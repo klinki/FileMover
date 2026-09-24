@@ -3,6 +3,7 @@ using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Headless;
 using Avalonia.LogicalTree;
+using Avalonia.Media;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
 using BackupNormalizer.Ui;
@@ -119,5 +120,34 @@ public sealed class HeadlessPanelTests : IDisposable
         Dispatcher.UIThread.RunJobs();
         Thread.Sleep(50);
         Dispatcher.UIThread.RunJobs();
+    }
+}
+
+public sealed class DataGridThemeOverrideTests
+{
+    [Fact]
+    public void Focus_Visuals_Are_Transparent_And_Selection_Is_Soft()
+    {
+        UiTestHost.Run(() =>
+        {
+            var window = new MainWindow { Width = 1100, Height = 700 };
+            window.Show();
+            Dispatcher.UIThread.RunJobs();
+            SolidColorBrush Res(string key)
+                => Assert.IsType<SolidColorBrush>(window.FindResource(key));
+            Assert.Equal(Avalonia.Media.Colors.Transparent, Res("DataGridCellFocusVisualPrimaryBrush").Color);
+            Assert.Equal(Avalonia.Media.Colors.Transparent, Res("DataGridCellFocusVisualSecondaryBrush").Color);
+            Assert.Equal(Avalonia.Media.Color.Parse("#D6E9F8"), Res("DataGridRowSelectedBackgroundBrush").Color);
+            Assert.Equal(Avalonia.Media.Color.Parse("#D6E9F8"), Res("DataGridRowSelectedUnfocusedBackgroundBrush").Color);
+            foreach (var key in new[]
+            {
+                "DataGridRowSelectedBackgroundOpacity",
+                "DataGridRowSelectedHoveredBackgroundOpacity",
+                "DataGridRowSelectedUnfocusedBackgroundOpacity",
+                "DataGridRowSelectedHoveredUnfocusedBackgroundOpacity",
+            })
+                Assert.Equal(1.0, Assert.IsType<double>(window.FindResource(key)));
+            window.Close();
+        });
     }
 }
