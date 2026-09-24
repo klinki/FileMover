@@ -40,6 +40,10 @@ public sealed partial class FileEntryItem : ObservableObject
     public bool IsText => !IsDirectory && TextExts.Contains(DottedExt);
     public bool IsGenericFile => !IsDirectory && !IsArchive && !IsImage && !IsVideo && !IsText;
 
+    /// <summary>TC-style mark (persistent, shown red). Independent from the grid cursor (SelectedEntry).</summary>
+    [ObservableProperty]
+    public partial bool IsMarked { get; set; }
+
     public FileEntryItem(string name, string fullPath, bool isDir, long size, DateTime modified, bool isParent = false)
     {
         Name = name;
@@ -60,6 +64,8 @@ public sealed partial class FilePanelViewModel : ObservableObject
 
     [ObservableProperty]
     public partial FileEntryItem? SelectedEntry { get; set; }
+
+    public FileEntryItem? MarkAnchor { get; set; }
 
     [ObservableProperty]
     public partial string Status { get; set; } = "";
@@ -129,6 +135,7 @@ public sealed partial class FilePanelViewModel : ObservableObject
 
     private void SortEntries()
     {
+        // Marks survive sorting because the same FileEntryItem instances are reused (only reordered).
         var pin = Entries.FirstOrDefault(e => e.IsParentEntry);
         var rest = Entries.Where(e => !e.IsParentEntry).ToList();
         Func<FileEntryItem, string> strKey = SortColumn switch
@@ -171,5 +178,108 @@ public sealed partial class FilePanelViewModel : ObservableObject
             CurrentPath = parent.FullName;
             Refresh();
         }
+    }
+
+    public void ToggleMark(FileEntryItem item)
+    {
+        if (item.IsParentEntry) return;
+        item.IsMarked = !item.IsMarked;
+    }
+
+    /// <summary>
+    /// TC rubber-band start: the mode is latched from the starting row.
+    /// Unmarked row -> select mode (gesture only marks); marked row -> deselect mode.
+    /// Returns the latched mode. Caller must skip parent entries.
+    /// </summary>
+    public bool BeginRubber(FileEntryItem item)
+    {
+        SelectedEntry = item;
+        MarkAnchor = item;
+        bool select = !item.IsMarked;
+        item.IsMarked = select;
+        return select;
+    }
+
+    /// <summary>Applies the latched rubber-band mode to an encountered row.</summary>
+    public void RubberTo(FileEntryItem item, bool select)
+    {
+        if (item.IsParentEntry) return;
+        item.IsMarked = select;
+    }
+
+    public void RightClick(FileEntryItem item)
+    {
+        SelectedEntry = item;
+        ToggleMark(item);
+        MarkAnchor = item;
+    }
+
+    public void CtrlClick(FileEntryItem item)
+    {
+        SelectedEntry = item;
+        ToggleMark(item);
+        MarkAnchor = item;
+    }
+
+    public void ShiftClick(FileEntryItem item)
+    {
+        int itemIdx = Entries.IndexOf(item);
+        if (itemIdx < 0)
+        {
+            SelectedEntry = item;
+            return;
+        }
+        FileEntryItem? anchor = MarkAnchor ?? SelectedEntry ?? Entries.FirstOrDefault(e => !e.IsParentEntry);
+        int anchorIdx = anchor != null ? Entries.IndexOf(anchor) : -1;
+        if (anchorIdx < 0) anchorIdx = itemIdx;
+        int lo = Math.Min(anchorIdx, itemIdx);
+        int hi = Math.Max(anchorIdx, itemIdx);
+        for (int i = lo; i <= hi; i++)
+        {
+            if (!Entries[i].IsParentEntry)
+                Entries[i].IsMarked = true;
+        }
+        SelectedEntry = item;
+    }
+
+    public void SpaceOnCursor()
+    {
+        if (SelectedEntry != null)
+        {
+            ToggleMark(SelectedEntry);
+            MarkAnchor = SelectedEntry;
+        }
+    }
+
+    public void ShiftArrow(int delta)
+    {
+        if (Entries.Count == 0) return;
+        var previous = SelectedEntry;
+        int curIdx = previous != null ? Entries.IndexOf(previous) : (delta > 0 ? -1 : Entries.Count);
+        if (curIdx < 0 || curIdx >= Entries.Count)
+            curIdx = delta > 0 ? -1 : Entries.Count;
+        // Clamp relative to the position before moving so a large delta lands on the edge.
+        int newIdx = Math.Clamp(curIdx + delta, 0, Entries.Count - 1);
+        if (MarkAnchor == null)
+            MarkAnchor = previous;
+        SelectedEntry = Entries[newIdx];
+        if (!SelectedEntry.IsParentEntry)
+            ToggleMark(SelectedEntry);
+    }
+
+    public IReadOnlyList<FileEntryItem> StagingSet()
+    {
+        var marked = Entries.Where(e => e.IsMarked && !e.IsParentEntry).ToList();
+        if (marked.Count > 0) return marked;
+        if (SelectedEntry != null && !SelectedEntry.IsParentEntry)
+            return new List<FileEntryItem> { SelectedEntry };
+        return Array.Empty<FileEntryItem>();
+    }
+
+    public void ClearMarks()
+    {
+        foreach (var e in Entries)
+            e.IsMarked = false;
+        MarkAnchor = null;
     }
 }

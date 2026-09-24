@@ -1,6 +1,7 @@
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:vm="using:BackupNormalizer.Ui.ViewModels"
+        xmlns:conv="using:BackupNormalizer.Ui.Converters"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         mc:Ignorable="d" d:DesignWidth="1100" d:DesignHeight="700"
@@ -9,6 +10,7 @@
         Icon="/Assets/avalonia-logo.ico"
         Title="BackupNormalizer Planner — Total Commander style (plan-only)">
   <Window.Resources>
+    <conv:MarkedToBrushConverter x:Key="MarkedToBrush" />
     <DataTemplate x:Key="FileIconTemplate" x:DataType="vm:FileEntryItem">
       <Panel Width="16" Height="16" VerticalAlignment="Center" HorizontalAlignment="Center">
         <Path Data="M13,20H11V8L5.5,13.5L4.08,12.08L12,4.16L19.92,12.08L18.5,13.5L13,8V20Z"
@@ -28,6 +30,17 @@
       </Panel>
     </DataTemplate>
   </Window.Resources>
+
+  <Window.Styles>
+    <!-- TC cursor: soft tint instead of full-strength selection blue -->
+    <Style Selector="DataGridRow:selected">
+      <Setter Property="Background" Value="#D6E9F8" />
+    </Style>
+    <!-- No black cell-focus rectangle; cursor row alone shows position -->
+    <Style Selector="DataGridCell">
+      <Setter Property="FocusAdorner" Value="{x:Null}" />
+    </Style>
+  </Window.Styles>
 
   <DockPanel>
     <Menu DockPanel.Dock="Top">
@@ -96,7 +109,6 @@
             <TextBlock Text="◀ LEFT (active source/dest — click to activate)" FontWeight="Bold" />
             <TextBox Text="{Binding Left.CurrentPath}" IsReadOnly="True" />
             <StackPanel Orientation="Horizontal" Spacing="4">
-              <Button Content="Up" Command="{Binding GoUpLeftCommand}" />
               <Button Content="Refresh" Command="{Binding RefreshAllCommand}" />
               <TextBlock Text="{Binding Left.Status}" VerticalAlignment="Center" />
             </StackPanel>
@@ -105,13 +117,37 @@
                     ItemsSource="{Binding Left.Entries}" SelectedItem="{Binding Left.SelectedEntry}"
                     AutoGenerateColumns="False" IsReadOnly="True" SelectionMode="Single"
                     CanUserResizeColumns="True" CanUserSortColumns="True" GridLinesVisibility="Horizontal"
-                    DoubleTapped="OnLeftDoubleTapped" Sorting="OnGridSorting">
+                    DoubleTapped="OnLeftDoubleTapped">
             <DataGrid.Columns>
               <DataGridTemplateColumn Width="30" CanUserResize="False" CanUserSort="False" CellTemplate="{StaticResource FileIconTemplate}" />
-              <DataGridTextColumn Header="Name" Binding="{Binding BaseName}" Tag="Name" Width="*" />
-              <DataGridTextColumn Header="Ext" Binding="{Binding Extension}" Tag="Ext" Width="70" />
-              <DataGridTextColumn Header="Size" Binding="{Binding SizeText}" Tag="Size" Width="100" />
-              <DataGridTextColumn Header="Modified" Binding="{Binding ModifiedText}" Tag="Modified" Width="140" />
+              <DataGridTemplateColumn Header="Name" Tag="Name" Width="*" CanUserSort="True">
+                <DataGridTemplateColumn.CellTemplate>
+                  <DataTemplate x:DataType="vm:FileEntryItem">
+                    <TextBlock Text="{Binding BaseName}" Foreground="{Binding IsMarked, Converter={StaticResource MarkedToBrush}}" VerticalAlignment="Center" />
+                  </DataTemplate>
+                </DataGridTemplateColumn.CellTemplate>
+              </DataGridTemplateColumn>
+              <DataGridTemplateColumn Header="Ext" Tag="Ext" Width="70" CanUserSort="True">
+                <DataGridTemplateColumn.CellTemplate>
+                  <DataTemplate x:DataType="vm:FileEntryItem">
+                    <TextBlock Text="{Binding Extension}" Foreground="{Binding IsMarked, Converter={StaticResource MarkedToBrush}}" VerticalAlignment="Center" />
+                  </DataTemplate>
+                </DataGridTemplateColumn.CellTemplate>
+              </DataGridTemplateColumn>
+              <DataGridTemplateColumn Header="Size" Tag="Size" Width="100" CanUserSort="True">
+                <DataGridTemplateColumn.CellTemplate>
+                  <DataTemplate x:DataType="vm:FileEntryItem">
+                    <TextBlock Text="{Binding SizeText}" Foreground="{Binding IsMarked, Converter={StaticResource MarkedToBrush}}" HorizontalAlignment="Right" VerticalAlignment="Center" />
+                  </DataTemplate>
+                </DataGridTemplateColumn.CellTemplate>
+              </DataGridTemplateColumn>
+              <DataGridTemplateColumn Header="Modified" Tag="Modified" Width="140" CanUserSort="True">
+                <DataGridTemplateColumn.CellTemplate>
+                  <DataTemplate x:DataType="vm:FileEntryItem">
+                    <TextBlock Text="{Binding ModifiedText}" Foreground="{Binding IsMarked, Converter={StaticResource MarkedToBrush}}" VerticalAlignment="Center" />
+                  </DataTemplate>
+                </DataGridTemplateColumn.CellTemplate>
+              </DataGridTemplateColumn>
             </DataGrid.Columns>
           </DataGrid>
         </DockPanel>
@@ -123,7 +159,6 @@
             <TextBlock Text="LEFT (click to activate)" />
             <TextBox Text="{Binding Left.CurrentPath}" IsReadOnly="True" />
             <StackPanel Orientation="Horizontal" Spacing="4">
-              <Button Content="Up" Command="{Binding GoUpLeftCommand}" />
               <TextBlock Text="{Binding Left.Status}" VerticalAlignment="Center" />
             </StackPanel>
           </StackPanel>
@@ -131,13 +166,37 @@
                     ItemsSource="{Binding Left.Entries}" SelectedItem="{Binding Left.SelectedEntry}"
                     AutoGenerateColumns="False" IsReadOnly="True" SelectionMode="Single"
                     CanUserResizeColumns="True" CanUserSortColumns="True" GridLinesVisibility="Horizontal"
-                    PointerPressed="OnLeftPressed" DoubleTapped="OnLeftDoubleTapped" Sorting="OnGridSorting">
+                    DoubleTapped="OnLeftDoubleTapped">
             <DataGrid.Columns>
               <DataGridTemplateColumn Width="30" CanUserResize="False" CanUserSort="False" CellTemplate="{StaticResource FileIconTemplate}" />
-              <DataGridTextColumn Header="Name" Binding="{Binding BaseName}" Tag="Name" Width="*" />
-              <DataGridTextColumn Header="Ext" Binding="{Binding Extension}" Tag="Ext" Width="70" />
-              <DataGridTextColumn Header="Size" Binding="{Binding SizeText}" Tag="Size" Width="100" />
-              <DataGridTextColumn Header="Modified" Binding="{Binding ModifiedText}" Tag="Modified" Width="140" />
+              <DataGridTemplateColumn Header="Name" Tag="Name" Width="*" CanUserSort="True">
+                <DataGridTemplateColumn.CellTemplate>
+                  <DataTemplate x:DataType="vm:FileEntryItem">
+                    <TextBlock Text="{Binding BaseName}" Foreground="{Binding IsMarked, Converter={StaticResource MarkedToBrush}}" VerticalAlignment="Center" />
+                  </DataTemplate>
+                </DataGridTemplateColumn.CellTemplate>
+              </DataGridTemplateColumn>
+              <DataGridTemplateColumn Header="Ext" Tag="Ext" Width="70" CanUserSort="True">
+                <DataGridTemplateColumn.CellTemplate>
+                  <DataTemplate x:DataType="vm:FileEntryItem">
+                    <TextBlock Text="{Binding Extension}" Foreground="{Binding IsMarked, Converter={StaticResource MarkedToBrush}}" VerticalAlignment="Center" />
+                  </DataTemplate>
+                </DataGridTemplateColumn.CellTemplate>
+              </DataGridTemplateColumn>
+              <DataGridTemplateColumn Header="Size" Tag="Size" Width="100" CanUserSort="True">
+                <DataGridTemplateColumn.CellTemplate>
+                  <DataTemplate x:DataType="vm:FileEntryItem">
+                    <TextBlock Text="{Binding SizeText}" Foreground="{Binding IsMarked, Converter={StaticResource MarkedToBrush}}" HorizontalAlignment="Right" VerticalAlignment="Center" />
+                  </DataTemplate>
+                </DataGridTemplateColumn.CellTemplate>
+              </DataGridTemplateColumn>
+              <DataGridTemplateColumn Header="Modified" Tag="Modified" Width="140" CanUserSort="True">
+                <DataGridTemplateColumn.CellTemplate>
+                  <DataTemplate x:DataType="vm:FileEntryItem">
+                    <TextBlock Text="{Binding ModifiedText}" Foreground="{Binding IsMarked, Converter={StaticResource MarkedToBrush}}" VerticalAlignment="Center" />
+                  </DataTemplate>
+                </DataGridTemplateColumn.CellTemplate>
+              </DataGridTemplateColumn>
             </DataGrid.Columns>
           </DataGrid>
         </DockPanel>
@@ -151,7 +210,6 @@
             <TextBlock Text="▶ RIGHT (active source/dest — click to activate)" FontWeight="Bold" />
             <TextBox Text="{Binding Right.CurrentPath}" IsReadOnly="True" />
             <StackPanel Orientation="Horizontal" Spacing="4">
-              <Button Content="Up" Command="{Binding GoUpRightCommand}" />
               <Button Content="Refresh" Command="{Binding RefreshAllCommand}" />
               <TextBlock Text="{Binding Right.Status}" VerticalAlignment="Center" />
             </StackPanel>
@@ -160,13 +218,37 @@
                     ItemsSource="{Binding Right.Entries}" SelectedItem="{Binding Right.SelectedEntry}"
                     AutoGenerateColumns="False" IsReadOnly="True" SelectionMode="Single"
                     CanUserResizeColumns="True" CanUserSortColumns="True" GridLinesVisibility="Horizontal"
-                    DoubleTapped="OnRightDoubleTapped" Sorting="OnGridSorting">
+                    DoubleTapped="OnRightDoubleTapped">
             <DataGrid.Columns>
               <DataGridTemplateColumn Width="30" CanUserResize="False" CanUserSort="False" CellTemplate="{StaticResource FileIconTemplate}" />
-              <DataGridTextColumn Header="Name" Binding="{Binding BaseName}" Tag="Name" Width="*" />
-              <DataGridTextColumn Header="Ext" Binding="{Binding Extension}" Tag="Ext" Width="70" />
-              <DataGridTextColumn Header="Size" Binding="{Binding SizeText}" Tag="Size" Width="100" />
-              <DataGridTextColumn Header="Modified" Binding="{Binding ModifiedText}" Tag="Modified" Width="140" />
+              <DataGridTemplateColumn Header="Name" Tag="Name" Width="*" CanUserSort="True">
+                <DataGridTemplateColumn.CellTemplate>
+                  <DataTemplate x:DataType="vm:FileEntryItem">
+                    <TextBlock Text="{Binding BaseName}" Foreground="{Binding IsMarked, Converter={StaticResource MarkedToBrush}}" VerticalAlignment="Center" />
+                  </DataTemplate>
+                </DataGridTemplateColumn.CellTemplate>
+              </DataGridTemplateColumn>
+              <DataGridTemplateColumn Header="Ext" Tag="Ext" Width="70" CanUserSort="True">
+                <DataGridTemplateColumn.CellTemplate>
+                  <DataTemplate x:DataType="vm:FileEntryItem">
+                    <TextBlock Text="{Binding Extension}" Foreground="{Binding IsMarked, Converter={StaticResource MarkedToBrush}}" VerticalAlignment="Center" />
+                  </DataTemplate>
+                </DataGridTemplateColumn.CellTemplate>
+              </DataGridTemplateColumn>
+              <DataGridTemplateColumn Header="Size" Tag="Size" Width="100" CanUserSort="True">
+                <DataGridTemplateColumn.CellTemplate>
+                  <DataTemplate x:DataType="vm:FileEntryItem">
+                    <TextBlock Text="{Binding SizeText}" Foreground="{Binding IsMarked, Converter={StaticResource MarkedToBrush}}" HorizontalAlignment="Right" VerticalAlignment="Center" />
+                  </DataTemplate>
+                </DataGridTemplateColumn.CellTemplate>
+              </DataGridTemplateColumn>
+              <DataGridTemplateColumn Header="Modified" Tag="Modified" Width="140" CanUserSort="True">
+                <DataGridTemplateColumn.CellTemplate>
+                  <DataTemplate x:DataType="vm:FileEntryItem">
+                    <TextBlock Text="{Binding ModifiedText}" Foreground="{Binding IsMarked, Converter={StaticResource MarkedToBrush}}" VerticalAlignment="Center" />
+                  </DataTemplate>
+                </DataGridTemplateColumn.CellTemplate>
+              </DataGridTemplateColumn>
             </DataGrid.Columns>
           </DataGrid>
         </DockPanel>
@@ -178,7 +260,6 @@
             <TextBlock Text="RIGHT (click to activate)" />
             <TextBox Text="{Binding Right.CurrentPath}" IsReadOnly="True" />
             <StackPanel Orientation="Horizontal" Spacing="4">
-              <Button Content="Up" Command="{Binding GoUpRightCommand}" />
               <TextBlock Text="{Binding Right.Status}" VerticalAlignment="Center" />
             </StackPanel>
           </StackPanel>
@@ -186,13 +267,37 @@
                     ItemsSource="{Binding Right.Entries}" SelectedItem="{Binding Right.SelectedEntry}"
                     AutoGenerateColumns="False" IsReadOnly="True" SelectionMode="Single"
                     CanUserResizeColumns="True" CanUserSortColumns="True" GridLinesVisibility="Horizontal"
-                    PointerPressed="OnRightPressed" DoubleTapped="OnRightDoubleTapped" Sorting="OnGridSorting">
+                    DoubleTapped="OnRightDoubleTapped">
             <DataGrid.Columns>
               <DataGridTemplateColumn Width="30" CanUserResize="False" CanUserSort="False" CellTemplate="{StaticResource FileIconTemplate}" />
-              <DataGridTextColumn Header="Name" Binding="{Binding BaseName}" Tag="Name" Width="*" />
-              <DataGridTextColumn Header="Ext" Binding="{Binding Extension}" Tag="Ext" Width="70" />
-              <DataGridTextColumn Header="Size" Binding="{Binding SizeText}" Tag="Size" Width="100" />
-              <DataGridTextColumn Header="Modified" Binding="{Binding ModifiedText}" Tag="Modified" Width="140" />
+              <DataGridTemplateColumn Header="Name" Tag="Name" Width="*" CanUserSort="True">
+                <DataGridTemplateColumn.CellTemplate>
+                  <DataTemplate x:DataType="vm:FileEntryItem">
+                    <TextBlock Text="{Binding BaseName}" Foreground="{Binding IsMarked, Converter={StaticResource MarkedToBrush}}" VerticalAlignment="Center" />
+                  </DataTemplate>
+                </DataGridTemplateColumn.CellTemplate>
+              </DataGridTemplateColumn>
+              <DataGridTemplateColumn Header="Ext" Tag="Ext" Width="70" CanUserSort="True">
+                <DataGridTemplateColumn.CellTemplate>
+                  <DataTemplate x:DataType="vm:FileEntryItem">
+                    <TextBlock Text="{Binding Extension}" Foreground="{Binding IsMarked, Converter={StaticResource MarkedToBrush}}" VerticalAlignment="Center" />
+                  </DataTemplate>
+                </DataGridTemplateColumn.CellTemplate>
+              </DataGridTemplateColumn>
+              <DataGridTemplateColumn Header="Size" Tag="Size" Width="100" CanUserSort="True">
+                <DataGridTemplateColumn.CellTemplate>
+                  <DataTemplate x:DataType="vm:FileEntryItem">
+                    <TextBlock Text="{Binding SizeText}" Foreground="{Binding IsMarked, Converter={StaticResource MarkedToBrush}}" HorizontalAlignment="Right" VerticalAlignment="Center" />
+                  </DataTemplate>
+                </DataGridTemplateColumn.CellTemplate>
+              </DataGridTemplateColumn>
+              <DataGridTemplateColumn Header="Modified" Tag="Modified" Width="140" CanUserSort="True">
+                <DataGridTemplateColumn.CellTemplate>
+                  <DataTemplate x:DataType="vm:FileEntryItem">
+                    <TextBlock Text="{Binding ModifiedText}" Foreground="{Binding IsMarked, Converter={StaticResource MarkedToBrush}}" VerticalAlignment="Center" />
+                  </DataTemplate>
+                </DataGridTemplateColumn.CellTemplate>
+              </DataGridTemplateColumn>
             </DataGrid.Columns>
           </DataGrid>
         </DockPanel>

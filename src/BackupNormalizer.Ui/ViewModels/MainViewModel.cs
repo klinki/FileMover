@@ -166,10 +166,15 @@ public sealed partial class MainViewModel : ViewModelBase
     {
         try
         {
-            var sel = Active.SelectedEntry;
-            if (sel == null) { StatusMessage = "Select a file/folder in the active panel first."; return; }
-            var ops = BackupNormalizer.PlanStaging.StageCopy(BasePath, sel.FullPath, Inactive.CurrentPath);
-            AppendStaged(ops);
+            var sources = Active.StagingSet();
+            if (sources.Count == 0) { StatusMessage = "Mark files (right-click/Space) or select one in the active panel first."; return; }
+            int files = 0;
+            foreach (var sel in sources)
+            {
+                AppendStaged(BackupNormalizer.PlanStaging.StageCopy(BasePath, sel.FullPath, Inactive.CurrentPath));
+                files++;
+            }
+            StatusMessage = $"Staged COPY for {files} item(s). Total ops: {_stagedCore.Count}. Nothing executed.";
         }
         catch (Exception ex) { StatusMessage = "stage copy failed: " + ex.Message; }
     }
@@ -179,12 +184,31 @@ public sealed partial class MainViewModel : ViewModelBase
     {
         try
         {
-            var sel = Active.SelectedEntry;
-            if (sel == null) { StatusMessage = "Select a file/folder in the active panel first."; return; }
-            var ops = BackupNormalizer.PlanStaging.StageMove(BasePath, sel.FullPath, Inactive.CurrentPath);
-            AppendStaged(ops);
+            var sources = Active.StagingSet();
+            if (sources.Count == 0) { StatusMessage = "Mark files (right-click/Space) or select one in the active panel first."; return; }
+            foreach (var sel in sources)
+                AppendStaged(BackupNormalizer.PlanStaging.StageMove(BasePath, sel.FullPath, Inactive.CurrentPath));
+            StatusMessage = $"Staged MOVE for {sources.Count} item(s). Total ops: {_stagedCore.Count}. Nothing executed.";
         }
         catch (Exception ex) { StatusMessage = "stage move failed: " + ex.Message; }
+    }
+
+    /// <summary>Drop target: schedule MOVE of absolute source paths into a panel directory.</summary>
+    public void StageMovePaths(IEnumerable<string> sourceAbsPaths, string destDirAbs)
+    {
+        try
+        {
+            int files = 0;
+            foreach (var abs in sourceAbsPaths)
+            {
+                if (string.IsNullOrWhiteSpace(abs)) continue;
+                AppendStaged(BackupNormalizer.PlanStaging.StageMove(BasePath, abs.Trim(), destDirAbs));
+                files++;
+            }
+            if (files == 0) StatusMessage = "Drop ignored: no valid paths.";
+            else StatusMessage = $"Staged MOVE for {files} dropped item(s). Total ops: {_stagedCore.Count}. Nothing executed.";
+        }
+        catch (Exception ex) { StatusMessage = "drop failed: " + ex.Message; }
     }
 
     [RelayCommand]
@@ -206,10 +230,11 @@ public sealed partial class MainViewModel : ViewModelBase
     {
         try
         {
-            var sel = Active.SelectedEntry;
-            if (sel == null) { StatusMessage = "Select a file/folder in the active panel first."; return; }
-            var ops = BackupNormalizer.PlanStaging.StageTrash(BasePath, sel.FullPath);
-            AppendStaged(ops);
+            var sources = Active.StagingSet();
+            if (sources.Count == 0) { StatusMessage = "Mark files (right-click/Space) or select one in the active panel first."; return; }
+            foreach (var sel in sources)
+                AppendStaged(BackupNormalizer.PlanStaging.StageTrash(BasePath, sel.FullPath));
+            StatusMessage = $"Staged TRASH for {sources.Count} item(s). Total ops: {_stagedCore.Count}. Nothing executed.";
         }
         catch (Exception ex) { StatusMessage = "stage delete failed: " + ex.Message; }
     }
