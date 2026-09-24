@@ -21,6 +21,7 @@
   <ItemGroup>
     <ProjectReference Include="..\..\src\BackupNormalizer\BackupNormalizer.csproj" />
     <ProjectReference Include="..\..\src\BackupNormalizer.Core\BackupNormalizer.Core.csproj" />
+    <ProjectReference Include="..\..\src\BackupNormalizer.Ui\BackupNormalizer.Ui.csproj" />
   </ItemGroup>
 
 </Project>

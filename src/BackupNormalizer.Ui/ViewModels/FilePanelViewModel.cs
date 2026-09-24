@@ -12,10 +12,13 @@ public sealed partial class FileEntryItem : ObservableObject
     public string Name { get; }
     public string FullPath { get; }
     public bool IsDirectory { get; }
+    public bool IsParentEntry { get; }
     public long Size { get; }
     public DateTime Modified { get; }
-    public string SizeText => IsDirectory ? "<DIR>" : Size.ToString("N0");
-    public string ModifiedText => Modified.ToString("yyyy-MM-dd HH:mm");
+    public string BaseName => IsDirectory ? Name : Path.GetFileNameWithoutExtension(Name);
+    public string Extension => IsDirectory ? "" : Path.GetExtension(Name).TrimStart('.');
+    public string SizeText => IsParentEntry ? "" : IsDirectory ? "<DIR>" : Size.ToString("N0");
+    public string ModifiedText => IsParentEntry ? "" : Modified.ToString("yyyy-MM-dd HH:mm");
     public string KindText => IsDirectory ? "dir" : "file";
 
     private static readonly HashSet<string> ArchiveExts = new(StringComparer.OrdinalIgnoreCase)
@@ -29,20 +32,22 @@ public sealed partial class FileEntryItem : ObservableObject
           ".cs", ".csproj", ".sln", ".xaml", ".axaml", ".py", ".js", ".ts", ".html", ".css", ".sh", ".ps1", ".sql",
           ".java", ".c", ".h", ".cpp", ".go", ".rs" };
 
-    private string Extension => IsDirectory ? "" : Path.GetExtension(Name);
-    public bool IsArchive => !IsDirectory && ArchiveExts.Contains(Extension);
-    public bool IsImage => !IsDirectory && ImageExts.Contains(Extension);
-    public bool IsVideo => !IsDirectory && VideoExts.Contains(Extension);
-    public bool IsText => !IsDirectory && TextExts.Contains(Extension);
+    private string DottedExt => IsDirectory ? "" : Path.GetExtension(Name);
+    public bool IsFolder => IsDirectory && !IsParentEntry;
+    public bool IsArchive => !IsDirectory && ArchiveExts.Contains(DottedExt);
+    public bool IsImage => !IsDirectory && ImageExts.Contains(DottedExt);
+    public bool IsVideo => !IsDirectory && VideoExts.Contains(DottedExt);
+    public bool IsText => !IsDirectory && TextExts.Contains(DottedExt);
     public bool IsGenericFile => !IsDirectory && !IsArchive && !IsImage && !IsVideo && !IsText;
 
-    public FileEntryItem(string name, string fullPath, bool isDir, long size, DateTime modified)
+    public FileEntryItem(string name, string fullPath, bool isDir, long size, DateTime modified, bool isParent = false)
     {
         Name = name;
         FullPath = fullPath;
         IsDirectory = isDir;
         Size = size;
         Modified = modified;
+        IsParentEntry = isParent;
     }
 }
 
@@ -59,6 +64,9 @@ public sealed partial class FilePanelViewModel : ObservableObject
     [ObservableProperty]
     public partial string Status { get; set; } = "";
 
+    public string SortColumn { get; private set; } = "Name";
+    public bool SortAscending { get; private set; } = true;
+
     public void Refresh()
     {
         Entries.Clear();
@@ -70,6 +78,10 @@ public sealed partial class FilePanelViewModel : ObservableObject
                 Status = "path not found";
                 return;
             }
+            // ".." up-row: always first, hidden at filesystem root.
+            var parent = Directory.GetParent(CurrentPath.TrimEnd(Path.DirectorySeparatorChar));
+            if (parent != null)
+                Entries.Add(new FileEntryItem("..", parent.FullName, true, 0, DateTime.MinValue, isParent: true));
             int dirs = 0, files = 0;
             foreach (var d in Directory.GetDirectories(CurrentPath).OrderBy(x => x))
             {
@@ -93,6 +105,7 @@ public sealed partial class FilePanelViewModel : ObservableObject
                 }
                 catch { }
             }
+            SortEntries();
             Status = $"{dirs} dirs, {files} files";
         }
         catch (Exception ex)
@@ -101,8 +114,49 @@ public sealed partial class FilePanelViewModel : ObservableObject
         }
     }
 
+    /// <summary>Sorts entries keeping ".." pinned first and directories before files (TC default).</summary>
+    public void ApplySort(string column)
+    {
+        if (string.Equals(SortColumn, column, StringComparison.OrdinalIgnoreCase))
+            SortAscending = !SortAscending;
+        else
+        {
+            SortColumn = column;
+            SortAscending = true;
+        }
+        SortEntries();
+    }
+
+    private void SortEntries()
+    {
+        var pin = Entries.FirstOrDefault(e => e.IsParentEntry);
+        var rest = Entries.Where(e => !e.IsParentEntry).ToList();
+        Func<FileEntryItem, string> strKey = SortColumn switch
+        {
+            "Ext" => e => e.Extension,
+            _ => e => e.BaseName,
+        };
+        IOrderedEnumerable<FileEntryItem> ordered = SortColumn switch
+        {
+            "Size" => SortAscending
+                ? rest.OrderBy(e => e.IsDirectory ? 0 : 1).ThenBy(e => e.Size).ThenBy(e => e.BaseName, StringComparer.OrdinalIgnoreCase)
+                : rest.OrderBy(e => e.IsDirectory ? 0 : 1).ThenByDescending(e => e.Size).ThenBy(e => e.BaseName, StringComparer.OrdinalIgnoreCase),
+            "Modified" => SortAscending
+                ? rest.OrderBy(e => e.IsDirectory ? 0 : 1).ThenBy(e => e.Modified).ThenBy(e => e.BaseName, StringComparer.OrdinalIgnoreCase)
+                : rest.OrderBy(e => e.IsDirectory ? 0 : 1).ThenByDescending(e => e.Modified).ThenBy(e => e.BaseName, StringComparer.OrdinalIgnoreCase),
+            _ => SortAscending
+                ? rest.OrderBy(e => e.IsDirectory ? 0 : 1).ThenBy(strKey, StringComparer.OrdinalIgnoreCase).ThenBy(e => e.Extension, StringComparer.OrdinalIgnoreCase)
+                : rest.OrderBy(e => e.IsDirectory ? 0 : 1).ThenByDescending(strKey, StringComparer.OrdinalIgnoreCase).ThenBy(e => e.Extension, StringComparer.OrdinalIgnoreCase),
+        };
+        var sorted = ordered.ToList();
+        Entries.Clear();
+        if (pin != null) Entries.Add(pin);
+        foreach (var e in sorted) Entries.Add(e);
+    }
+
     public bool NavigateTo(FileEntryItem entry)
     {
+        if (entry.IsParentEntry) { GoUp(); return true; }
         if (!entry.IsDirectory) return false;
         CurrentPath = entry.FullPath;
         Refresh();
