@@ -123,6 +123,23 @@ public partial class MainWindow : Window
             panel.SpaceOnCursor();
             e.Handled = true;
         }
+        else if ((e.KeyModifiers.HasFlag(KeyModifiers.Control) || e.KeyModifiers.HasFlag(KeyModifiers.Meta)) && e.Key == Key.A)
+        {
+            // Ctrl+A on Windows/Linux, Cmd+A on macOS.
+            panel.MarkAll();
+            e.Handled = true;
+        }
+        else if (e.Key == Key.Tab && e.KeyModifiers == KeyModifiers.None)
+        {
+            // TC panel switch; scoped to grids so Tab still moves through textboxes.
+            Vm.IsLeftActive = !Vm.IsLeftActive;
+            e.Handled = true;
+        }
+        else if (e.Key == Key.Escape && e.KeyModifiers == KeyModifiers.None)
+        {
+            panel.ClearMarks();
+            e.Handled = true;
+        }
         else if ((e.Key == Key.Up || e.Key == Key.Down) && e.KeyModifiers.HasFlag(KeyModifiers.Shift))
         {
             panel.ShiftArrow(e.Key == Key.Down ? 1 : -1);

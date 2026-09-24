@@ -303,6 +303,17 @@ public sealed class PanelSelectionTests : IDisposable
     }
 
     [Fact]
+    public void MarkAll_Marks_Everything_Except_DotDot()
+    {
+        var panel = CreatePanel("a.txt", "b.txt");
+        panel.MarkAll();
+        Assert.True(panel.Entries.Where(e => !e.IsParentEntry).All(e => e.IsMarked));
+        Assert.False(panel.Entries.Single(e => e.IsParentEntry).IsMarked);
+        panel.ClearMarks();
+        Assert.DoesNotContain(panel.Entries, e => e.IsMarked);
+    }
+
+    [Fact]
     public void Rubber_Latches_Select_Mode_On_Unmarked_Start()
     {
         var panel = CreatePanel("a.txt", "b.txt", "c.txt");

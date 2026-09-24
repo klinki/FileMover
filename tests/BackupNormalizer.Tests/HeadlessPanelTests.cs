@@ -13,6 +13,7 @@ using BackupNormalizer.Ui.Views;
 namespace BackupNormalizer.Tests;
 
 /// <summary>Headless reproduction: main window must list files in both panels.</summary>
+[Collection("UI")]
 public sealed class HeadlessPanelTests : IDisposable
 {
     private readonly string _dir = Path.Combine(Path.GetTempPath(), "bn-headless-" + Guid.NewGuid().ToString("N"));
@@ -101,8 +102,12 @@ public sealed class HeadlessPanelTests : IDisposable
             Pump4();
             var grid = window.GetLogicalDescendants().OfType<DataGrid>()
                 .First(g => (g.Tag as string) == "Left" && g.IsEffectivelyVisible);
+            var item = vm.Left.Entries.First(e => e.Name == "a.txt");
+            grid.ScrollIntoView(item, null);
+            Pump4();
             var row = grid.GetVisualDescendants().OfType<DataGridRow>()
-                .First(r => ((BackupNormalizer.Ui.ViewModels.FileEntryItem)r.DataContext!).Name == "a.txt");
+                .FirstOrDefault(r => ((BackupNormalizer.Ui.ViewModels.FileEntryItem)r.DataContext!).Name == "a.txt");
+            Assert.NotNull(row);
             var cells = row.GetVisualDescendants().OfType<TextBlock>().ToList();
             Assert.True(cells.Count >= 4);
             foreach (var cell in cells)
@@ -123,6 +128,7 @@ public sealed class HeadlessPanelTests : IDisposable
     }
 }
 
+[Collection("UI")]
 public sealed class DataGridThemeOverrideTests
 {
     [Fact]

@@ -282,4 +282,12 @@ public sealed partial class FilePanelViewModel : ObservableObject
             e.IsMarked = false;
         MarkAnchor = null;
     }
+
+    /// <summary>Ctrl/Cmd+A: mark everything except "..".</summary>
+    public void MarkAll()
+    {
+        foreach (var e in Entries)
+            if (!e.IsParentEntry)
+                e.IsMarked = true;
+    }
 }

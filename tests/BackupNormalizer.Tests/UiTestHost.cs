@@ -5,6 +5,10 @@ using Avalonia.Threading;
 
 namespace BackupNormalizer.Tests;
 
+/// <summary>All headless GUI tests share one UI thread: run them sequentially.</summary>
+[CollectionDefinition("UI")]
+public sealed class UiCollectionDefinition;
+
 /// <summary>Single persistent headless UI thread shared by all GUI tests.</summary>
 internal static class UiTestHost
 {
@@ -30,9 +34,14 @@ internal static class UiTestHost
     })
     { IsBackground = true };
 
+    private static readonly Lock StartLock = new();
+
     public static void Run(Action action)
     {
-        if (!UiThread.IsAlive) UiThread.Start();
+        lock (StartLock)
+        {
+            if (!UiThread.IsAlive) UiThread.Start();
+        }
         var done = new TaskCompletionSource<Exception?>();
         Queue.Add(new UiWork(action, done));
         var error = done.Task.GetAwaiter().GetResult();

@@ -95,7 +95,7 @@
           <Button Content="Save JSON" Command="{Binding SaveJsonCommand}" />
           <Button Content="Write to DB" Command="{Binding WriteToDbCommand}" />
         </WrapPanel>
-        <TextBlock Text="Plan-only: F5/F6/F7/F8 stage operations with size+hash preconditions. Nothing is executed here. Run executor later; remap drives with --map-root." FontStyle="Italic" TextWrapping="Wrap" />
+        <TextBlock Text="Plan-only: F5/F6/F7/F8 stage operations with size+hash preconditions. Nothing is executed here. Run executor later; remap drives with --map-root. Shortcuts: Ctrl/Cmd+A mark all, Space toggle, Shift+arrows extend, Esc clear marks, Tab switch panel." FontStyle="Italic" TextWrapping="Wrap" />
       </StackPanel>
     </Border>
 

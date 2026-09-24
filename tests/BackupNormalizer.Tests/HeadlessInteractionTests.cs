@@ -11,6 +11,7 @@ using BackupNormalizer.Ui.Views;
 namespace BackupNormalizer.Tests;
 
 /// <summary>Headless input tests for TC gestures. All UI access runs on <see cref="UiTestHost"/>.</summary>
+[Collection("UI")]
 public sealed class HeadlessInteractionTests : IDisposable
 {
     private readonly string _dir = Path.Combine(Path.GetTempPath(), "bn-gesture-" + Guid.NewGuid().ToString("N"));
@@ -213,5 +214,54 @@ public sealed class HeadlessInteractionTests : IDisposable
             Assert.Contains("m.txt", op.Source);
             w.Close();
         });
+    }
+}
+
+[Collection("UI")]
+public sealed class HeadlessShortcutTests
+{
+    [Fact]
+    public void CtrlA_Escape_Tab_Work_From_Grid()
+    {
+        UiTestHost.Run(() =>
+        {
+            var dir = Path.Combine(Path.GetTempPath(), "bn-keys-" + Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(Path.Combine(dir, "adir"));
+            File.WriteAllText(Path.Combine(dir, "m.txt"), "m");
+            try
+            {
+                var vm = new MainViewModel { BasePath = dir };
+                vm.ApplyBase();
+                var w = new MainWindow { DataContext = vm, Width = 1100, Height = 700 };
+                w.Show();
+                Pump5();
+                var grid = w.GetLogicalDescendants().OfType<DataGrid>()
+                    .First(g => (g.Tag as string) == "Left" && g.IsEffectivelyVisible);
+                grid.Focus();
+                Pump5();
+
+                w.KeyPress(Key.A, RawInputModifiers.Control, PhysicalKey.A, "a");
+                Pump5();
+                Assert.True(vm.Left.Entries.Where(e => !e.IsParentEntry).All(e => e.IsMarked));
+
+                w.KeyPress(Key.Escape, RawInputModifiers.None, PhysicalKey.Escape, "");
+                Pump5();
+                Assert.Empty(vm.Left.Entries.Where(e => e.IsMarked));
+
+                Assert.True(vm.IsLeftActive);
+                w.KeyPress(Key.Tab, RawInputModifiers.None, PhysicalKey.Tab, "");
+                Pump5();
+                Assert.False(vm.IsLeftActive);
+                w.Close();
+            }
+            finally { try { Directory.Delete(dir, true); } catch { } }
+        });
+    }
+
+    private static void Pump5()
+    {
+        Dispatcher.UIThread.RunJobs();
+        Thread.Sleep(20);
+        Dispatcher.UIThread.RunJobs();
     }
 }
