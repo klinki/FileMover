@@ -93,16 +93,19 @@ public sealed class Executor
             }
             return false;
         }
-
         var ops = LoadOps(planId);
-        int done = 0, failed = 0, skipped = 0, conflicts = 0;        foreach (var op in ops)
+        int done = 0, failed = 0, skipped = 0, conflicts = 0;
+        int pos = 0, total = ops.Count;
+        foreach (var op in ops)
         {
+            pos++;
+            string tag = $"[{pos}/{total}]";
             if (resume && op.Status == "Completed") { done++; continue; }
             if (op.Status == "Completed" && !resume) { done++; continue; }
             if (op.Type is "KEEP")
             {
                 Mark(op.Id, "Completed");
-                Journal(op.Id, "INFO", $"KEEP {op.DestRoot}:{op.DestPath}");
+                Journal(op.Id, "INFO", $"{tag} KEEP {op.DestRoot}:{op.DestPath}");
                 done++;
                 continue;
             }
@@ -114,10 +117,10 @@ public sealed class Executor
                     var dir = ResolvePath(op.DestRoot!, op.DestPath!);
                     Directory.CreateDirectory(dir);
                     Mark(op.Id, "Completed");
-                    Journal(op.Id, "INFO", $"MKDIR {op.DestRoot}:{op.DestPath}");
+                    Journal(op.Id, "INFO", $"{tag} MKDIR {op.DestRoot}:{op.DestPath}");
                     done++;
                 }
-                catch (Exception ex) { Mark(op.Id, "Failed", ex.Message); Journal(op.Id, "ERROR", ex.Message); failed++; if (stopOnError) break; }
+                catch (Exception ex) { Mark(op.Id, "Failed", ex.Message); Journal(op.Id, "ERROR", $"{tag} {ex.Message}"); failed++; if (stopOnError) break; }
                 continue;
             }
             try
@@ -132,20 +135,20 @@ public sealed class Executor
                     default: throw new InvalidOperationException($"unknown op {op.Type}");
                 }
                 Mark(op.Id, "Completed");
-                Journal(op.Id, "INFO", $"{op.Type} ok {op.SourceRoot}:{op.SourcePath} -> {op.DestRoot}:{op.DestPath} size={op.ExpectedSize} hash={op.ExpectedHash}");
+                Journal(op.Id, "INFO", $"{tag} {op.Type} ok {op.SourceRoot}:{op.SourcePath} -> {op.DestRoot}:{op.DestPath} size={op.ExpectedSize} hash={op.ExpectedHash}");
                 done++;
             }
             catch (ConflictException ex)
             {
                 Mark(op.Id, "Conflict", ex.Message);
-                Journal(op.Id, "WARN", $"CONFLICT {ex.Message}");
+                Journal(op.Id, "WARN", $"{tag} CONFLICT {ex.Message}");
                 conflicts++;
                 if (stopOnError) break;
             }
             catch (Exception ex)
             {
                 Mark(op.Id, "Failed", ex.Message);
-                Journal(op.Id, "ERROR", $"{op.Type} failed: {ex.Message}");
+                Journal(op.Id, "ERROR", $"{tag} {op.Type} failed: {ex.Message}");
                 failed++;
                 if (stopOnError) break;
             }

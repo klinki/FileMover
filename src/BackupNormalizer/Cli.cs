@@ -49,7 +49,7 @@ public static class Cli
               plan --canonical-db C.db --target-db T.db [--canonical-root R] --target-root R [--plan ID] [--out-db T.db]
               plan show <plan-id> [--db PATH] | plan export <plan-id> [--format json] [--output F] [--db PATH]
               plan import <plan.json> [--db PATH] [--root-path ABS] [--role R]
-              execute <plan-id> [--db PATH] [--map-root id=path ...] [--resume] [--stop-on-error]
+              execute <plan-id> [--db PATH] [--map-root id=path ...] [--resume] [--stop-on-error] [--yes]
               verify <plan-id> [--db PATH] [--map-root id=path ...]
               purge --older-than 30d --yes [--db PATH] [--path ROOTPATH]
               inventory export <rootId> --output F [--db PATH] | inventory import <file> [--db PATH]
@@ -243,9 +243,42 @@ public static class Cli
         string db = Opt(a, "--db", AppConfig.Load(Opt(a, "--config", AppConfig.DefaultPath)).Database);
         var map = MapRoots(a);
         using var d = new Database(db);
+        if (!d.PlanExists(a[0])) return Fail($"unknown plan '{a[0]}'");
+        if (!Has(a, "--yes"))
+        {
+            var (counts, est) = PlanSummary(d, a[0]);
+            int total = counts.Values.Sum();
+            Console.WriteLine($"Plan {a[0]}: " +
+                string.Join("  ", counts.OrderBy(kv => kv.Key).Select(kv => $"{kv.Key} {kv.Value}")) +
+                $"  estBytes={est}");
+            Console.Write($"Execute {total} operations ({est} bytes to copy)? [y/N] ");
+            string? ans = Console.ReadLine();
+            if (!string.Equals(ans?.Trim(), "y", StringComparison.OrdinalIgnoreCase)
+                && !string.Equals(ans?.Trim(), "yes", StringComparison.OrdinalIgnoreCase))
+            {
+                Console.WriteLine("Aborted (nothing was modified). Use --yes to approve non-interactively.");
+                return 2;
+            }
+        }
         var sum = new Executor(d).Execute(a[0], map, Has(a, "--resume"), Has(a, "--stop-on-error"));
         Console.WriteLine($"execute {a[0]}: completed={sum.Completed} failed={sum.Failed} conflicts={sum.Conflicts}");
         return sum.Failed == 0 && sum.Conflicts == 0 ? 0 : 3;
+    }
+
+    private static (Dictionary<string, int> Counts, long EstBytes) PlanSummary(Database db, string planId)
+    {
+        var counts = new Dictionary<string, int>();
+        using var c = db.Conn.CreateCommand();
+        c.CommandText = "SELECT Type,COUNT(*) FROM PlanOperation WHERE PlanId=$p GROUP BY Type";
+        c.Parameters.AddWithValue("$p", planId);
+        using var r = c.ExecuteReader();
+        while (r.Read()) counts[r.GetString(0)] = r.GetInt32(1);
+        r.Close();
+        using var c2 = db.Conn.CreateCommand();
+        c2.CommandText = "SELECT EstimatedBytesCopied FROM Plan WHERE Id=$p";
+        c2.Parameters.AddWithValue("$p", planId);
+        long est = (long)(c2.ExecuteScalar() ?? 0L);
+        return (counts, est);
     }
 
     private static int Verify(string[] a)

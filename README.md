@@ -261,7 +261,7 @@ plan --canonical <rootId> [--db PATH] [--plan ID]
 plan --canonical-db C.db --target-db T.db [--canonical-root R] --target-root R [--plan ID]
 plan show <plan-id> [--db PATH]
 plan export <plan-id> [--format json] [--output F] [--db PATH]
-execute <plan-id> [--db PATH] [--map-root id=path ...] [--resume] [--stop-on-error]
+execute <plan-id> [--db PATH] [--map-root id=path ...] [--resume] [--stop-on-error] [--yes]
 verify <plan-id> [--db PATH] [--map-root id=path ...]
 purge --older-than 30d --yes [--db PATH] [--path ROOTPATH]
 inventory export <rootId> --output F [--db PATH]
@@ -285,7 +285,12 @@ Config file `backup-normalizer.json` (created by `init`, overridable via `--conf
 
 `hashAlgorithm` accepts `sha256` (current) and `blake3` (mapped to SHA-256 fallback with a warning until a validated BLAKE3 native is added for ARM32/QNAP). Hashing is streaming (4 MiB buffer), supports >4 GB files, never loads whole files.
 
-Exit codes: `0` ok, `2` usage/error, `3` execute/verify completed with failures or conflicts.
+Exit codes: `0` ok, `2` usage/error/declined confirmation, `3` execute/verify completed with failures or conflicts.
+
+`execute` prints the plan totals and per-operation `[i/n]` progress, and asks
+`Execute N operations (X bytes to copy)? [y/N]` unless `--yes` is given
+(automation should always pass `--yes`; a declined or missing answer aborts
+with code 2 and modifies nothing).
 
 ## 7. Pre-execution checks and conflicts
 
