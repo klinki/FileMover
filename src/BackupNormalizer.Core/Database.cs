@@ -14,7 +14,7 @@ public sealed class Database : IDisposable
 
     static Database()
     {
-        try { SQLitePCL.Batteries.Init(); } catch { }
+        SqliteInit.EnsureInitialized();
     }
 
     public Database(string dbPath)

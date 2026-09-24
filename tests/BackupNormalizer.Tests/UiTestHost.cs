@@ -48,3 +48,7 @@ internal static class UiTestHost
         if (error != null) throw new Xunit.Sdk.XunitException("UI thread failed: " + error);
     }
 }
+
+/// <summary>Tests that redirect process-wide Console state must not run in parallel.</summary>
+[CollectionDefinition("Console")]
+public sealed class ConsoleCollectionDefinition { }

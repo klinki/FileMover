@@ -95,6 +95,7 @@ public sealed class TrashSurvivorTests : IDisposable
     }
 }
 
+[Collection("Console")]
 public sealed class PlanConflictsTests
 {
     [Fact]

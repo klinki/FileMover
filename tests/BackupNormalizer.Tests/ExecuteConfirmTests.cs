@@ -2,6 +2,7 @@ using BackupNormalizer;
 
 namespace BackupNormalizer.Tests;
 
+[Collection("Console")]
 public sealed class ExecuteConfirmTests : IDisposable
 {
     private readonly string _dir = Path.Combine(Path.GetTempPath(), "bn-confirm-" + Guid.NewGuid().ToString("N"));

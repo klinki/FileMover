@@ -1,8 +1,4 @@
 ﻿using BackupNormalizer;
 
-try
-{
-    SQLitePCL.Batteries.Init();
-}
-catch { }
+BackupNormalizer.SqliteInit.EnsureInitialized();
 return Cli.Run(args);
