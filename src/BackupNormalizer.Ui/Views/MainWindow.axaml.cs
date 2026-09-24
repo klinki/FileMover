@@ -364,8 +364,19 @@ public partial class MainWindow : Window
         ["Modified"] = "Modified",
     };
 
-    private void OnGridSorting(object? sender, DataGridColumnEventArgs e)
+    /// <summary>TC niche: double-click the divider restores 50/50.</summary>
+    public void ResetSplit()
     {
+        if (SplitGrid.ColumnDefinitions.Count >= 3)
+        {
+            SplitGrid.ColumnDefinitions[0].Width = new GridLength(1, GridUnitType.Star);
+            SplitGrid.ColumnDefinitions[2].Width = new GridLength(1, GridUnitType.Star);
+        }
+    }
+
+    private void OnSplitterDoubleTapped(object? sender, TappedEventArgs e) => ResetSplit();
+
+    private void OnGridSorting(object? sender, DataGridColumnEventArgs e)    {
         if (Vm == null) return;
         var grid = sender as DataGrid;
         if (grid == null || e.Column == null) return;

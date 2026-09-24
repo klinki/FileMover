@@ -106,7 +106,7 @@
     </Border>
 
     <!-- Main area: two panels + staged list -->
-    <Grid ColumnDefinitions="*,Auto,*">
+    <Grid x:Name="SplitGrid" ColumnDefinitions="*,Auto,*">
       <!-- Left panel -->
       <Border Grid.Column="0" Margin="0,6,0,6" BorderBrush="DodgerBlue" BorderThickness="2" CornerRadius="4"
               IsVisible="{Binding IsLeftActive}">
@@ -207,7 +207,7 @@
         </DockPanel>
       </Border>
 
-      <GridSplitter Grid.Column="1" Width="6" ResizeBehavior="PreviousAndNext" Background="Gray" />
+      <GridSplitter Grid.Column="1" Width="6" ResizeBehavior="PreviousAndNext" Background="Gray" DoubleTapped="OnSplitterDoubleTapped" ToolTip.Tip="Double-click to restore 50/50" />
 
       <!-- Right panel -->
       <Border Grid.Column="2" Margin="0,6,0,6" BorderBrush="DodgerBlue" BorderThickness="2" CornerRadius="4"

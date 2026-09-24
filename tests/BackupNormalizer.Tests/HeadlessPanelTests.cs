@@ -194,3 +194,26 @@ public sealed class StagedWindowTests
         });
     }
 }
+
+[Collection("UI")]
+public sealed class SplitterTests
+{
+    [Fact]
+    public void ResetSplit_Restores_Equal_Stars()
+    {
+        UiTestHost.Run(() =>
+        {
+            var window = new MainWindow { Width = 1100, Height = 700 };
+            window.Show();
+            Dispatcher.UIThread.RunJobs();
+            var grid = window.FindControl<Grid>("SplitGrid");
+            Assert.NotNull(grid);
+            grid!.ColumnDefinitions[0].Width = new GridLength(2, GridUnitType.Star);
+            grid.ColumnDefinitions[2].Width = new GridLength(1, GridUnitType.Star);
+            (window as MainWindow)!.ResetSplit();
+            Assert.Equal(new GridLength(1, GridUnitType.Star), grid.ColumnDefinitions[0].Width);
+            Assert.Equal(new GridLength(1, GridUnitType.Star), grid.ColumnDefinitions[2].Width);
+            window.Close();
+        });
+    }
+}
