@@ -352,6 +352,12 @@ getconf PAGESIZE  # expect 32768
 ./BackupNormalizer scan-test /data
 ```
 
+Or run it all at once (also suitable for CI on the NAS):
+
+```bash
+./qnap-check.sh ./BackupNormalizer /data
+```
+
 ## 9. Tests
 
 ```bash
