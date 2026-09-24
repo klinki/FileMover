@@ -49,6 +49,7 @@ public static class Cli
               plan --canonical-db C.db --target-db T.db [--canonical-root R] --target-root R [--plan ID] [--out-db T.db]
               plan show <plan-id> [--db PATH] | plan export <plan-id> [--format json] [--output F] [--db PATH]
               plan import <plan.json> [--db PATH] [--root-path ABS] [--role R]
+              plan conflicts <plan-id> [--db PATH]
               execute <plan-id> [--db PATH] [--map-root id=path ...] [--resume] [--stop-on-error] [--yes]
               verify <plan-id> [--db PATH] [--map-root id=path ...]
               purge --older-than 30d --yes [--db PATH] [--path ROOTPATH]
@@ -177,6 +178,18 @@ public static class Cli
             if (!string.IsNullOrEmpty(outF)) File.WriteAllText(outF, json);
             else Console.WriteLine(json);
             return 0;
+        }
+        if (a[0] == "conflicts" && a.Length >= 2)
+        {
+            string db = Opt(a, "--db", AppConfig.Load(Opt(a, "--config", AppConfig.DefaultPath)).Database);
+            using var d = new Database(db);
+            if (!d.PlanExists(a[1])) return Fail($"unknown plan '{a[1]}'");
+            var bad = d.ListPlanOperations(a[1], onlyProblems: true);
+            if (bad.Count == 0) { Console.WriteLine($"plan {a[1]}: no conflicts or failures"); return 0; }
+            Console.WriteLine($"plan {a[1]}: {bad.Count} problem(s)");
+            foreach (var o in bad)
+                Console.WriteLine($"  {o.Sequence:D4} {o.Status,-8} {o.Type,-7} {o.SourceRoot}:{o.SourcePath} -> {o.DestRoot}:{o.DestPath} : {o.Error}");
+            return 3;
         }
         if (a[0] == "import" && a.Length >= 2)
         {

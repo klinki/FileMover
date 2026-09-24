@@ -94,3 +94,48 @@ public sealed class TrashSurvivorTests : IDisposable
         Assert.True(File.Exists(Path.Combine(data, "dup.txt"))); // last copy preserved
     }
 }
+
+public sealed class PlanConflictsTests
+{
+    [Fact]
+    public void Conflicts_Command_Lists_Problems()
+    {
+        string dir = Path.Combine(Path.GetTempPath(), "bn-conf-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(dir);
+        try
+        {
+            File.WriteAllText(Path.Combine(dir, "v.txt"), "x");
+            string dbp = Path.Combine(dir, "c.db");
+            using (var db = new Database(dbp))
+            {
+                db.UpsertRoot(new StorageRootRow("d", "d", dir, "Backup", true, "fs", "unknown", Database.UtcNow()));
+                new Scanner(db).ScanRoot("d");
+                db.InsertPlan("pc", "d", 0);
+                db.InsertOperation("pc", 1, "TRASH", "d", "v.txt", "d", null, 1, "deadbeef");
+            }
+            using (var db = new Database(dbp))
+            {
+                var sum = new Executor(db).Execute("pc");
+                Assert.Equal(1, sum.Conflicts);
+                Assert.Equal(0, sum.Failed);
+            }
+            using (var db = new Database(dbp))
+            {
+                var bad = db.ListPlanOperations("pc", onlyProblems: true);
+                Assert.Single(bad);
+                Assert.Equal("Conflict", bad[0].Status);
+            }
+            var oldOut = Console.Out;
+            try
+            {
+                var sw = new StringWriter();
+                Console.SetOut(sw);
+                Assert.Equal(3, Cli.Run(new[] { "plan", "conflicts", "pc", "--db", dbp }));
+                Assert.Contains("TRASH", sw.ToString());
+                Assert.Equal(0, Cli.Run(new[] { "plan", "conflicts", "nope", "--db", dbp }) == 0 ? 1 : 0); // unknown plan -> Fail(2), not 0
+            }
+            finally { Console.SetOut(oldOut); }
+        }
+        finally { try { Directory.Delete(dir, true); } catch { } }
+    }
+}

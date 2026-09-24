@@ -287,4 +287,26 @@ public sealed class Database : IDisposable
         c.Parameters.AddWithValue("$id", planId);
         return c.ExecuteScalar() != null;
     }
+
+    public sealed record PlanOperationRow(long Id, int Sequence, string Type,
+        string? SourceRoot, string? SourcePath, string? DestRoot, string? DestPath,
+        long ExpectedSize, string? ExpectedHash, string Status, string? Error);
+
+    public List<PlanOperationRow> ListPlanOperations(string planId, bool onlyProblems = false)
+    {
+        var out_ = new List<PlanOperationRow>();
+        using var c = _conn.CreateCommand();
+        c.CommandText = "SELECT Id,Sequence,Type,SourceRootId,SourcePath,DestinationRootId,DestinationPath,ExpectedSize,ExpectedHash,Status,Error FROM PlanOperation WHERE PlanId=$p"
+            + (onlyProblems ? " AND Status IN ('Conflict','Failed','Skipped')" : "")
+            + " ORDER BY Sequence";
+        c.Parameters.AddWithValue("$p", planId);
+        using var r = c.ExecuteReader();
+        while (r.Read())
+            out_.Add(new PlanOperationRow(r.GetInt64(0), r.GetInt32(1), r.GetString(2),
+                r.IsDBNull(3) ? null : r.GetString(3), r.IsDBNull(4) ? null : r.GetString(4),
+                r.IsDBNull(5) ? null : r.GetString(5), r.IsDBNull(6) ? null : r.GetString(6),
+                r.GetInt64(7), r.IsDBNull(8) ? null : r.GetString(8), r.GetString(9),
+                r.IsDBNull(10) ? null : r.GetString(10)));
+        return out_;
+    }
 }
