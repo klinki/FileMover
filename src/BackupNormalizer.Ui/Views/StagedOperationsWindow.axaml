@@ -8,7 +8,7 @@
         x:DataType="vm:MainViewModel"
         Icon="/Assets/avalonia-logo.ico"
         Title="Staged operations (plan-only)">
-  <DockPanel>
+  <DockPanel KeyDown="OnKeyDown">
     <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Spacing="6" Margin="6">
       <TextBlock Text="Staged operations (plan-only)" FontWeight="Bold" VerticalAlignment="Center" />
       <Button Content="Remove selected" Command="{Binding RemoveStagedCommand}" CommandParameter="{Binding ElementName=StagedList, Path=SelectedItem}" />

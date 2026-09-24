@@ -494,3 +494,23 @@ public sealed class StagedOpItemTests
         Assert.Equal(full, item.HashFull);
     }
 }
+
+public sealed class StagedRemovalTests : IDisposable
+{
+    private readonly string _dir = Path.Combine(Path.GetTempPath(), "bn-stagedrm-" + Guid.NewGuid().ToString("N"));
+    public StagedRemovalTests() { Directory.CreateDirectory(_dir); }
+    public void Dispose() { try { Directory.Delete(_dir, true); } catch { } }
+
+    [Fact]
+    public void RemoveStaged_Removes_Item_And_Updates_Summary()
+    {
+        var vm = new MainViewModel { BasePath = _dir };
+        vm.ApplyBase();
+        vm.StageMkdirFromDialog("toremove");
+        var item = Assert.Single(vm.Staged);
+        vm.RemoveStaged(item);
+        Assert.Empty(vm.Staged);
+        Assert.Equal("No staged operations.", vm.PlanSummary);
+        vm.RemoveStaged(null); // no-op, never throws
+    }
+}
