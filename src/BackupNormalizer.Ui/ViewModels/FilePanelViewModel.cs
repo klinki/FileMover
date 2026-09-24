@@ -73,6 +73,18 @@ public sealed partial class FilePanelViewModel : ObservableObject
     public string SortColumn { get; private set; } = "Name";
     public bool SortAscending { get; private set; } = true;
 
+    /// <summary>Parent directory, or null at a filesystem root ("/", "C:\").</summary>
+    public static DirectoryInfo? ParentOf(string path)
+    {
+        string trimmed = path.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        if (string.IsNullOrEmpty(trimmed))
+            return null; // Unix root "/" trims to ""
+        // Windows drive root ("C:\") trims to "C:", which has no parent.
+        if (trimmed.Length == 2 && trimmed[1] == ':' && OperatingSystem.IsWindows())
+            return null;
+        return Directory.GetParent(trimmed);
+    }
+
     public void Refresh()
     {
         Entries.Clear();
@@ -85,8 +97,7 @@ public sealed partial class FilePanelViewModel : ObservableObject
                 return;
             }
             // ".." up-row: always first, hidden at filesystem root.
-            var parent = Directory.GetParent(CurrentPath.TrimEnd(Path.DirectorySeparatorChar));
-            if (parent != null)
+            if (ParentOf(CurrentPath) is { } parent)
                 Entries.Add(new FileEntryItem("..", parent.FullName, true, 0, DateTime.MinValue, isParent: true));
             int dirs = 0, files = 0;
             foreach (var d in Directory.GetDirectories(CurrentPath).OrderBy(x => x))
@@ -172,8 +183,7 @@ public sealed partial class FilePanelViewModel : ObservableObject
 
     public void GoUp()
     {
-        var parent = Directory.GetParent(CurrentPath.TrimEnd(Path.DirectorySeparatorChar));
-        if (parent != null)
+        if (ParentOf(CurrentPath) is { } parent)
         {
             CurrentPath = parent.FullName;
             Refresh();

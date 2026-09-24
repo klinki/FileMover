@@ -42,6 +42,28 @@ public sealed class PanelViewTests : IDisposable
     }
 
     [Fact]
+    public void Filesystem_Root_Lists_Entries_Without_Error()
+    {
+        string root = Path.GetPathRoot(Path.GetFullPath(_dir))!;
+        var panel = new FilePanelViewModel { CurrentPath = root };
+        panel.Refresh();
+        Assert.DoesNotContain("error", panel.Status, StringComparison.OrdinalIgnoreCase);
+        Assert.NotEmpty(panel.Entries);
+        Assert.DoesNotContain(panel.Entries, e => e.IsParentEntry);
+    }
+
+    [Fact]
+    public void GoUp_At_Filesystem_Root_Is_NoOp()
+    {
+        string root = Path.GetPathRoot(Path.GetFullPath(_dir))!;
+        var panel = new FilePanelViewModel { CurrentPath = root };
+        panel.Refresh();
+        var ex = Record.Exception(() => panel.GoUp());
+        Assert.Null(ex);
+        Assert.Equal(root, panel.CurrentPath);
+    }
+
+    [Fact]
     public void Sorting_Keeps_DotDot_First_And_Dirs_Before_Files()
     {
         var sub = Path.Combine(_dir, "sort");
@@ -364,5 +386,39 @@ public sealed class MainWindowStaticInitTests
             System.Runtime.CompilerServices.RuntimeHelpers.RunClassConstructor(
                 typeof(BackupNormalizer.Ui.Views.MainWindow).TypeHandle));
         Assert.Null(ex);
+    }
+}
+
+public sealed class MainViewModelPanelTests : IDisposable
+{
+    private readonly string _dir = Path.Combine(Path.GetTempPath(), "bn-vmpanel-" + Guid.NewGuid().ToString("N"));
+    public MainViewModelPanelTests() { Directory.CreateDirectory(_dir); }
+    public void Dispose() { try { Directory.Delete(_dir, true); } catch { } }
+
+    [Fact]
+    public void SwapPanels_Swaps_Paths_And_Refreshes()
+    {
+        var a = Path.Combine(_dir, "a"); Directory.CreateDirectory(a);
+        var b = Path.Combine(_dir, "b"); Directory.CreateDirectory(b);
+        File.WriteAllText(Path.Combine(a, "f.txt"), "x");
+        var vm = new MainViewModel { BasePath = _dir };
+        vm.Left.CurrentPath = a; vm.Left.Refresh();
+        vm.Right.CurrentPath = b; vm.Right.Refresh();
+        vm.SwapPanels();
+        Assert.Equal(b, vm.Left.CurrentPath);
+        Assert.Equal(a, vm.Right.CurrentPath);
+        Assert.Contains(vm.Right.Entries, e => e.Name == "f.txt");
+    }
+
+    [Fact]
+    public void RefreshActive_Reloads_Active_Panel_Only()
+    {
+        var a = Path.Combine(_dir, "a"); Directory.CreateDirectory(a);
+        var vm = new MainViewModel { BasePath = _dir };
+        vm.Left.CurrentPath = a; vm.Left.Refresh();
+        Assert.Empty(vm.Left.Entries.Where(e => !e.IsParentEntry));
+        File.WriteAllText(Path.Combine(a, "new.txt"), "x");
+        vm.RefreshActive(); // left is active by default
+        Assert.Contains(vm.Left.Entries, e => e.Name == "new.txt");
     }
 }

@@ -110,6 +110,22 @@ public sealed partial class MainViewModel : ViewModelBase
     }
 
     [RelayCommand]
+    public void RefreshActive()
+    {
+        Active.Refresh();
+        StatusMessage = "Active panel refreshed.";
+    }
+
+    [RelayCommand]
+    public void SwapPanels()
+    {
+        (Left.CurrentPath, Right.CurrentPath) = (Right.CurrentPath, Left.CurrentPath);
+        Left.Refresh();
+        Right.Refresh();
+        StatusMessage = "Panels swapped.";
+    }
+
+    [RelayCommand]
     public void SetActive(string side)
     {
         IsLeftActive = !string.Equals(side, "Right", StringComparison.OrdinalIgnoreCase);
