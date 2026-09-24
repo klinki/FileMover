@@ -52,7 +52,7 @@ public sealed class Database : IDisposable
             {
                 Context.Database.ExecuteSqlRaw("PRAGMA journal_mode=WAL;");
                 Context.Database.ExecuteSqlRaw("PRAGMA synchronous=NORMAL;");
-                Context.Database.Migrate();
+                Context.Database.EnsureCreated();
             }
         }
         catch

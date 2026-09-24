@@ -15,7 +15,7 @@ Requirements:
 - .NET 10 SDK (`dotnet --version` should print `10.x`)
 - No other system dependencies. EF Core's SQLite provider includes the native SQLite library.
 
-The application applies EF Core migrations when it opens a writable database. The initial migration adopts databases created with the earlier SQLite schema without replacing their inventory or plans.
+EF Core creates the SQLite schema when the application opens a new writable database. Schema upgrades for existing databases are not supported yet.
 
 Build once:
 
