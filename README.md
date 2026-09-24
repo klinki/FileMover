@@ -247,6 +247,15 @@ Notes:
 - **Re-plan vs replay rule of thumb**: replay (`--map-root`) while the
   pair is proven in sync and the plan has no `TRASH`; otherwise re-plan —
   planning is cheap, deleting the wrong copy is not.
+- **Version your plans**: `plan export` JSON files are small, stable text
+  (logical paths + sizes + hashes, no absolute machine paths). Commit them
+  to git next to a note of which DB snapshot they were built from:
+  ```bash
+  bn plan export organize-001 --db ./disk2.db --output ./plans/2026-09-24-organize-001.json
+  ```
+  Later `diff` + `plan conflicts` output tells you exactly what has drifted
+  since. Never commit `.db` files (binary, machine-local); the exported
+  JSON plus a fresh scan reproduces everything.
 
 ## 6. Command reference
 
