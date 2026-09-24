@@ -115,10 +115,17 @@ public partial class MainWindow : Window
     {
         if (Vm == null) return;
         var grid = GridOf(e.Source);
-        if (grid == null) return;
-        var panel = PanelOf(grid);
+        FilePanelViewModel? panel = grid != null ? PanelOf(grid) : null;
+        // Outside grids (toolbar, status, splitter): shortcuts fall back to the
+        // active panel — but never hijack text input, and Space/Tab/arrows stay
+        // grid-only so buttons, menus and focus traversal keep working.
+        bool inTextInput = e.Source is TextBox;
+        bool inMenu = e.Source is MenuItem or Menu;
+        if (panel == null && !inTextInput)
+            panel = Vm.Active;
         if (panel == null) return;
-        if (e.Key == Key.Space && e.KeyModifiers == KeyModifiers.None)
+        bool inGrid = grid != null;
+        if (e.Key == Key.Space && e.KeyModifiers == KeyModifiers.None && inGrid)
         {
             panel.SpaceOnCursor();
             e.Handled = true;
@@ -129,18 +136,18 @@ public partial class MainWindow : Window
             panel.MarkAll();
             e.Handled = true;
         }
-        else if (e.Key == Key.Tab && e.KeyModifiers == KeyModifiers.None)
+        else if (e.Key == Key.Tab && e.KeyModifiers == KeyModifiers.None && inGrid)
         {
-            // TC panel switch; scoped to grids so Tab still moves through textboxes.
+            // TC panel switch; grid-scoped so Tab still moves through textboxes.
             Vm.IsLeftActive = !Vm.IsLeftActive;
             e.Handled = true;
         }
-        else if (e.Key == Key.Escape && e.KeyModifiers == KeyModifiers.None)
+        else if (e.Key == Key.Escape && e.KeyModifiers == KeyModifiers.None && !inTextInput && !inMenu)
         {
             panel.ClearMarks();
             e.Handled = true;
         }
-        else if ((e.Key == Key.Up || e.Key == Key.Down) && e.KeyModifiers.HasFlag(KeyModifiers.Shift))
+        else if ((e.Key == Key.Up || e.Key == Key.Down) && e.KeyModifiers.HasFlag(KeyModifiers.Shift) && inGrid)
         {
             panel.ShiftArrow(e.Key == Key.Down ? 1 : -1);
             e.Handled = true;
@@ -155,6 +162,7 @@ public partial class MainWindow : Window
         var grid = GridOf(e.Source);
         if (grid == null) return;
         Activate(grid);
+        grid.Focus(); // cursor, focus and marks move together; keys route into the grid
         var panel = PanelOf(grid);
         if (panel == null) return;
         var row = RowOf(e.Source);
@@ -210,13 +218,28 @@ public partial class MainWindow : Window
             var set = _dragPanel.StagingSet();
             if (set.Count == 0 || _dragPress == null) { _dragPanel = null; _dragPress = null; return; }
             _dragging = true;
+            var vm = Vm;
+            vm.StatusMessage = $"Dragging {set.Count} item(s) — release over the other panel to stage MOVE.";
             var transfer = new DataTransfer();
             transfer.Add(DataTransferItem.Create(DropFormat, string.Join("\n", set.Select(s => s.FullPath))));
             var press = _dragPress;
             _dragPanel = null;
             _dragPress = null;
-            _ = DragDrop.DoDragDropAsync(press, transfer, DragDropEffects.Move).ContinueWith(_ => _dragging = false,
-                System.Threading.Tasks.TaskScheduler.Default);
+            try
+            {
+                _ = DragDrop.DoDragDropAsync(press, transfer, DragDropEffects.Move).ContinueWith(t =>
+                {
+                    _dragging = false;
+                    if (t.Exception != null)
+                        Dispatcher.UIThread.Post(() => vm.StatusMessage = "Drag failed: " +
+                            (t.Exception.InnerException?.Message ?? t.Exception.Message));
+                }, System.Threading.Tasks.TaskScheduler.Default);
+            }
+            catch (Exception ex)
+            {
+                _dragging = false;
+                vm.StatusMessage = "Drag failed: " + ex.Message;
+            }
         }
     }
 

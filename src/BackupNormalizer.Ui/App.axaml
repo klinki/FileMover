@@ -9,6 +9,20 @@
         <local:ViewLocator />
     </Application.DataTemplates>
 
+    <Application.Resources>
+        <!-- TC look, shared by all windows: no per-cell focus frame; soft full-row selection. -->
+        <SolidColorBrush x:Key="DataGridCellFocusVisualPrimaryBrush" Color="Transparent" />
+        <SolidColorBrush x:Key="DataGridCellFocusVisualSecondaryBrush" Color="Transparent" />
+        <SolidColorBrush x:Key="DataGridRowSelectedBackgroundBrush" Color="#D6E9F8" />
+        <SolidColorBrush x:Key="DataGridRowSelectedHoveredBackgroundBrush" Color="#C2DDF5" />
+        <SolidColorBrush x:Key="DataGridRowSelectedUnfocusedBackgroundBrush" Color="#D6E9F8" />
+        <SolidColorBrush x:Key="DataGridRowSelectedHoveredUnfocusedBackgroundBrush" Color="#C2DDF5" />
+        <x:Double x:Key="DataGridRowSelectedBackgroundOpacity">1</x:Double>
+        <x:Double x:Key="DataGridRowSelectedHoveredBackgroundOpacity">1</x:Double>
+        <x:Double x:Key="DataGridRowSelectedUnfocusedBackgroundOpacity">1</x:Double>
+        <x:Double x:Key="DataGridRowSelectedHoveredUnfocusedBackgroundOpacity">1</x:Double>
+    </Application.Resources>
+
     <Application.Styles>
         <FluentTheme />
         <StyleInclude Source="avares://Avalonia.Controls.DataGrid/Themes/Fluent.xaml" />

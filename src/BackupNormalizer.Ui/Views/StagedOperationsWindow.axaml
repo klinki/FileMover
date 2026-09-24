@@ -15,18 +15,34 @@
       <Button Content="Clear" Command="{Binding ClearStagedCommand}" />
       <TextBlock Text="{Binding PlanSummary}" VerticalAlignment="Center" />
     </StackPanel>
-    <ListBox x:Name="StagedList" ItemsSource="{Binding Staged}" Margin="6,0,6,6">
-      <ListBox.ItemTemplate>
-        <DataTemplate x:DataType="vm:StagedOpItem">
-          <Grid ColumnDefinitions="70,*,*,90,110">
-            <TextBlock Grid.Column="0" Text="{Binding Type}" FontWeight="Bold" />
-            <TextBlock Grid.Column="1" Text="{Binding Source}" TextTrimming="CharacterEllipsis" />
-            <TextBlock Grid.Column="2" Text="{Binding Dest}" TextTrimming="CharacterEllipsis" />
-            <TextBlock Grid.Column="3" Text="{Binding SizeText}" HorizontalAlignment="Right" />
-            <TextBlock Grid.Column="4" Text="{Binding HashShort}" />
-          </Grid>
-        </DataTemplate>
-      </ListBox.ItemTemplate>
-    </ListBox>
+    <DataGrid x:Name="StagedList" ItemsSource="{Binding Staged}" Margin="6,0,6,6"
+              AutoGenerateColumns="False" IsReadOnly="True" SelectionMode="Single"
+              CanUserResizeColumns="True" CanUserSortColumns="False" GridLinesVisibility="Horizontal">
+      <DataGrid.Columns>
+        <DataGridTextColumn Header="Op" Binding="{Binding Type}" Width="70" />
+        <DataGridTemplateColumn Header="Source" Width="*" CanUserSort="False">
+          <DataGridTemplateColumn.CellTemplate>
+            <DataTemplate x:DataType="vm:StagedOpItem">
+              <TextBlock Text="{Binding Source}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
+            </DataTemplate>
+          </DataGridTemplateColumn.CellTemplate>
+        </DataGridTemplateColumn>
+        <DataGridTemplateColumn Header="Destination" Width="*" CanUserSort="False">
+          <DataGridTemplateColumn.CellTemplate>
+            <DataTemplate x:DataType="vm:StagedOpItem">
+              <TextBlock Text="{Binding Dest}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
+            </DataTemplate>
+          </DataGridTemplateColumn.CellTemplate>
+        </DataGridTemplateColumn>
+        <DataGridTextColumn Header="Size" Binding="{Binding SizeText}" Width="90" />
+        <DataGridTemplateColumn Header="Hash" Width="200" CanUserSort="False">
+          <DataGridTemplateColumn.CellTemplate>
+            <DataTemplate x:DataType="vm:StagedOpItem">
+              <TextBlock Text="{Binding HashFull}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
+            </DataTemplate>
+          </DataGridTemplateColumn.CellTemplate>
+        </DataGridTemplateColumn>
+      </DataGrid.Columns>
+    </DataGrid>
   </DockPanel>
 </Window>

@@ -265,3 +265,55 @@ public sealed class HeadlessShortcutTests
         Dispatcher.UIThread.RunJobs();
     }
 }
+
+[Collection("UI")]
+public sealed class HeadlessFallbackShortcutTests
+{
+    [Fact]
+    public void Shortcuts_Fall_Back_To_Active_Panel_Outside_Grids()
+    {
+        UiTestHost.Run(() =>
+        {
+            var dir = Path.Combine(Path.GetTempPath(), "bn-fallback-" + Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(dir);
+            File.WriteAllText(Path.Combine(dir, "f.txt"), "x");
+            try
+            {
+                var vm = new MainViewModel { BasePath = dir };
+                vm.ApplyBase();
+                var w = new MainWindow { DataContext = vm, Width = 1100, Height = 700 };
+                w.Show();
+                Pump6();
+                // All grids must accept drops (ctor wiring, not XAML).
+                foreach (var g in w.GetLogicalDescendants().OfType<DataGrid>())
+                    Assert.True(DragDrop.GetAllowDrop(g));
+                // Focus a neutral toolbar button: shortcuts apply to the active panel.
+                var btn = w.GetVisualDescendants().OfType<Button>().First(b => (b.Content as string) == "Apply");
+                btn.Focus();
+                Pump6();
+                w.KeyPress(Key.A, RawInputModifiers.Control, PhysicalKey.A, "a");
+                Pump6();
+                Assert.True(vm.Left.Entries.Where(e => !e.IsParentEntry).All(e => e.IsMarked));
+                w.KeyPress(Key.Escape, RawInputModifiers.None, PhysicalKey.Escape, "");
+                Pump6();
+                Assert.Empty(vm.Left.Entries.Where(e => e.IsMarked).ToList());
+                // ...but never hijack text input.
+                var box = w.GetVisualDescendants().OfType<TextBox>().First();
+                box.Focus();
+                Pump6();
+                w.KeyPress(Key.A, RawInputModifiers.Control, PhysicalKey.A, "a");
+                Pump6();
+                Assert.Empty(vm.Left.Entries.Where(e => e.IsMarked).ToList());
+                w.Close();
+            }
+            finally { try { Directory.Delete(dir, true); } catch { } }
+        });
+    }
+
+    private static void Pump6()
+    {
+        Dispatcher.UIThread.RunJobs();
+        Thread.Sleep(20);
+        Dispatcher.UIThread.RunJobs();
+    }
+}

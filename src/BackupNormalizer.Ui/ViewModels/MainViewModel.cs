@@ -16,6 +16,7 @@ public sealed partial class StagedOpItem : ObservableObject
     public long Size { get; }
     public string SizeText => Size == 0 ? "" : Size.ToString("N0");
     public string HashShort { get; }
+    public string HashFull { get; }
 
     public StagedOpItem(string type, string source, string dest, long size, string? hash)
     {
@@ -24,6 +25,7 @@ public sealed partial class StagedOpItem : ObservableObject
         Dest = dest;
         Size = size;
         HashShort = hash is null ? "" : hash.Length > 12 ? hash[..12] + "…" : hash;
+        HashFull = hash ?? "";
     }
 }
 

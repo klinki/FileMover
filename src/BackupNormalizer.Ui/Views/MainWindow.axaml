@@ -11,17 +11,6 @@
         Title="BackupNormalizer Planner — Total Commander style (plan-only)">
   <Window.Resources>
     <conv:MarkedToBrushConverter x:Key="MarkedToBrush" />
-    <!-- TC look: no per-cell focus frame; selection reads as a soft full-row tint. -->
-    <SolidColorBrush x:Key="DataGridCellFocusVisualPrimaryBrush" Color="Transparent" />
-    <SolidColorBrush x:Key="DataGridCellFocusVisualSecondaryBrush" Color="Transparent" />
-    <SolidColorBrush x:Key="DataGridRowSelectedBackgroundBrush" Color="#D6E9F8" />
-    <SolidColorBrush x:Key="DataGridRowSelectedHoveredBackgroundBrush" Color="#C2DDF5" />
-    <SolidColorBrush x:Key="DataGridRowSelectedUnfocusedBackgroundBrush" Color="#D6E9F8" />
-    <SolidColorBrush x:Key="DataGridRowSelectedHoveredUnfocusedBackgroundBrush" Color="#C2DDF5" />
-    <x:Double x:Key="DataGridRowSelectedBackgroundOpacity">1</x:Double>
-    <x:Double x:Key="DataGridRowSelectedHoveredBackgroundOpacity">1</x:Double>
-    <x:Double x:Key="DataGridRowSelectedUnfocusedBackgroundOpacity">1</x:Double>
-    <x:Double x:Key="DataGridRowSelectedHoveredUnfocusedBackgroundOpacity">1</x:Double>
     <DataTemplate x:Key="FileIconTemplate" x:DataType="vm:FileEntryItem">
       <Panel Width="16" Height="16" VerticalAlignment="Center" HorizontalAlignment="Center">
         <Path Data="M13,20H11V8L5.5,13.5L4.08,12.08L12,4.16L19.92,12.08L18.5,13.5L13,8V20Z"

@@ -184,7 +184,9 @@ public sealed class StagedWindowTests
                 var window = new StagedOperationsWindow { DataContext = vm, Width = 800, Height = 400 };
                 window.Show();
                 Dispatcher.UIThread.RunJobs();
-                var list = window.GetLogicalDescendants().OfType<ListBox>().First();
+                var list = window.GetLogicalDescendants().OfType<DataGrid>().First();
+                Assert.False(list.CanUserSortColumns);
+                Assert.True(list.CanUserResizeColumns);
                 Assert.Equal(vm.Staged.Count, (list.ItemsSource as System.Collections.IList)?.Count ?? -1);
                 window.Close();
             }

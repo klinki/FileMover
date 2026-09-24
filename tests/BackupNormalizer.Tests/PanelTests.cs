@@ -483,3 +483,14 @@ public sealed class VirtualDirTests : IDisposable
         Assert.Equal(before, vm.Staged.Count);
     }
 }
+
+public sealed class StagedOpItemTests
+{
+    [Fact]
+    public void HashFull_Preserves_Digest_For_Resizing()
+    {
+        string full = new('a', 64);
+        var item = new StagedOpItem("COPY", "s", "d", 10, full);
+        Assert.Equal(full, item.HashFull);
+    }
+}
