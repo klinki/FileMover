@@ -1,4 +1,4 @@
-using Microsoft.Data.Sqlite;
+using Microsoft.EntityFrameworkCore;
 
 namespace BackupNormalizer;
 
@@ -46,42 +46,40 @@ public sealed class Executor
         {
             if (op.ExpectedHash == null) return false;
             // (a) Same-plan completed COPY/MOVE: hash-verified when marked Completed.
-            using var c = _db.Conn.CreateCommand();
-            c.CommandText = """
-                SELECT DestinationRootId, DestinationPath, ExpectedSize FROM PlanOperation
-                WHERE PlanId=$p AND Status='Completed' AND ExpectedHash=$h AND Type IN ('COPY','MOVE')
-                """;
-            c.Parameters.AddWithValue("$p", planId);
-            c.Parameters.AddWithValue("$h", op.ExpectedHash);
-            using var r = c.ExecuteReader();
-            while (r.Read())
+            var completedCopies = _db.Context.PlanOperations
+                .Where(candidate => candidate.PlanId == planId
+                    && candidate.Status == "Completed"
+                    && candidate.ExpectedHash == op.ExpectedHash
+                    && (candidate.Type == "COPY" || candidate.Type == "MOVE"))
+                .Select(candidate => new { candidate.DestinationRootId, candidate.DestinationPath, candidate.ExpectedSize })
+                .ToList();
+            foreach (var candidate in completedCopies)
             {
-                string? dr = r.IsDBNull(0) ? null : r.GetString(0);
-                string? dp = r.IsDBNull(1) ? null : r.GetString(1);
+                string? dr = candidate.DestinationRootId;
+                string? dp = candidate.DestinationPath;
                 if (dr == null || dp == null) continue;
                 if (dr == op.SourceRoot && dp == op.SourcePath) continue; // must be ANOTHER copy
                 string abs;
                 try { abs = ResolvePath(dr, dp); } catch { continue; } // offline snapshot root
-                if (File.Exists(abs) && new FileInfo(abs).Length == r.GetInt64(2)) return true;
+                if (File.Exists(abs) && new FileInfo(abs).Length == candidate.ExpectedSize) return true;
             }
-            r.Close();
             // (b) DB-known copies: existence + size + fresh hash verification.
-            using var c2 = _db.Conn.CreateCommand();
-            c2.CommandText = """
-                SELECT fe.StorageRootId, fe.RelativePath, fe.Size FROM FileEntry fe
-                JOIN FileHash fh ON fh.FileEntryId = fe.Id
-                WHERE fh.Digest=$h AND fh.State='Ok' AND fe.Status='Ok'
-                  AND NOT (fe.StorageRootId=$sr AND fe.RelativePath=$sp)
-                """;
-            c2.Parameters.AddWithValue("$h", op.ExpectedHash);
-            c2.Parameters.AddWithValue("$sr", op.SourceRoot!);
-            c2.Parameters.AddWithValue("$sp", op.SourcePath!);
-            using var r2 = c2.ExecuteReader();
-            var candidates = new List<(string Root, string Rel, long Size)>();
-            while (r2.Read()) candidates.Add((r2.GetString(0), r2.GetString(1), r2.GetInt64(2)));
-            r2.Close();
-            foreach (var (cr, cp, csz) in candidates)
+            // The SQL NOT expression returned no rows for a null source root/path.
+            if (op.SourceRoot == null || op.SourcePath == null) return false;
+            var candidates = _db.Context.FileHashes
+                .Join(_db.Context.FileEntries, hash => hash.FileEntryId, entry => entry.Id,
+                    (hash, entry) => new { hash, entry })
+                .Where(pair => pair.hash.Digest == op.ExpectedHash
+                    && pair.hash.State == "Ok"
+                    && pair.entry.Status == "Ok"
+                    && !(pair.entry.StorageRootId == op.SourceRoot && pair.entry.RelativePath == op.SourcePath))
+                .Select(pair => new { pair.entry.StorageRootId, pair.entry.RelativePath, pair.entry.Size })
+                .ToList();
+            foreach (var candidate in candidates)
             {
+                var cr = candidate.StorageRootId;
+                var cp = candidate.RelativePath;
+                var csz = candidate.Size;
                 string abs;
                 try { abs = ResolvePath(cr, cp); } catch { continue; }
                 if (!File.Exists(abs)) continue;
@@ -154,11 +152,13 @@ public sealed class Executor
             }
         }
         // Update plan status
-        using var c = _db.Conn.CreateCommand();
-        c.CommandText = "UPDATE Plan SET Status=$s WHERE Id=$id";
-        c.Parameters.AddWithValue("$s", failed == 0 && conflicts == 0 ? "Completed" : "Partial");
-        c.Parameters.AddWithValue("$id", planId);
-        c.ExecuteNonQuery();
+        string planStatus = failed == 0 && conflicts == 0 ? "Completed" : "Partial";
+        _db.Context.Plans
+            .Where(plan => plan.Id == planId)
+            .ExecuteUpdate(setters => setters.SetProperty(plan => plan.Status, planStatus));
+        var trackedPlan = _db.Context.Plans.Local.FirstOrDefault(plan => plan.Id == planId);
+        if (trackedPlan != null)
+            _db.Context.Entry(trackedPlan).State = EntityState.Detached;
         return new ExecSummary(done, failed, skipped, conflicts);
     }
 
@@ -167,49 +167,51 @@ public sealed class Executor
 
     private List<OpRow> LoadOps(string planId)
     {
-        var out_ = new List<OpRow>();
-        using var c = _db.Conn.CreateCommand();
-        c.CommandText = "SELECT Id,Type,SourceRootId,SourcePath,DestinationRootId,DestinationPath,ExpectedSize,ExpectedHash,Status FROM PlanOperation WHERE PlanId=$p ORDER BY Sequence";
-        c.Parameters.AddWithValue("$p", planId);
-        using var r = c.ExecuteReader();
-        while (r.Read())
-            out_.Add(new OpRow(r.GetInt64(0), r.GetString(1),
-                r.IsDBNull(2) ? null : r.GetString(2), r.IsDBNull(3) ? null : r.GetString(3),
-                r.IsDBNull(4) ? null : r.GetString(4), r.IsDBNull(5) ? null : r.GetString(5),
-                r.GetInt64(6), r.IsDBNull(7) ? null : r.GetString(7), r.GetString(8)));
+        var out_ = _db.Context.PlanOperations
+            .Where(operation => operation.PlanId == planId)
+            .OrderBy(operation => operation.Sequence)
+            .Select(operation => new OpRow(operation.Id, operation.Type,
+                operation.SourceRootId, operation.SourcePath,
+                operation.DestinationRootId, operation.DestinationPath,
+                operation.ExpectedSize, operation.ExpectedHash, operation.Status))
+            .ToList();
         if (out_.Count == 0) throw new InvalidOperationException($"unknown or empty plan '{planId}'");
         return out_;
     }
 
     private void SetStarted(long opId)
     {
-        using var c = _db.Conn.CreateCommand();
-        c.CommandText = "UPDATE PlanOperation SET Status='Started', StartedUtc=$t WHERE Id=$id";
-        c.Parameters.AddWithValue("$t", Database.UtcNow());
-        c.Parameters.AddWithValue("$id", opId);
-        c.ExecuteNonQuery();
+        string startedUtc = Database.UtcNow();
+        _db.Context.PlanOperations
+            .Where(operation => operation.Id == opId)
+            .ExecuteUpdate(setters => setters
+                .SetProperty(operation => operation.Status, "Started")
+                .SetProperty(operation => operation.StartedUtc, startedUtc));
     }
 
     private void Mark(long opId, string status, string? err = null)
     {
-        using var c = _db.Conn.CreateCommand();
-        c.CommandText = "UPDATE PlanOperation SET Status=$s, CompletedUtc=$t, Error=$e WHERE Id=$id";
-        c.Parameters.AddWithValue("$s", status);
-        c.Parameters.AddWithValue("$t", Database.UtcNow());
-        c.Parameters.AddWithValue("$e", (object?)err ?? DBNull.Value);
-        c.Parameters.AddWithValue("$id", opId);
-        c.ExecuteNonQuery();
+        string completedUtc = Database.UtcNow();
+        _db.Context.PlanOperations
+            .Where(operation => operation.Id == opId)
+            .ExecuteUpdate(setters => setters
+                .SetProperty(operation => operation.Status, status)
+                .SetProperty(operation => operation.CompletedUtc, completedUtc)
+                .SetProperty(operation => operation.Error, err));
     }
 
     private void Journal(long opId, string level, string msg)
     {
-        using var c = _db.Conn.CreateCommand();
-        c.CommandText = "INSERT INTO ExecutionLog(PlanOperationId,TimestampUtc,Level,Message) VALUES($o,$t,$l,$m)";
-        c.Parameters.AddWithValue("$o", opId);
-        c.Parameters.AddWithValue("$t", Database.UtcNow());
-        c.Parameters.AddWithValue("$l", level);
-        c.Parameters.AddWithValue("$m", msg);
-        c.ExecuteNonQuery();
+        var logEntry = new ExecutionLogEntity
+        {
+            PlanOperationId = opId,
+            TimestampUtc = Database.UtcNow(),
+            Level = level,
+            Message = msg,
+        };
+        _db.Context.ExecutionLogs.Add(logEntry);
+        _db.Context.SaveChanges();
+        _db.Context.Entry(logEntry).State = EntityState.Detached;
         Log.Info(msg, new { opId, level });
     }
 

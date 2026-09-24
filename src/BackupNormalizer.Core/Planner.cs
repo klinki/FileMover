@@ -71,7 +71,8 @@ public sealed class Planner
         List<PhysicalFile> currentInTarget, List<PhysicalFile> sourceUniverse,
         Dictionary<string, StorageRootRow> targetRoots, bool allowMoveOnlyWithin)
     {
-        if (_db.PlanExists(planId)) throw new InvalidOperationException($"plan '{planId}' already exists (immutable after approval, §18)");
+        var context = _db.Context;
+        if (context.Plans.Any(p => p.Id == planId)) throw new InvalidOperationException($"plan '{planId}' already exists (immutable after approval, §18)");
         var byContent = sourceUniverse
             .Where(f => f.Hash != null)
             .GroupBy(f => (f.Size, f.Hash!))
@@ -193,12 +194,41 @@ public sealed class Planner
             }
         }
 
-        _db.InsertPlan(planId, destRootId, bytesToCopy);
+        using var transaction = context.Database.BeginTransaction();
+        var planEntity = new PlanEntity
+        {
+            Id = planId,
+            CreatedUtc = Database.UtcNow(),
+            CanonicalRootId = destRootId,
+            Status = "Planned",
+            EstimatedBytesCopied = bytesToCopy,
+        };
+        context.Plans.Add(planEntity);
+        var planOperations = new List<PlanOperationEntity>();
         int seq = 1;
         foreach (var op in ops.OrderBy(o => o.Type == "MKDIR" ? 0 : o.Type == "KEEP" ? 1 : o.Type == "MOVE" ? 2 : o.Type == "COPY" ? 3 : o.Type == "TRASH" ? 4 : 5))
         {
-            _db.InsertOperation(planId, seq++, op.Type, op.SourceRoot, op.SourcePath, op.DestRoot, op.DestPath, op.ExpectedSize, op.ExpectedHash);
+            var planOperation = new PlanOperationEntity
+            {
+                PlanId = planId,
+                Sequence = seq++,
+                Type = op.Type,
+                SourceRootId = op.SourceRoot,
+                SourcePath = op.SourcePath,
+                DestinationRootId = op.DestRoot,
+                DestinationPath = op.DestPath,
+                ExpectedSize = op.ExpectedSize,
+                ExpectedHash = op.ExpectedHash,
+                Status = "Planned",
+            };
+            planOperations.Add(planOperation);
+            context.PlanOperations.Add(planOperation);
         }
+        context.SaveChanges();
+        transaction.Commit();
+        context.Entry(planEntity).State = Microsoft.EntityFrameworkCore.EntityState.Detached;
+        foreach (var operation in planOperations)
+            context.Entry(operation).State = Microsoft.EntityFrameworkCore.EntityState.Detached;
         return new PlanResult(planId, keep, move, copy, trash, mkdir, bytesToCopy, bytesAvoided);
     }
 
@@ -213,24 +243,15 @@ public sealed class Planner
 
     public PlanDoc ExportPlan(string planId)
     {
-        using var c = _db.Conn.CreateCommand();
-        c.CommandText = "SELECT Id,CreatedUtc,EstimatedBytesCopied FROM Plan WHERE Id=$id";
-        c.Parameters.AddWithValue("$id", planId);
-        using var r = c.ExecuteReader();
-        if (!r.Read()) throw new InvalidOperationException($"unknown plan '{planId}'");
-        string created = r.GetString(1); long est = r.GetInt64(2);
-        r.Close();
-        var ops = new List<PlanOpDoc>();
-        using var c2 = _db.Conn.CreateCommand();
-        c2.CommandText = "SELECT Sequence,Type,SourceRootId,SourcePath,DestinationRootId,DestinationPath,ExpectedSize,ExpectedHash FROM PlanOperation WHERE PlanId=$id ORDER BY Sequence";
-        c2.Parameters.AddWithValue("$id", planId);
-        using var r2 = c2.ExecuteReader();
-        while (r2.Read())
-            ops.Add(new PlanOpDoc(r2.GetInt32(0), r2.GetString(1),
-                r2.IsDBNull(2) ? null : r2.GetString(2), r2.IsDBNull(3) ? null : r2.GetString(3),
-                r2.IsDBNull(4) ? null : r2.GetString(4), r2.IsDBNull(5) ? null : r2.GetString(5),
-                r2.GetInt64(6), r2.IsDBNull(7) ? null : r2.GetString(7)));
-        return new PlanDoc(planId, created, est, ops);
+        var plan = _db.Context.Plans.SingleOrDefault(p => p.Id == planId)
+            ?? throw new InvalidOperationException($"unknown plan '{planId}'");
+        var ops = _db.Context.PlanOperations
+            .Where(o => o.PlanId == planId)
+            .OrderBy(o => o.Sequence)
+            .Select(o => new PlanOpDoc(o.Sequence, o.Type, o.SourceRootId, o.SourcePath,
+                o.DestinationRootId, o.DestinationPath, o.ExpectedSize, o.ExpectedHash))
+            .ToList();
+        return new PlanDoc(planId, plan.CreatedUtc, plan.EstimatedBytesCopied, ops);
     }
 
     public static string ToJson(PlanDoc doc)

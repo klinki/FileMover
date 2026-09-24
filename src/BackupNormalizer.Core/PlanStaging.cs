@@ -144,15 +144,47 @@ public static class PlanStaging
     /// <summary>Write a plan doc into a DB so the existing executor can run it.</summary>
     public static void WriteToDatabase(Database db, PlanDoc doc, string rootId, string rootPath, string role = "Backup")
     {
-        if (db.PlanExists(doc.PlanId))
+        var context = db.Context;
+        if (context.Plans.Any(plan => plan.Id == doc.PlanId))
             throw new InvalidOperationException($"plan '{doc.PlanId}' already exists (immutable, §18)");
         if (db.GetRoot(rootId) == null)
             db.UpsertRoot(new StorageRootRow(rootId, rootId, Path.GetFullPath(rootPath), role, true,
                 Paths.GetFileSystemId(rootPath), Paths.DetectCaseSensitivity(rootPath), Database.UtcNow()));
-        db.InsertPlan(doc.PlanId, rootId, doc.EstimatedBytesCopied);
+
+        using var transaction = context.Database.BeginTransaction();
+        var planEntity = new PlanEntity
+        {
+            Id = doc.PlanId,
+            CreatedUtc = Database.UtcNow(),
+            CanonicalRootId = rootId,
+            Status = "Planned",
+            EstimatedBytesCopied = doc.EstimatedBytesCopied,
+        };
+        context.Plans.Add(planEntity);
+        var planOperations = new List<PlanOperationEntity>();
         foreach (var o in doc.Operations.OrderBy(o => o.Id))
-            db.InsertOperation(doc.PlanId, o.Id, o.Type, o.SourceRoot, o.SourcePath,
-                o.DestinationRoot, o.DestinationPath, o.ExpectedSize, o.ExpectedHash);
+        {
+            var planOperation = new PlanOperationEntity
+            {
+                PlanId = doc.PlanId,
+                Sequence = o.Id,
+                Type = o.Type,
+                SourceRootId = o.SourceRoot,
+                SourcePath = o.SourcePath,
+                DestinationRootId = o.DestinationRoot,
+                DestinationPath = o.DestinationPath,
+                ExpectedSize = o.ExpectedSize,
+                ExpectedHash = o.ExpectedHash,
+                Status = "Planned",
+            };
+            planOperations.Add(planOperation);
+            context.PlanOperations.Add(planOperation);
+        }
+        context.SaveChanges();
+        transaction.Commit();
+        context.Entry(planEntity).State = Microsoft.EntityFrameworkCore.EntityState.Detached;
+        foreach (var operation in planOperations)
+            context.Entry(operation).State = Microsoft.EntityFrameworkCore.EntityState.Detached;
     }
 
     /// <summary>Import a plan JSON file into a DB (CLI `plan import` + UI "Write to .db" helper).</summary>

@@ -133,6 +133,7 @@ public sealed class Scanner
     public (int hashed, int skipped, int unstable) HashNeeded(string? rootId = null, bool all = false, int parallelism = 2)
     {
         var files = _db.ListFiles(rootId);
+        var roots = _db.ListRoots().ToDictionary(r => r.Id);
         int hashed = 0, skipped = 0, unstable = 0;
         var opts = new ParallelOptions { MaxDegreeOfParallelism = Math.Max(1, parallelism) };
         // HDD/NAS: default conservative (§29). Parallel file reads only; DB writes serialized via lock.
@@ -156,15 +157,14 @@ public sealed class Scanner
                     }
                 }
             }
-            var root = _db.GetRoot(f.StorageRootId);
-            if (root == null) { Interlocked.Increment(ref skipped); return; }
+            if (!roots.TryGetValue(f.StorageRootId, out var root)) { Interlocked.Increment(ref skipped); return; }
             var abs = Paths.CombineRoot(root.Path, f.RelativePath);
-            string sizeBefore, mBefore;
+            string mBefore;
             long lenBefore;
             try
             {
                 var fi = new FileInfo(abs);
-                lenBefore = fi.Length; mBefore = fi.LastWriteTimeUtc.ToString("o"); sizeBefore = mBefore;
+                lenBefore = fi.Length; mBefore = fi.LastWriteTimeUtc.ToString("o");
             }
             catch { Interlocked.Increment(ref skipped); return; }
             string digest;

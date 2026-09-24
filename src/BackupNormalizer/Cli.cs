@@ -280,17 +280,15 @@ public static class Cli
 
     private static (Dictionary<string, int> Counts, long EstBytes) PlanSummary(Database db, string planId)
     {
-        var counts = new Dictionary<string, int>();
-        using var c = db.Conn.CreateCommand();
-        c.CommandText = "SELECT Type,COUNT(*) FROM PlanOperation WHERE PlanId=$p GROUP BY Type";
-        c.Parameters.AddWithValue("$p", planId);
-        using var r = c.ExecuteReader();
-        while (r.Read()) counts[r.GetString(0)] = r.GetInt32(1);
-        r.Close();
-        using var c2 = db.Conn.CreateCommand();
-        c2.CommandText = "SELECT EstimatedBytesCopied FROM Plan WHERE Id=$p";
-        c2.Parameters.AddWithValue("$p", planId);
-        long est = (long)(c2.ExecuteScalar() ?? 0L);
+        var counts = db.Context.PlanOperations
+            .Where(operation => operation.PlanId == planId)
+            .GroupBy(operation => operation.Type)
+            .Select(group => new { Type = group.Key, Count = group.Count() })
+            .ToDictionary(row => row.Type, row => row.Count);
+        long est = db.Context.Plans
+            .Where(plan => plan.Id == planId)
+            .Select(plan => (long?)plan.EstimatedBytesCopied)
+            .SingleOrDefault() ?? 0L;
         return (counts, est);
     }
 
@@ -301,27 +299,34 @@ public static class Cli
         var map = MapRoots(a);
         using var d = new Database(db);
         // Verify = re-run VERIFY ops + destination checks via executor path: execute only VERIFY by direct check
-        using var c = d.Conn.CreateCommand();
-        c.CommandText = "SELECT Type,DestinationRootId,DestinationPath,ExpectedSize,ExpectedHash FROM PlanOperation WHERE PlanId=$p";
-        c.Parameters.AddWithValue("$p", a[0]);
         var roots = d.ListRoots().ToDictionary(r => r.Id);
         int ok = 0, bad = 0;
         var hasher = HasherFactory.Create(null);
-        using var r = c.ExecuteReader();
-        while (r.Read())
+        var operations = d.Context.PlanOperations
+            .Where(operation => operation.PlanId == a[0])
+            .Select(operation => new
+            {
+                operation.Type,
+                operation.DestinationRootId,
+                operation.DestinationPath,
+                operation.ExpectedSize,
+                operation.ExpectedHash,
+            })
+            .ToList();
+        foreach (var operation in operations)
         {
-            string type = r.GetString(0);
+            string type = operation.Type;
             if (type is "KEEP" or "VERIFY" or "MOVE" or "COPY")
             {
-                string? dr = r.IsDBNull(1) ? null : r.GetString(1);
-                string? dp = r.IsDBNull(2) ? null : r.GetString(2);
+                string? dr = operation.DestinationRootId;
+                string? dp = operation.DestinationPath;
                 if (dr == null || dp == null) continue;
                 string basePath = map.TryGetValue(dr, out var ov) ? ov : roots.TryGetValue(dr, out var rr) ? rr.Path : "";
                 if (string.IsNullOrEmpty(basePath)) { bad++; continue; }
                 string abs = Paths.CombineRoot(basePath, dp);
                 if (!File.Exists(abs)) { Console.WriteLine($"MISSING {dr}:{dp}"); bad++; continue; }
-                long sz = r.GetInt64(3);
-                string? eh = r.IsDBNull(4) ? null : r.GetString(4);
+                long sz = operation.ExpectedSize;
+                string? eh = operation.ExpectedHash;
                 var fi = new FileInfo(abs);
                 if (sz != 0 && fi.Length != sz) { Console.WriteLine($"SIZE-MISMATCH {dr}:{dp}"); bad++; continue; }
                 if (eh != null && !string.Equals(hasher.HashFile(abs, fi.Length), eh, StringComparison.OrdinalIgnoreCase))
@@ -404,9 +409,10 @@ public static class Cli
             d.UpsertFileEntry(new FileEntryRow(0, "t", "a.txt", "a.txt", 3, Database.UtcNow(), null, null, sid, "Ok", null));
             var got = d.ListFiles("t");
             if (got.Count != 1) throw new Exception("readback failed");
-            using var tx = d.Conn.BeginTransaction();
+            using var tx = d.Context.Database.BeginTransaction();
             d.UpsertFileEntry(new FileEntryRow(0, "t", "b.txt", "b.txt", 1, Database.UtcNow(), null, null, sid, "Ok", null));
             tx.Rollback();
+            d.Context.ChangeTracker.Clear();
             if (d.ListFiles("t").Count != 1) throw new Exception("rollback failed");
             d.FinishScan(sid, "Completed");
             Console.WriteLine("db-test: PASS (create/insert/read/commit/rollback ok)");

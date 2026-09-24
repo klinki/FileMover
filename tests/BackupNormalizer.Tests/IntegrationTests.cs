@@ -43,7 +43,7 @@ public sealed class IntegrationTests : IDisposable
         using var td = new Database(t1);
         using var cd = new Database(t0);
         // Force same FS id for move detection
-        using (var c = td.Conn.CreateCommand()) { c.CommandText = "UPDATE StorageRoot SET FileSystemId='shared'"; c.ExecuteNonQuery(); }
+        td.UpsertRoot(td.GetRoot("disk")! with { FileSystemId = "shared" });
         var res = new Planner(td).PlanFromSnapshot(cd, null, "disk", "mig-1");
         Assert.Equal(1, res.Move);
         // Execute with remap disk -> B (already), then verify file landed at Photos/a.jpg
@@ -56,7 +56,7 @@ public sealed class IntegrationTests : IDisposable
         string t2 = Path.Combine(_dir, "t2.db");
         ScanHash(t2, "disk", cdir);
         using var td2 = new Database(t2);
-        using (var c = td2.Conn.CreateCommand()) { c.CommandText = "UPDATE StorageRoot SET FileSystemId='shared'"; c.ExecuteNonQuery(); }
+        td2.UpsertRoot(td2.GetRoot("disk")! with { FileSystemId = "shared" });
         new Planner(td2).PlanFromSnapshot(cd, null, "disk", "mig-2");
         var sum2 = new Executor(td2).Execute("mig-2", new Dictionary<string, string> { ["disk"] = cdir, ["canon:disk"] = a });
         Assert.True(File.Exists(Path.Combine(cdir, "Photos", "a.jpg")));

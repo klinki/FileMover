@@ -88,7 +88,7 @@ The core project should avoid dependencies that prevent ARM32 publishing.
 
 Use SQLite.
 
-Use the regular `Microsoft.Data.Sqlite` package and its bundled native SQLite library on all targets. Validate the `linux-musl-arm` publish on the actual QNAP before treating it as supported.
+Use EF Core with its SQLite provider and bundled native SQLite library on all targets. Use migrations for schema changes and preserve existing inventory databases when adopting the initial migration. Validate the `linux-musl-arm` publish on the actual QNAP before treating it as supported.
 
 The database should be treated as an inventory/cache and operation journal. It is not the source of truth for file contents.
 
@@ -976,6 +976,12 @@ Message
 ```
 
 Use migrations.
+
+For schema changes, add an EF Core migration from the core project:
+
+```bash
+dotnet ef migrations add <Name> --project src/BackupNormalizer.Core --startup-project src/BackupNormalizer.Core
+```
 
 ---
 

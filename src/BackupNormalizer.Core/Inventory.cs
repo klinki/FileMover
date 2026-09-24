@@ -1,4 +1,4 @@
-using Microsoft.Data.Sqlite;
+using Microsoft.EntityFrameworkCore;
 
 namespace BackupNormalizer;
 
@@ -7,50 +7,72 @@ public static class Inventory
 {
     public static void ExportRoot(string dbPath, string rootId, string outputPath)
     {
-        if (File.Exists(outputPath)) File.Delete(outputPath);
-        // Create new DB with schema then copy rows
-        using var dst = new Database(outputPath);
-        using var src = new Database(dbPath);
+        var sourcePath = Path.GetFullPath(dbPath);
+        var destinationPath = Path.GetFullPath(outputPath);
+        if (PathEquals(sourcePath, destinationPath))
+            throw new InvalidOperationException("The inventory output must be a different file from its source database.");
+
+        using var src = new Database(sourcePath, readOnly: true);
         var root = src.GetRoot(rootId) ?? throw new InvalidOperationException($"unknown root '{rootId}'");
-        dst.UpsertRoot(root);
-        // Copy scans + file entries + hashes for root
         var files = src.ListFiles(rootId);
-        var idMap = new Dictionary<long, long>();
-        foreach (var f in files)
+        var hashes = (from hash in src.Context.FileHashes.AsNoTracking()
+                      join file in src.Context.FileEntries.AsNoTracking() on hash.FileEntryId equals file.Id
+                      where file.StorageRootId == rootId
+                      select hash).ToList();
+        var hashesByFileId = hashes.GroupBy(h => h.FileEntryId).ToDictionary(g => g.Key, g => g.ToList());
+
+        if (File.Exists(destinationPath)) File.Delete(destinationPath);
+        using var dst = new Database(destinationPath);
+        using var transaction = dst.Context.Database.BeginTransaction();
+        dst.UpsertRoot(root);
+        foreach (var file in files)
         {
-            long newId = dst.UpsertFileEntry(f with { Id = 0, LastSeenScanId = 1 });
-            idMap[f.Id] = newId;
-            foreach (var algo in new[] { "sha256", "blake3" })
-            {
-                var h = src.GetHash(f.Id, algo);
-                if (h != null) dst.UpsertHash(h with { FileEntryId = newId });
-            }
+            // Inventory files are standalone cache rows; their scan id is not a foreign key.
+            var newId = dst.UpsertFileEntry(file with { Id = 0, LastSeenScanId = 1 });
+            if (!hashesByFileId.TryGetValue(file.Id, out var fileHashes)) continue;
+            foreach (var hash in fileHashes)
+                dst.UpsertHash(new FileHashRow(newId, hash.Algorithm, hash.Digest, hash.SizeAtHash,
+                    hash.ModifiedUtcAtHash, hash.CalculatedUtc, hash.State));
         }
-        // Ensure at least one scan row exists for FK sanity (LastSeenScanId may dangle; acceptable for inventory cache)
-        Log.Info($"exported root '{rootId}' ({files.Count} files) to {outputPath}");
+        transaction.Commit();
+        Log.Info($"exported root '{rootId}' ({files.Count} files) to {destinationPath}");
     }
 
     public static void ImportFile(string dbPath, string inputPath)
     {
-        using var dst = new Database(dbPath);
-        using var src = new Database(inputPath);
-        foreach (var r in src.ListRoots())
+        var destinationPath = Path.GetFullPath(dbPath);
+        var sourcePath = Path.GetFullPath(inputPath);
+        if (PathEquals(destinationPath, sourcePath))
+            throw new InvalidOperationException("The inventory source must be a different file from the target database.");
+
+        using var src = new Database(sourcePath, readOnly: true);
+        using var dst = new Database(destinationPath);
+        using var transaction = dst.Context.Database.BeginTransaction();
+        foreach (var root in src.ListRoots())
         {
-            if (dst.GetRoot(r.Id) == null)
-                dst.UpsertRoot(r);
+            if (dst.GetRoot(root.Id) == null)
+                dst.UpsertRoot(root);
             else
-                Log.Warn($"root '{r.Id}' already exists in target; merging file entries");
-            foreach (var f in src.ListFiles(r.Id))
+                Log.Warn($"root '{root.Id}' already exists in target; merging file entries");
+
+            var files = src.ListFiles(root.Id);
+            var hashes = (from hash in src.Context.FileHashes.AsNoTracking()
+                          join file in src.Context.FileEntries.AsNoTracking() on hash.FileEntryId equals file.Id
+                          where file.StorageRootId == root.Id
+                          select hash).ToList();
+            var hashesByFileId = hashes.GroupBy(h => h.FileEntryId).ToDictionary(g => g.Key, g => g.ToList());
+
+            foreach (var file in files)
             {
-                long newId = dst.UpsertFileEntry(f with { Id = 0 });
-                foreach (var algo in new[] { "sha256", "blake3" })
-                {
-                    var h = src.GetHash(f.Id, algo);
-                    if (h != null) dst.UpsertHash(h with { FileEntryId = newId });
-                }
+                var newId = dst.UpsertFileEntry(file with { Id = 0 });
+                if (!hashesByFileId.TryGetValue(file.Id, out var fileHashes)) continue;
+                foreach (var hash in fileHashes)
+                    dst.UpsertHash(new FileHashRow(newId, hash.Algorithm, hash.Digest, hash.SizeAtHash,
+                        hash.ModifiedUtcAtHash, hash.CalculatedUtc, hash.State));
             }
         }
-        Log.Info($"imported {inputPath} into {dbPath}");
+        transaction.Commit();
+        Log.Info($"imported {sourcePath} into {destinationPath}");
     }
 
     public sealed record DiffSummary(int OnlyInOld, int OnlyInNew, int Changed, int Identical, List<string> Samples);
@@ -58,8 +80,8 @@ public static class Inventory
     public static DiffSummary Diff(string oldDbPath, string newDbPath, string algo = "sha256", int samples = 20)
     {
         algo = HasherFactory.NormalizeAlgorithm(algo);
-        using var a = new Database(oldDbPath);
-        using var b = new Database(newDbPath);
+        using var a = new Database(oldDbPath, readOnly: true);
+        using var b = new Database(newDbPath, readOnly: true);
         var fa = Matcher.LoadFromDb(a, algo).GroupBy(f => f.RelativePath).ToDictionary(g => g.Key, g => g.First());
         var fb = Matcher.LoadFromDb(b, algo).GroupBy(f => f.RelativePath).ToDictionary(g => g.Key, g => g.First());
         int onlyOld = 0, onlyNew = 0, changed = 0, same = 0;
@@ -74,4 +96,7 @@ public static class Inventory
             if (!fa.ContainsKey(kv.Key)) { onlyNew++; if (sampleLines.Count < samples) sampleLines.Add($"+ {kv.Key}"); }
         return new DiffSummary(onlyOld, onlyNew, changed, same, sampleLines);
     }
+
+    private static bool PathEquals(string left, string right) =>
+        string.Equals(left, right, OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal);
 }
