@@ -31,4 +31,4 @@ EF Core's SQLite provider passes Windows tests and publishes an ARM32 musl nativ
 - 2026-09-24: Regular package and QNAP image configuration applied.
 - 2026-09-24: Full Windows suite passed, CLI database smoke test passed, and ARM32 musl publish completed.
 - 2026-09-24: Awaiting the QNAP acceptance test on the actual NAS.
-- 2026-09-24: EF Core data access replaced direct SQL and creates new database schemas directly.
+- 2026-09-24: EF Core data access replaced direct SQL; an EF-generated initial migration creates new database schemas.
