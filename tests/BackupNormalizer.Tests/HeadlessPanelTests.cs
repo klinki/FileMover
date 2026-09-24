@@ -4,6 +4,7 @@ using Avalonia.Controls;
 using Avalonia.Headless;
 using Avalonia.LogicalTree;
 using Avalonia.Media;
+using Avalonia.Styling;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
 using BackupNormalizer.Ui;
@@ -120,6 +121,55 @@ public sealed class HeadlessPanelTests : IDisposable
         });
     }
 
+    [Fact]
+    public void File_Row_Colors_Follow_Light_And_Dark_Themes()
+    {
+        UiTestHost.Run(() =>
+        {
+            var vm = new MainViewModel { BasePath = _dir };
+            vm.ApplyBase();
+            vm.Left.Entries.First(e => e.Name == "b.jpg").IsMarked = true;
+            var window = new MainWindow { DataContext = vm, Width = 1100, Height = 700 };
+            window.Show();
+
+            void Check(ThemeVariant theme, string background, string text, string marked, string selected)
+            {
+                window.RequestedThemeVariant = theme;
+                Pump4();
+                var grid = window.GetLogicalDescendants().OfType<DataGrid>()
+                    .First(g => (g.Tag as string) == "Left" && g.IsEffectivelyVisible);
+
+                Color RowText(string name)
+                {
+                    var item = vm.Left.Entries.First(e => e.Name == name);
+                    grid.ScrollIntoView(item, null);
+                    Pump4();
+                    var row = grid.GetVisualDescendants().OfType<DataGridRow>()
+                        .First(r => ((FileEntryItem)r.DataContext!).Name == name);
+                    var label = row.GetVisualDescendants().OfType<TextBlock>()
+                        .First(t => t.Text == item.BaseName);
+                    return Assert.IsType<SolidColorBrush>(label.Foreground).Color;
+                }
+
+                Assert.Equal(Color.Parse(background), Assert.IsType<SolidColorBrush>(grid.Background).Color);
+                var header = grid.GetVisualDescendants().OfType<DataGridColumnHeader>().First();
+                Assert.Equal(Color.Parse(theme == ThemeVariant.Dark ? "#2B3743" : "#FFFFFF"),
+                    Assert.IsType<SolidColorBrush>(header.Background).Color);
+                Assert.Equal(Color.Parse(text), RowText("a.txt"));
+                Assert.Equal(Color.Parse(marked), RowText("b.jpg"));
+                grid.SelectedItem = vm.Left.Entries.First(e => e.Name == "a.txt");
+                Pump4();
+                var selectedRow = grid.GetVisualDescendants().OfType<DataGridRow>()
+                    .First(r => ((FileEntryItem)r.DataContext!).Name == "a.txt");
+                Assert.Equal(Color.Parse(selected), Assert.IsType<SolidColorBrush>(selectedRow.Background).Color);
+            }
+
+            Check(ThemeVariant.Dark, "#26323D", "#EEF2F6", "#FF9E98", "#365A79");
+            Check(ThemeVariant.Light, "#FFFFFF", "#202833", "#C62828", "#D6E9F8");
+            window.Close();
+        });
+    }
+
     private static void Pump4()
     {
         Dispatcher.UIThread.RunJobs();
@@ -137,14 +187,13 @@ public sealed class DataGridThemeOverrideTests
         UiTestHost.Run(() =>
         {
             var window = new MainWindow { Width = 1100, Height = 700 };
+            window.RequestedThemeVariant = ThemeVariant.Light;
             window.Show();
             Dispatcher.UIThread.RunJobs();
             SolidColorBrush Res(string key)
                 => Assert.IsType<SolidColorBrush>(window.FindResource(key));
             Assert.Equal(Avalonia.Media.Colors.Transparent, Res("DataGridCellFocusVisualPrimaryBrush").Color);
             Assert.Equal(Avalonia.Media.Colors.Transparent, Res("DataGridCellFocusVisualSecondaryBrush").Color);
-            Assert.Equal(Avalonia.Media.Color.Parse("#D6E9F8"), Res("DataGridRowSelectedBackgroundBrush").Color);
-            Assert.Equal(Avalonia.Media.Color.Parse("#D6E9F8"), Res("DataGridRowSelectedUnfocusedBackgroundBrush").Color);
             foreach (var key in new[]
             {
                 "DataGridRowSelectedBackgroundOpacity",

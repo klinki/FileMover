@@ -10,21 +10,76 @@
     </Application.DataTemplates>
 
     <Application.Resources>
-        <!-- TC look, shared by all windows: no per-cell focus frame; soft full-row selection. -->
-        <SolidColorBrush x:Key="DataGridCellFocusVisualPrimaryBrush" Color="Transparent" />
-        <SolidColorBrush x:Key="DataGridCellFocusVisualSecondaryBrush" Color="Transparent" />
-        <SolidColorBrush x:Key="DataGridRowSelectedBackgroundBrush" Color="#D6E9F8" />
-        <SolidColorBrush x:Key="DataGridRowSelectedHoveredBackgroundBrush" Color="#C2DDF5" />
-        <SolidColorBrush x:Key="DataGridRowSelectedUnfocusedBackgroundBrush" Color="#D6E9F8" />
-        <SolidColorBrush x:Key="DataGridRowSelectedHoveredUnfocusedBackgroundBrush" Color="#C2DDF5" />
-        <x:Double x:Key="DataGridRowSelectedBackgroundOpacity">1</x:Double>
-        <x:Double x:Key="DataGridRowSelectedHoveredBackgroundOpacity">1</x:Double>
-        <x:Double x:Key="DataGridRowSelectedUnfocusedBackgroundOpacity">1</x:Double>
-        <x:Double x:Key="DataGridRowSelectedHoveredUnfocusedBackgroundOpacity">1</x:Double>
+        <ResourceDictionary>
+            <ResourceDictionary.ThemeDictionaries>
+                <ResourceDictionary x:Key="Light">
+                    <SolidColorBrush x:Key="AppSurfaceBrush" Color="#F5F7FA" />
+                    <SolidColorBrush x:Key="ControlSurfaceBrush" Color="#FFFFFF" />
+                    <SolidColorBrush x:Key="GridSurfaceBrush" Color="#FFFFFF" />
+                    <SolidColorBrush x:Key="GridLineBrush" Color="#E2E8F0" />
+                    <SolidColorBrush x:Key="AppTextBrush" Color="#202833" />
+                    <SolidColorBrush x:Key="FileTextBrush" Color="#202833" />
+                    <SolidColorBrush x:Key="MarkedTextBrush" Color="#C62828" />
+                    <SolidColorBrush x:Key="SelectedRowBrush" Color="#D6E9F8" />
+                    <SolidColorBrush x:Key="SelectedRowHoverBrush" Color="#C2DDF5" />
+                </ResourceDictionary>
+                <ResourceDictionary x:Key="Dark">
+                    <SolidColorBrush x:Key="AppSurfaceBrush" Color="#1E2730" />
+                    <SolidColorBrush x:Key="ControlSurfaceBrush" Color="#2B3743" />
+                    <SolidColorBrush x:Key="GridSurfaceBrush" Color="#26323D" />
+                    <SolidColorBrush x:Key="GridLineBrush" Color="#41505D" />
+                    <SolidColorBrush x:Key="AppTextBrush" Color="#EEF2F6" />
+                    <SolidColorBrush x:Key="FileTextBrush" Color="#EEF2F6" />
+                    <SolidColorBrush x:Key="MarkedTextBrush" Color="#FF9E98" />
+                    <SolidColorBrush x:Key="SelectedRowBrush" Color="#365A79" />
+                    <SolidColorBrush x:Key="SelectedRowHoverBrush" Color="#416A8E" />
+                </ResourceDictionary>
+            </ResourceDictionary.ThemeDictionaries>
+            <!-- No per-cell focus frame; full-row selection in both themes. -->
+            <SolidColorBrush x:Key="DataGridCellFocusVisualPrimaryBrush" Color="Transparent" />
+            <SolidColorBrush x:Key="DataGridCellFocusVisualSecondaryBrush" Color="Transparent" />
+            <x:Double x:Key="DataGridRowSelectedBackgroundOpacity">1</x:Double>
+            <x:Double x:Key="DataGridRowSelectedHoveredBackgroundOpacity">1</x:Double>
+            <x:Double x:Key="DataGridRowSelectedUnfocusedBackgroundOpacity">1</x:Double>
+            <x:Double x:Key="DataGridRowSelectedHoveredUnfocusedBackgroundOpacity">1</x:Double>
+        </ResourceDictionary>
     </Application.Resources>
 
     <Application.Styles>
         <FluentTheme />
         <StyleInclude Source="avares://Avalonia.Controls.DataGrid/Themes/Fluent.xaml" />
+        <Style Selector="Window">
+            <Setter Property="Background" Value="{DynamicResource AppSurfaceBrush}" />
+            <Setter Property="Foreground" Value="{DynamicResource AppTextBrush}" />
+        </Style>
+        <Style Selector="TextBox">
+            <Setter Property="Background" Value="{DynamicResource ControlSurfaceBrush}" />
+            <Setter Property="Foreground" Value="{DynamicResource AppTextBrush}" />
+        </Style>
+        <Style Selector="Menu">
+            <Setter Property="Background" Value="{DynamicResource ControlSurfaceBrush}" />
+            <Setter Property="Foreground" Value="{DynamicResource AppTextBrush}" />
+        </Style>
+        <Style Selector="DataGrid">
+            <Setter Property="Background" Value="{DynamicResource GridSurfaceBrush}" />
+            <Setter Property="RowBackground" Value="{DynamicResource GridSurfaceBrush}" />
+            <Setter Property="HorizontalGridLinesBrush" Value="{DynamicResource GridLineBrush}" />
+        </Style>
+        <Style Selector="DataGridColumnHeader">
+            <Setter Property="Background" Value="{DynamicResource ControlSurfaceBrush}" />
+            <Setter Property="Foreground" Value="{DynamicResource AppTextBrush}" />
+        </Style>
+        <Style Selector="DataGridCell TextBlock">
+            <Setter Property="Foreground" Value="{DynamicResource FileTextBrush}" />
+        </Style>
+        <Style Selector="DataGridCell TextBlock.marked">
+            <Setter Property="Foreground" Value="{DynamicResource MarkedTextBrush}" />
+        </Style>
+        <Style Selector="DataGridRow:selected">
+            <Setter Property="Background" Value="{DynamicResource SelectedRowBrush}" />
+        </Style>
+        <Style Selector="DataGridRow:selected:pointerover">
+            <Setter Property="Background" Value="{DynamicResource SelectedRowHoverBrush}" />
+        </Style>
     </Application.Styles>
 </Application>

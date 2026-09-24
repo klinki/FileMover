@@ -1,7 +1,6 @@
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:vm="using:BackupNormalizer.Ui.ViewModels"
-        xmlns:conv="using:BackupNormalizer.Ui.Converters"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         mc:Ignorable="d" d:DesignWidth="1100" d:DesignHeight="700"
@@ -10,7 +9,6 @@
         Icon="/Assets/avalonia-logo.ico"
         Title="BackupNormalizer Planner — Total Commander style (plan-only)">
   <Window.Resources>
-    <conv:MarkedToBrushConverter x:Key="MarkedToBrush" />
     <DataTemplate x:Key="FileIconTemplate" x:DataType="vm:FileEntryItem">
       <Panel Width="16" Height="16" VerticalAlignment="Center" HorizontalAlignment="Center">
         <Path Data="M13,20H11V8L5.5,13.5L4.08,12.08L12,4.16L19.92,12.08L18.5,13.5L13,8V20Z"
@@ -128,28 +126,28 @@
               <DataGridTemplateColumn Header="Name" Tag="Name" Width="*" CanUserSort="True">
                 <DataGridTemplateColumn.CellTemplate>
                   <DataTemplate x:DataType="vm:FileEntryItem">
-                    <TextBlock Text="{Binding BaseName}" Foreground="{Binding IsMarked, Converter={StaticResource MarkedToBrush}}" VerticalAlignment="Center" />
+                    <TextBlock Text="{Binding BaseName}" Classes.marked="{Binding IsMarked}" VerticalAlignment="Center" />
                   </DataTemplate>
                 </DataGridTemplateColumn.CellTemplate>
               </DataGridTemplateColumn>
               <DataGridTemplateColumn Header="Ext" Tag="Ext" Width="70" CanUserSort="True">
                 <DataGridTemplateColumn.CellTemplate>
                   <DataTemplate x:DataType="vm:FileEntryItem">
-                    <TextBlock Text="{Binding Extension}" Foreground="{Binding IsMarked, Converter={StaticResource MarkedToBrush}}" VerticalAlignment="Center" />
+                    <TextBlock Text="{Binding Extension}" Classes.marked="{Binding IsMarked}" VerticalAlignment="Center" />
                   </DataTemplate>
                 </DataGridTemplateColumn.CellTemplate>
               </DataGridTemplateColumn>
               <DataGridTemplateColumn Header="Size" Tag="Size" Width="100" CanUserSort="True">
                 <DataGridTemplateColumn.CellTemplate>
                   <DataTemplate x:DataType="vm:FileEntryItem">
-                    <TextBlock Text="{Binding SizeText}" Foreground="{Binding IsMarked, Converter={StaticResource MarkedToBrush}}" HorizontalAlignment="Right" VerticalAlignment="Center" />
+                    <TextBlock Text="{Binding SizeText}" Classes.marked="{Binding IsMarked}" HorizontalAlignment="Right" VerticalAlignment="Center" />
                   </DataTemplate>
                 </DataGridTemplateColumn.CellTemplate>
               </DataGridTemplateColumn>
               <DataGridTemplateColumn Header="Modified" Tag="Modified" Width="140" CanUserSort="True">
                 <DataGridTemplateColumn.CellTemplate>
                   <DataTemplate x:DataType="vm:FileEntryItem">
-                    <TextBlock Text="{Binding ModifiedText}" Foreground="{Binding IsMarked, Converter={StaticResource MarkedToBrush}}" VerticalAlignment="Center" />
+                    <TextBlock Text="{Binding ModifiedText}" Classes.marked="{Binding IsMarked}" VerticalAlignment="Center" />
                   </DataTemplate>
                 </DataGridTemplateColumn.CellTemplate>
               </DataGridTemplateColumn>
@@ -177,28 +175,28 @@
               <DataGridTemplateColumn Header="Name" Tag="Name" Width="*" CanUserSort="True">
                 <DataGridTemplateColumn.CellTemplate>
                   <DataTemplate x:DataType="vm:FileEntryItem">
-                    <TextBlock Text="{Binding BaseName}" Foreground="{Binding IsMarked, Converter={StaticResource MarkedToBrush}}" VerticalAlignment="Center" />
+                    <TextBlock Text="{Binding BaseName}" Classes.marked="{Binding IsMarked}" VerticalAlignment="Center" />
                   </DataTemplate>
                 </DataGridTemplateColumn.CellTemplate>
               </DataGridTemplateColumn>
               <DataGridTemplateColumn Header="Ext" Tag="Ext" Width="70" CanUserSort="True">
                 <DataGridTemplateColumn.CellTemplate>
                   <DataTemplate x:DataType="vm:FileEntryItem">
-                    <TextBlock Text="{Binding Extension}" Foreground="{Binding IsMarked, Converter={StaticResource MarkedToBrush}}" VerticalAlignment="Center" />
+                    <TextBlock Text="{Binding Extension}" Classes.marked="{Binding IsMarked}" VerticalAlignment="Center" />
                   </DataTemplate>
                 </DataGridTemplateColumn.CellTemplate>
               </DataGridTemplateColumn>
               <DataGridTemplateColumn Header="Size" Tag="Size" Width="100" CanUserSort="True">
                 <DataGridTemplateColumn.CellTemplate>
                   <DataTemplate x:DataType="vm:FileEntryItem">
-                    <TextBlock Text="{Binding SizeText}" Foreground="{Binding IsMarked, Converter={StaticResource MarkedToBrush}}" HorizontalAlignment="Right" VerticalAlignment="Center" />
+                    <TextBlock Text="{Binding SizeText}" Classes.marked="{Binding IsMarked}" HorizontalAlignment="Right" VerticalAlignment="Center" />
                   </DataTemplate>
                 </DataGridTemplateColumn.CellTemplate>
               </DataGridTemplateColumn>
               <DataGridTemplateColumn Header="Modified" Tag="Modified" Width="140" CanUserSort="True">
                 <DataGridTemplateColumn.CellTemplate>
                   <DataTemplate x:DataType="vm:FileEntryItem">
-                    <TextBlock Text="{Binding ModifiedText}" Foreground="{Binding IsMarked, Converter={StaticResource MarkedToBrush}}" VerticalAlignment="Center" />
+                    <TextBlock Text="{Binding ModifiedText}" Classes.marked="{Binding IsMarked}" VerticalAlignment="Center" />
                   </DataTemplate>
                 </DataGridTemplateColumn.CellTemplate>
               </DataGridTemplateColumn>
@@ -230,28 +228,28 @@
               <DataGridTemplateColumn Header="Name" Tag="Name" Width="*" CanUserSort="True">
                 <DataGridTemplateColumn.CellTemplate>
                   <DataTemplate x:DataType="vm:FileEntryItem">
-                    <TextBlock Text="{Binding BaseName}" Foreground="{Binding IsMarked, Converter={StaticResource MarkedToBrush}}" VerticalAlignment="Center" />
+                    <TextBlock Text="{Binding BaseName}" Classes.marked="{Binding IsMarked}" VerticalAlignment="Center" />
                   </DataTemplate>
                 </DataGridTemplateColumn.CellTemplate>
               </DataGridTemplateColumn>
               <DataGridTemplateColumn Header="Ext" Tag="Ext" Width="70" CanUserSort="True">
                 <DataGridTemplateColumn.CellTemplate>
                   <DataTemplate x:DataType="vm:FileEntryItem">
-                    <TextBlock Text="{Binding Extension}" Foreground="{Binding IsMarked, Converter={StaticResource MarkedToBrush}}" VerticalAlignment="Center" />
+                    <TextBlock Text="{Binding Extension}" Classes.marked="{Binding IsMarked}" VerticalAlignment="Center" />
                   </DataTemplate>
                 </DataGridTemplateColumn.CellTemplate>
               </DataGridTemplateColumn>
               <DataGridTemplateColumn Header="Size" Tag="Size" Width="100" CanUserSort="True">
                 <DataGridTemplateColumn.CellTemplate>
                   <DataTemplate x:DataType="vm:FileEntryItem">
-                    <TextBlock Text="{Binding SizeText}" Foreground="{Binding IsMarked, Converter={StaticResource MarkedToBrush}}" HorizontalAlignment="Right" VerticalAlignment="Center" />
+                    <TextBlock Text="{Binding SizeText}" Classes.marked="{Binding IsMarked}" HorizontalAlignment="Right" VerticalAlignment="Center" />
                   </DataTemplate>
                 </DataGridTemplateColumn.CellTemplate>
               </DataGridTemplateColumn>
               <DataGridTemplateColumn Header="Modified" Tag="Modified" Width="140" CanUserSort="True">
                 <DataGridTemplateColumn.CellTemplate>
                   <DataTemplate x:DataType="vm:FileEntryItem">
-                    <TextBlock Text="{Binding ModifiedText}" Foreground="{Binding IsMarked, Converter={StaticResource MarkedToBrush}}" VerticalAlignment="Center" />
+                    <TextBlock Text="{Binding ModifiedText}" Classes.marked="{Binding IsMarked}" VerticalAlignment="Center" />
                   </DataTemplate>
                 </DataGridTemplateColumn.CellTemplate>
               </DataGridTemplateColumn>
@@ -279,28 +277,28 @@
               <DataGridTemplateColumn Header="Name" Tag="Name" Width="*" CanUserSort="True">
                 <DataGridTemplateColumn.CellTemplate>
                   <DataTemplate x:DataType="vm:FileEntryItem">
-                    <TextBlock Text="{Binding BaseName}" Foreground="{Binding IsMarked, Converter={StaticResource MarkedToBrush}}" VerticalAlignment="Center" />
+                    <TextBlock Text="{Binding BaseName}" Classes.marked="{Binding IsMarked}" VerticalAlignment="Center" />
                   </DataTemplate>
                 </DataGridTemplateColumn.CellTemplate>
               </DataGridTemplateColumn>
               <DataGridTemplateColumn Header="Ext" Tag="Ext" Width="70" CanUserSort="True">
                 <DataGridTemplateColumn.CellTemplate>
                   <DataTemplate x:DataType="vm:FileEntryItem">
-                    <TextBlock Text="{Binding Extension}" Foreground="{Binding IsMarked, Converter={StaticResource MarkedToBrush}}" VerticalAlignment="Center" />
+                    <TextBlock Text="{Binding Extension}" Classes.marked="{Binding IsMarked}" VerticalAlignment="Center" />
                   </DataTemplate>
                 </DataGridTemplateColumn.CellTemplate>
               </DataGridTemplateColumn>
               <DataGridTemplateColumn Header="Size" Tag="Size" Width="100" CanUserSort="True">
                 <DataGridTemplateColumn.CellTemplate>
                   <DataTemplate x:DataType="vm:FileEntryItem">
-                    <TextBlock Text="{Binding SizeText}" Foreground="{Binding IsMarked, Converter={StaticResource MarkedToBrush}}" HorizontalAlignment="Right" VerticalAlignment="Center" />
+                    <TextBlock Text="{Binding SizeText}" Classes.marked="{Binding IsMarked}" HorizontalAlignment="Right" VerticalAlignment="Center" />
                   </DataTemplate>
                 </DataGridTemplateColumn.CellTemplate>
               </DataGridTemplateColumn>
               <DataGridTemplateColumn Header="Modified" Tag="Modified" Width="140" CanUserSort="True">
                 <DataGridTemplateColumn.CellTemplate>
                   <DataTemplate x:DataType="vm:FileEntryItem">
-                    <TextBlock Text="{Binding ModifiedText}" Foreground="{Binding IsMarked, Converter={StaticResource MarkedToBrush}}" VerticalAlignment="Center" />
+                    <TextBlock Text="{Binding ModifiedText}" Classes.marked="{Binding IsMarked}" VerticalAlignment="Center" />
                   </DataTemplate>
                 </DataGridTemplateColumn.CellTemplate>
               </DataGridTemplateColumn>
