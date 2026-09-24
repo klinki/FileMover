@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.IO;
 using System.Linq;
@@ -16,6 +17,24 @@ public sealed partial class FileEntryItem : ObservableObject
     public string SizeText => IsDirectory ? "<DIR>" : Size.ToString("N0");
     public string ModifiedText => Modified.ToString("yyyy-MM-dd HH:mm");
     public string KindText => IsDirectory ? "dir" : "file";
+
+    private static readonly HashSet<string> ArchiveExts = new(StringComparer.OrdinalIgnoreCase)
+        { ".zip", ".rar", ".7z", ".tar", ".gz", ".tgz", ".bz2", ".xz", ".cab", ".iso", ".jar", ".war" };
+    private static readonly HashSet<string> ImageExts = new(StringComparer.OrdinalIgnoreCase)
+        { ".jpg", ".jpeg", ".png", ".gif", ".bmp", ".tif", ".tiff", ".webp", ".svg", ".ico", ".heic", ".heif", ".dng", ".cr2", ".nef" };
+    private static readonly HashSet<string> VideoExts = new(StringComparer.OrdinalIgnoreCase)
+        { ".mp4", ".mkv", ".avi", ".mov", ".wmv", ".flv", ".webm", ".m4v", ".mpg", ".mpeg", ".ts", ".mts", ".3gp" };
+    private static readonly HashSet<string> TextExts = new(StringComparer.OrdinalIgnoreCase)
+        { ".txt", ".md", ".markdown", ".log", ".csv", ".tsv", ".json", ".xml", ".yml", ".yaml", ".ini", ".cfg", ".toml",
+          ".cs", ".csproj", ".sln", ".xaml", ".axaml", ".py", ".js", ".ts", ".html", ".css", ".sh", ".ps1", ".sql",
+          ".java", ".c", ".h", ".cpp", ".go", ".rs" };
+
+    private string Extension => IsDirectory ? "" : Path.GetExtension(Name);
+    public bool IsArchive => !IsDirectory && ArchiveExts.Contains(Extension);
+    public bool IsImage => !IsDirectory && ImageExts.Contains(Extension);
+    public bool IsVideo => !IsDirectory && VideoExts.Contains(Extension);
+    public bool IsText => !IsDirectory && TextExts.Contains(Extension);
+    public bool IsGenericFile => !IsDirectory && !IsArchive && !IsImage && !IsVideo && !IsText;
 
     public FileEntryItem(string name, string fullPath, bool isDir, long size, DateTime modified)
     {
