@@ -20,6 +20,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\BackupNormalizer\BackupNormalizer.csproj" />
+    <ProjectReference Include="..\..\src\BackupNormalizer.Core\BackupNormalizer.Core.csproj" />
   </ItemGroup>
 
 </Project>

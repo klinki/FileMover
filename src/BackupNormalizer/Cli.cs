@@ -48,6 +48,7 @@ public static class Cli
               plan --canonical <rootId> [--db PATH] [--plan ID]
               plan --canonical-db C.db --target-db T.db [--canonical-root R] --target-root R [--plan ID] [--out-db T.db]
               plan show <plan-id> [--db PATH] | plan export <plan-id> [--format json] [--output F] [--db PATH]
+              plan import <plan.json> [--db PATH] [--root-path ABS] [--role R]
               execute <plan-id> [--db PATH] [--map-root id=path ...] [--resume] [--stop-on-error]
               verify <plan-id> [--db PATH] [--map-root id=path ...]
               purge --older-than 30d --yes [--db PATH] [--path ROOTPATH]
@@ -175,6 +176,29 @@ public static class Cli
             string? outF = Has(a, "--output") ? Opt(a, "--output", "") : null;
             if (!string.IsNullOrEmpty(outF)) File.WriteAllText(outF, json);
             else Console.WriteLine(json);
+            return 0;
+        }
+        if (a[0] == "import" && a.Length >= 2)
+        {
+            // UI-generated plan JSON -> DB, so the same executor can run it.
+            string db = Opt(a, "--db", AppConfig.Load(Opt(a, "--config", AppConfig.DefaultPath)).Database);
+            string rootPath = Opt(a, "--root-path", "");
+            string role = Opt(a, "--role", "Backup");
+            var doc = PlanStaging.ImportJson(a[1]);
+            string rootId = doc.Operations.FirstOrDefault(o => o.SourceRoot != null)?.SourceRoot
+                ?? doc.Operations.FirstOrDefault(o => o.DestinationRoot != null)?.DestinationRoot ?? "disk";
+            if (string.IsNullOrEmpty(rootPath))
+            {
+                using var probe = new Database(db);
+                var existing = probe.GetRoot(rootId);
+                if (existing == null)
+                    return Fail($"plan import needs --root-path <abs-path> for root '{rootId}' (or register the root first)");
+                rootPath = existing.Path;
+                role = existing.Role;
+            }
+            using var d = new Database(db);
+            PlanStaging.WriteToDatabase(d, doc, rootId, rootPath, role);
+            Console.WriteLine($"imported plan {doc.PlanId} ({doc.Operations.Count} ops) into {db}");
             return 0;
         }
         // two-DB mode?

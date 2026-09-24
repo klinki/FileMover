@@ -1,5 +1,7 @@
 <Solution>
   <Folder Name="/src/">
+    <Project Path="src/BackupNormalizer.Core/BackupNormalizer.Core.csproj" />
+    <Project Path="src/BackupNormalizer.Ui/BackupNormalizer.Ui.csproj" />
     <Project Path="src/BackupNormalizer/BackupNormalizer.csproj" />
   </Folder>
   <Folder Name="/tests/">
