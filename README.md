@@ -8,7 +8,7 @@ Safety model: scan/plan never touch user files. `plan` is dry-run by default. `e
 
 ## 1. Run on your main computer (no Docker needed)
 
-Docker is only needed for the QNAP NAS (see §7). On Windows/macOS/Linux desktop, run natively with .NET 10.
+Docker is only needed for the QNAP NAS (see §8). On Windows/macOS/Linux desktop, run natively with .NET 10.
 
 Requirements:
 
@@ -167,7 +167,88 @@ Notes:
 - Plans are immutable: re-running `plan` with an existing ID errors. Generate a new plan ID if state changed.
 - `--map-root` can be repeated: `--map-root disk=/Volumes/D2 --map-root nas=/Volumes/NAS`.
 
-## 5. Command reference
+## 5. Modes and workflows
+
+There are two modes, sharing one plan format. A plan (`plan.json`) is just
+logical root IDs + relative paths + expected size/hash — so UI staging and
+auto-diff are interchangeable plan *sources*, and the same executor (with
+`--map-root` replay) runs both.
+
+### 5.1 Initial organization — auto sync from two snapshots
+
+Two unsorted disks, one of them (or an external layout) defines the desired
+state:
+
+```bash
+# 1-2. Snapshot both disks (incremental; repeat any time)
+bn init --db ./disk1.db
+bn root add disk /Volumes/D1 --role Backup --db ./disk1.db
+bn scan disk --db ./disk1.db && bn hash --needed --db ./disk1.db
+
+bn init --db ./disk2.db
+bn root add disk /Volumes/D2 --role Backup --db ./disk2.db
+bn scan disk --db ./disk2.db && bn hash --needed --db ./disk2.db
+
+# 3. Compute operations (disk1's layout wins; swap DBs to reverse direction)
+bn plan --canonical-db ./disk1.db --target-db ./disk2.db --target-root disk --plan organize-001
+bn plan show organize-001 --db ./disk2.db
+
+# 4. Execute + verify (resume on interruption)
+bn execute organize-001 --db ./disk2.db --map-root disk=/Volumes/D2
+bn verify organize-001 --db ./disk2.db --map-root disk=/Volumes/D2
+```
+
+### 5.2 Fast sync — replay one schedule on an in-sync pair
+
+Assumes disk1 and disk2 are identical. Don't assume it — prove it first
+(fresh incremental scans + hash-compared diff, §3):
+
+```bash
+# 0. Precondition: prove in-sync (must report no differences)
+bn scan disk --db ./disk1.db && bn hash --needed --db ./disk1.db
+bn scan disk --db ./disk2.db && bn hash --needed --db ./disk2.db
+bn diff --old ./disk1.db --new ./disk2.db
+
+# 1-2. Schedule on disk1: either stage in the UI (F5/F6/F7/F8, Save JSON)
+# or auto-diff two snapshots of disk1 — both yield the same plan format.
+bn plan import ./ui-plan.json --db ./disk1.db --root-path /Volumes/D1
+
+# 3. Execute + verify on disk1
+bn execute <plan-id> --db ./disk1.db --map-root disk=/Volumes/D1
+bn verify <plan-id> --db ./disk1.db --map-root disk=/Volumes/D1
+
+# 4-5. Remap ("change the drive letter") and execute + verify on disk2
+bn execute <plan-id> --db ./disk1.db --map-root disk=/Volumes/D2
+bn verify <plan-id> --db ./disk1.db --map-root disk=/Volumes/D2
+```
+
+Notes:
+
+- Drifted ops fail as `Conflict`, never as bad writes. A partially applied
+  disk2 just needs a fresh `diff` + re-plan.
+- `TRASH` caveat: the never-delete-the-last-copy proof is made by the
+  planner against disk1. On replay the executor re-checks the source hash
+  but not surviving-copy existence on disk2. Trash is recoverable and
+  `purge` is separate, but when in doubt re-plan per disk instead of
+  replaying.
+
+### 5.3 Other workflows
+
+- **Single-DB normalization** (§2): all drives attached at once, one DB,
+  `plan --canonical <root>`. Simplest when everything is local.
+- **UI-manual organization of one disk**: stage in the UI, `Write to DB`,
+  execute in place. No second disk involved.
+- **Restore/rollback**: keep a T0 snapshot; `plan --canonical-db t0.db`
+  restores the known-good layout (§4).
+- **NAS-assisted** (§8): scan on the QNAP container (read-only mount),
+  import the DB on the desktop, plan there. No hashing over SMB.
+- **Audit-only drift detection**: scheduled `scan` + `hash --needed` +
+  `diff`, never `execute`. Alert on any difference.
+- **Re-plan vs replay rule of thumb**: replay (`--map-root`) while the
+  pair is proven in sync and the plan has no `TRASH`; otherwise re-plan —
+  planning is cheap, deleting the wrong copy is not.
+
+## 6. Command reference
 
 ```
 init [--db PATH] [--config PATH]
@@ -206,7 +287,7 @@ Config file `backup-normalizer.json` (created by `init`, overridable via `--conf
 
 Exit codes: `0` ok, `2` usage/error, `3` execute/verify completed with failures or conflicts.
 
-## 6. Pre-execution checks and conflicts
+## 7. Pre-execution checks and conflicts
 
 Before each `MOVE`/`COPY`/`TRASH`, the executor re-validates size/mtime/hash. These stop that op as `Conflict` (other ops continue unless `--stop-on-error`):
 
@@ -215,7 +296,7 @@ Before each `MOVE`/`COPY`/`TRASH`, the executor re-validates size/mtime/hash. Th
 - trash candidate lost its surviving copy or changed hash
 - copy source root not mapped (hint shows required `--map-root`)
 
-## 7. QNAP NAS (Docker, `Dockerfile.qnap`)
+## 8. QNAP NAS (Docker, `Dockerfile.qnap`)
 
 Use this only for the QNAP TS-431P3 (ARMv7, 32 KB page size). Desktops run natively per §1.
 
@@ -255,7 +336,7 @@ getconf PAGESIZE  # expect 32768
 ./BackupNormalizer scan-test /data
 ```
 
-## 8. Tests
+## 9. Tests
 
 ```bash
 dotnet test BackupNormalizer.slnx
