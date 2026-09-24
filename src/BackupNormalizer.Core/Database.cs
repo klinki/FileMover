@@ -12,11 +12,6 @@ public sealed class Database : IDisposable
     private readonly SqliteConnection _conn;
     public string DbPath { get; }
 
-    static Database()
-    {
-        SqliteInit.EnsureInitialized();
-    }
-
     public Database(string dbPath)
     {
         DbPath = Path.GetFullPath(dbPath);

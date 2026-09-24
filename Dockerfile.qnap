@@ -1,4 +1,4 @@
-# QNAP TS-431P3 target: Alpine 3.17 ARMv7, .NET 10 linux-musl-arm, system libsqlite3 (§28)
+# QNAP TS-431P3 target: Alpine 3.17 ARMv7, .NET 10 linux-musl-arm (§28)
 # Build (on x64/ARM64 host with Docker buildx):
 #   docker buildx build --platform linux/arm/v7 -f Dockerfile.qnap -t backup-normalizer:qnap-arm32 .
 # Publish equivalent (no Docker):
@@ -15,11 +15,10 @@ COPY . .
 RUN dotnet publish src/BackupNormalizer/BackupNormalizer.csproj -c Release -r linux-musl-arm --self-contained true -o /publish
 
 FROM alpine:3.17
-RUN apk add --no-cache sqlite-libs libgcc libstdc++ icu-libs
-
-# Spec §3.2: prefer the Alpine-provided system SQLite over the bundled binary.
-ENV BN_SQLITE=system
+RUN apk add --no-cache libgcc libstdc++ icu-libs
 
 WORKDIR /app
 COPY --from=build /publish/ .
+COPY qnap-check.sh .
+RUN chmod +x qnap-check.sh
 ENTRYPOINT ["./BackupNormalizer"]

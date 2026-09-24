@@ -13,7 +13,7 @@ Docker is only needed for the QNAP NAS (see §8). On Windows/macOS/Linux desktop
 Requirements:
 
 - .NET 10 SDK (`dotnet --version` should print `10.x`)
-- No other dependencies. SQLite is bundled via `SQLitePCLRaw.bundle_sqlite3`.
+- No other dependencies. `Microsoft.Data.Sqlite` includes the native SQLite library.
 
 Build once:
 
@@ -343,7 +343,7 @@ services:
 ./BackupNormalizer hash --needed --db /state/nas.db --parallelism 2
 ```
 
-Copy `/state/nas.db` (or `inventory export nas --output nas.inventory.db`) back to your main computer, then `inventory import` + `plan` + `diff` there. This avoids hashing NAS files over SMB. The image uses `alpine:3.17` + system `sqlite-libs` + `linux-musl-arm` self-contained publish for the 32 KB page-size environment. Before relying on it, verify on the NAS:
+Copy `/state/nas.db` (or `inventory export nas --output nas.inventory.db`) back to your main computer, then `inventory import` + `plan` + `diff` there. This avoids hashing NAS files over SMB. The image uses `alpine:3.17`, the SQLite library bundled by NuGet, and a `linux-musl-arm` self-contained publish. Before relying on it in the 32 KB page-size environment, verify on the NAS:
 
 ```bash
 uname -m          # expect armv7l
