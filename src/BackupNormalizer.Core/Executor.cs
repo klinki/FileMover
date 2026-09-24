@@ -39,9 +39,63 @@ public sealed class Executor
             return Path.Combine(basePath, _trashName, planId);
         }
 
+        // Invariant 1 at execute time (not just plan time): a TRASH must leave
+        // behind at least one other verified copy. The planner proves this for
+        // the planned disk, but a remapped replay (--map-root) needs re-proof.
+        bool HasSurvivingCopy(OpRow op)
+        {
+            if (op.ExpectedHash == null) return false;
+            // (a) Same-plan completed COPY/MOVE: hash-verified when marked Completed.
+            using var c = _db.Conn.CreateCommand();
+            c.CommandText = """
+                SELECT DestinationRootId, DestinationPath, ExpectedSize FROM PlanOperation
+                WHERE PlanId=$p AND Status='Completed' AND ExpectedHash=$h AND Type IN ('COPY','MOVE')
+                """;
+            c.Parameters.AddWithValue("$p", planId);
+            c.Parameters.AddWithValue("$h", op.ExpectedHash);
+            using var r = c.ExecuteReader();
+            while (r.Read())
+            {
+                string? dr = r.IsDBNull(0) ? null : r.GetString(0);
+                string? dp = r.IsDBNull(1) ? null : r.GetString(1);
+                if (dr == null || dp == null) continue;
+                if (dr == op.SourceRoot && dp == op.SourcePath) continue; // must be ANOTHER copy
+                string abs;
+                try { abs = ResolvePath(dr, dp); } catch { continue; } // offline snapshot root
+                if (File.Exists(abs) && new FileInfo(abs).Length == r.GetInt64(2)) return true;
+            }
+            r.Close();
+            // (b) DB-known copies: existence + size + fresh hash verification.
+            using var c2 = _db.Conn.CreateCommand();
+            c2.CommandText = """
+                SELECT fe.StorageRootId, fe.RelativePath, fe.Size FROM FileEntry fe
+                JOIN FileHash fh ON fh.FileEntryId = fe.Id
+                WHERE fh.Digest=$h AND fh.State='Ok' AND fe.Status='Ok'
+                  AND NOT (fe.StorageRootId=$sr AND fe.RelativePath=$sp)
+                """;
+            c2.Parameters.AddWithValue("$h", op.ExpectedHash);
+            c2.Parameters.AddWithValue("$sr", op.SourceRoot!);
+            c2.Parameters.AddWithValue("$sp", op.SourcePath!);
+            using var r2 = c2.ExecuteReader();
+            var candidates = new List<(string Root, string Rel, long Size)>();
+            while (r2.Read()) candidates.Add((r2.GetString(0), r2.GetString(1), r2.GetInt64(2)));
+            r2.Close();
+            foreach (var (cr, cp, csz) in candidates)
+            {
+                string abs;
+                try { abs = ResolvePath(cr, cp); } catch { continue; }
+                if (!File.Exists(abs)) continue;
+                var fi = new FileInfo(abs);
+                if (fi.Length != csz || (op.ExpectedSize != 0 && fi.Length != op.ExpectedSize)) continue;
+                string digest;
+                try { digest = _hasher.HashFile(abs, fi.Length); } catch { continue; }
+                if (string.Equals(digest, op.ExpectedHash, StringComparison.OrdinalIgnoreCase)) return true;
+            }
+            return false;
+        }
+
         var ops = LoadOps(planId);
-        int done = 0, failed = 0, skipped = 0, conflicts = 0;
-        foreach (var op in ops)
+        int done = 0, failed = 0, skipped = 0, conflicts = 0;        foreach (var op in ops)
         {
             if (resume && op.Status == "Completed") { done++; continue; }
             if (op.Status == "Completed" && !resume) { done++; continue; }
@@ -73,7 +127,7 @@ public sealed class Executor
                 {
                     case "MOVE": DoMove(op, ResolvePath); break;
                     case "COPY": DoCopy(op, ResolvePath); break;
-                    case "TRASH": DoTrash(op, ResolvePath, TrashDirFor); break;
+                    case "TRASH": DoTrash(op, ResolvePath, TrashDirFor, HasSurvivingCopy); break;
                     case "VERIFY": DoVerify(op, ResolvePath); break;
                     default: throw new InvalidOperationException($"unknown op {op.Type}");
                 }
@@ -262,19 +316,21 @@ public sealed class Executor
         File.Move(tmp, dst);
     }
 
-    private void DoTrash(OpRow op, Func<string, string, string> resolve, Func<string, string> trashDirFor)
+    private void DoTrash(OpRow op, Func<string, string, string> resolve, Func<string, string> trashDirFor, Func<OpRow, bool> hasSurvivor)
     {
         var src = resolve(op.SourceRoot!, op.SourcePath!);
         if (!File.Exists(src)) throw new ConflictException($"trash source missing (already gone?): {src}");
-        // Invariant 1/5: refuse unless another valid copy exists — best-effort check via DB content group
-        // MVP: verify hash matches expected before trashing; full cross-check done at plan time.
         var sfi = new FileInfo(src);
-        if (op.ExpectedHash != null)
-        {
-            string sh = _hasher.HashFile(src, sfi.Length);
-            if (!string.Equals(sh, op.ExpectedHash, StringComparison.OrdinalIgnoreCase))
-                throw new ConflictException($"refusing trash: source changed: {src}");
-        }
+        if (op.ExpectedSize != 0 && sfi.Length != op.ExpectedSize)
+            throw new ConflictException($"trash source changed size: {src}");
+        if (op.ExpectedHash == null)
+            throw new ConflictException($"refusing trash without content identity: {src}");
+        string sh = _hasher.HashFile(src, sfi.Length);
+        if (!string.Equals(sh, op.ExpectedHash, StringComparison.OrdinalIgnoreCase))
+            throw new ConflictException($"refusing trash: source changed: {src}");
+        // Invariant 1 re-proven here (planner proof doesn't transfer across --map-root replay).
+        if (!hasSurvivor(op))
+            throw new ConflictException($"refusing trash: no surviving verified copy of content: {src}");
         string trashDir = trashDirFor(op.SourceRoot!);
         string rel = op.SourcePath!;
         string dst = Path.Combine(trashDir, rel.Replace('/', Path.DirectorySeparatorChar));
