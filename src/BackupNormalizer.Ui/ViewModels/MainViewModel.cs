@@ -49,9 +49,6 @@ public sealed partial class MainViewModel : ViewModelBase
     public partial string JsonPath { get; set; } = "./ui-plan.json";
 
     [ObservableProperty]
-    public partial string NewFolderName { get; set; } = "";
-
-    [ObservableProperty]
     public partial bool IsLeftActive { get; set; } = true;
 
     [ObservableProperty]
@@ -64,10 +61,15 @@ public sealed partial class MainViewModel : ViewModelBase
     public FilePanelViewModel Right { get; } = new();
     public ObservableCollection<StagedOpItem> Staged { get; } = new();
 
+    /// <summary>Staged virtual directories (absolute paths), visible in both panels.</summary>
+    public HashSet<string> VirtualDirs { get; } = new(StringComparer.OrdinalIgnoreCase);
+
     private readonly List<BackupNormalizer.PlanStaging.StagedOp> _stagedCore = new();
 
     public MainViewModel()
     {
+        Left.VirtualDirs = VirtualDirs;
+        Right.VirtualDirs = VirtualDirs;
         Left.CurrentPath = BasePath;
         Right.CurrentPath = BasePath;
         Left.Refresh();
@@ -89,6 +91,7 @@ public sealed partial class MainViewModel : ViewModelBase
                 return;
             }
             BasePath = full;
+            VirtualDirs.Clear(); // virtuals belong to the previous base
             Left.CurrentPath = full;
             Right.CurrentPath = full;
             Left.Refresh();
@@ -227,16 +230,26 @@ public sealed partial class MainViewModel : ViewModelBase
         catch (Exception ex) { StatusMessage = "drop failed: " + ex.Message; }
     }
 
-    [RelayCommand]
-    public void StageMkdir()
+    /// <summary>
+    /// F7 confirmed from the mkdir dialog: stages MKDIR and publishes a virtual
+    /// directory so both panels show and navigate it immediately.
+    /// </summary>
+    public void StageMkdirFromDialog(string name)
     {
         try
         {
-            if (string.IsNullOrWhiteSpace(NewFolderName)) { StatusMessage = "Enter a new folder name first."; return; }
-            string abs = Path.Combine(Active.CurrentPath, NewFolderName.Trim());
-            var ops = BackupNormalizer.PlanStaging.StageMkdir(BasePath, abs);
-            AppendStaged(ops);
-            NewFolderName = "";
+            string trimmed = (name ?? "").Trim();
+            if (trimmed.Length == 0) { StatusMessage = "Folder name is empty."; return; }
+            if (trimmed == "." || trimmed == ".." || trimmed.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0)
+            { StatusMessage = $"Invalid folder name: '{trimmed}'."; return; }
+            string abs = Path.GetFullPath(Path.Combine(Active.CurrentPath, trimmed));
+            if (Directory.Exists(abs) || VirtualDirs.Contains(abs))
+            { StatusMessage = $"Already exists: '{trimmed}'."; return; }
+            AppendStaged(BackupNormalizer.PlanStaging.StageMkdir(BasePath, abs));
+            VirtualDirs.Add(abs);
+            Left.Refresh();
+            Right.Refresh();
+            StatusMessage = $"Staged MKDIR '{trimmed}'. Nothing executed.";
         }
         catch (Exception ex) { StatusMessage = "stage mkdir failed: " + ex.Message; }
     }

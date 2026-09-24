@@ -44,7 +44,7 @@ public sealed partial class FileEntryItem : ObservableObject
     [ObservableProperty]
     public partial bool IsMarked { get; set; }
 
-    public FileEntryItem(string name, string fullPath, bool isDir, long size, DateTime modified, bool isParent = false)
+    public FileEntryItem(string name, string fullPath, bool isDir, long size, DateTime modified, bool isParent = false, bool isVirtual = false)
     {
         Name = name;
         FullPath = fullPath;
@@ -52,7 +52,11 @@ public sealed partial class FileEntryItem : ObservableObject
         Size = size;
         Modified = modified;
         IsParentEntry = isParent;
+        IsVirtual = isVirtual;
     }
+
+    /// <summary>Staged-but-not-on-disk directory. Shown and navigable like a real dir.</summary>
+    public bool IsVirtual { get; }
 }
 
 public sealed partial class FilePanelViewModel : ObservableObject
@@ -70,6 +74,12 @@ public sealed partial class FilePanelViewModel : ObservableObject
     [ObservableProperty]
     public partial string Status { get; set; } = "";
 
+    /// <summary>
+    /// Absolute paths of staged-but-not-on-disk directories, shared by both panels.
+    /// Owned by MainViewModel; merged into listings so virtual dirs are navigable.
+    /// </summary>
+    public HashSet<string> VirtualDirs { get; set; } = new(StringComparer.OrdinalIgnoreCase);
+
     public string SortColumn { get; private set; } = "Name";
     public bool SortAscending { get; private set; } = true;
 
@@ -85,13 +95,19 @@ public sealed partial class FilePanelViewModel : ObservableObject
         return Directory.GetParent(trimmed);
     }
 
+    private bool IsVirtualLocation(string path)
+        => VirtualDirs.Contains(path)
+            || VirtualDirs.Any(v => v.StartsWith(path.TrimEnd(Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar,
+                OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal));
+
     public void Refresh()
     {
         Entries.Clear();
         SelectedEntry = null;
         try
         {
-            if (!Directory.Exists(CurrentPath))
+            bool onDisk = Directory.Exists(CurrentPath);
+            if (!onDisk && !IsVirtualLocation(CurrentPath))
             {
                 Status = "path not found";
                 return;
@@ -100,30 +116,46 @@ public sealed partial class FilePanelViewModel : ObservableObject
             if (ParentOf(CurrentPath) is { } parent)
                 Entries.Add(new FileEntryItem("..", parent.FullName, true, 0, DateTime.MinValue, isParent: true));
             int dirs = 0, files = 0;
-            foreach (var d in Directory.GetDirectories(CurrentPath).OrderBy(x => x))
+            if (onDisk)
             {
-                try
+                foreach (var d in Directory.GetDirectories(CurrentPath).OrderBy(x => x))
                 {
-                    var di = new DirectoryInfo(d);
-                    if (di.Attributes.HasFlag(FileAttributes.ReparsePoint)) continue; // like scanner: no follow
-                    Entries.Add(new FileEntryItem(di.Name, di.FullName, true, 0, di.LastWriteTime));
-                    dirs++;
+                    try
+                    {
+                        var di = new DirectoryInfo(d);
+                        if (di.Attributes.HasFlag(FileAttributes.ReparsePoint)) continue; // like scanner: no follow
+                        Entries.Add(new FileEntryItem(di.Name, di.FullName, true, 0, di.LastWriteTime));
+                        dirs++;
+                    }
+                    catch { }
                 }
-                catch { }
+                foreach (var f in Directory.GetFiles(CurrentPath).OrderBy(x => x))
+                {
+                    try
+                    {
+                        var fi = new FileInfo(f);
+                        if (fi.Attributes.HasFlag(FileAttributes.ReparsePoint)) continue;
+                        Entries.Add(new FileEntryItem(fi.Name, fi.FullName, false, fi.Length, fi.LastWriteTime));
+                        files++;
+                    }
+                    catch { }
+                }
             }
-            foreach (var f in Directory.GetFiles(CurrentPath).OrderBy(x => x))
+            // Staged virtual children of the current directory.
+            string prefix = CurrentPath.TrimEnd(Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar;
+            var cmp = OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
+            int staged = 0;
+            foreach (var v in VirtualDirs.OrderBy(x => x))
             {
-                try
-                {
-                    var fi = new FileInfo(f);
-                    if (fi.Attributes.HasFlag(FileAttributes.ReparsePoint)) continue;
-                    Entries.Add(new FileEntryItem(fi.Name, fi.FullName, false, fi.Length, fi.LastWriteTime));
-                    files++;
-                }
-                catch { }
+                if (!v.StartsWith(prefix, cmp)) continue;
+                string rest = v.Substring(prefix.Length);
+                if (rest.Length == 0 || rest.Contains(Path.DirectorySeparatorChar)) continue; // not a direct child
+                if (Entries.Any(e => e.IsDirectory && string.Equals(e.Name, rest, cmp))) continue; // real one wins
+                Entries.Add(new FileEntryItem(rest, v, true, 0, DateTime.UtcNow, isVirtual: true));
+                staged++;
             }
             SortEntries();
-            Status = $"{dirs} dirs, {files} files";
+            Status = $"{dirs} dirs, {files} files" + (staged > 0 ? $", {staged} staged" : "");
         }
         catch (Exception ex)
         {

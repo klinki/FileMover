@@ -1,0 +1,32 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:BackupNormalizer.Ui.ViewModels"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        mc:Ignorable="d" d:DesignWidth="800" d:DesignHeight="400"
+        x:Class="BackupNormalizer.Ui.Views.StagedOperationsWindow"
+        x:DataType="vm:MainViewModel"
+        Icon="/Assets/avalonia-logo.ico"
+        Title="Staged operations (plan-only)">
+  <DockPanel>
+    <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Spacing="6" Margin="6">
+      <TextBlock Text="Staged operations (plan-only)" FontWeight="Bold" VerticalAlignment="Center" />
+      <Button Content="Remove selected" Command="{Binding RemoveStagedCommand}" CommandParameter="{Binding ElementName=StagedList, Path=SelectedItem}" />
+      <Button Content="Clear" Command="{Binding ClearStagedCommand}" />
+      <TextBlock Text="{Binding PlanSummary}" VerticalAlignment="Center" />
+    </StackPanel>
+    <ListBox x:Name="StagedList" ItemsSource="{Binding Staged}" Margin="6,0,6,6">
+      <ListBox.ItemTemplate>
+        <DataTemplate x:DataType="vm:StagedOpItem">
+          <Grid ColumnDefinitions="70,*,*,90,110">
+            <TextBlock Grid.Column="0" Text="{Binding Type}" FontWeight="Bold" />
+            <TextBlock Grid.Column="1" Text="{Binding Source}" TextTrimming="CharacterEllipsis" />
+            <TextBlock Grid.Column="2" Text="{Binding Dest}" TextTrimming="CharacterEllipsis" />
+            <TextBlock Grid.Column="3" Text="{Binding SizeText}" HorizontalAlignment="Right" />
+            <TextBlock Grid.Column="4" Text="{Binding HashShort}" />
+          </Grid>
+        </DataTemplate>
+      </ListBox.ItemTemplate>
+    </ListBox>
+  </DockPanel>
+</Window>

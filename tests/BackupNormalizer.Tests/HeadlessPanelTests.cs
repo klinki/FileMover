@@ -72,7 +72,7 @@ public sealed class HeadlessPanelTests : IDisposable
             int visibleBorders = window.GetLogicalDescendants().OfType<Border>()
                 .Count(b => b.IsEffectivelyVisible && b.Child is DockPanel);
             report.Add($"visible panel borders={visibleBorders}");
-            Assert.Equal(3, visibleBorders); // staged + exactly one border per side
+            Assert.Equal(2, visibleBorders); // exactly one border per side; staged lives in its own window
             foreach (var g in window.GetLogicalDescendants().OfType<DataGrid>().Where(g => g.IsEffectivelyVisible))
             {
                 int items = (g.ItemsSource as IList)?.Count ?? -1;
@@ -154,6 +154,41 @@ public sealed class DataGridThemeOverrideTests
             })
                 Assert.Equal(1.0, Assert.IsType<double>(window.FindResource(key)));
             window.Close();
+        });
+    }
+}
+
+[Collection("UI")]
+public sealed class StagedWindowTests
+{
+    [Fact]
+    public void Staged_Window_Shows_Staged_Operations()
+    {
+        UiTestHost.Run(() =>
+        {
+            var dir = Path.Combine(Path.GetTempPath(), "bn-stagedwin-" + Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(Path.Combine(dir, "src"));
+            Directory.CreateDirectory(Path.Combine(dir, "dst"));
+            File.WriteAllText(Path.Combine(dir, "src", "f.txt"), "data");
+            try
+            {
+                var vm = new MainViewModel { BasePath = dir };
+                vm.ApplyBase();
+                vm.Left.CurrentPath = Path.Combine(dir, "src");
+                vm.Left.Refresh();
+                vm.Right.CurrentPath = Path.Combine(dir, "dst");
+                vm.Right.Refresh();
+                vm.Left.SelectedEntry = vm.Left.Entries.First(e => e.Name == "f.txt");
+                vm.StageMove();
+                Assert.NotEmpty(vm.Staged);
+                var window = new StagedOperationsWindow { DataContext = vm, Width = 800, Height = 400 };
+                window.Show();
+                Dispatcher.UIThread.RunJobs();
+                var list = window.GetLogicalDescendants().OfType<ListBox>().First();
+                Assert.Equal(vm.Staged.Count, (list.ItemsSource as System.Collections.IList)?.Count ?? -1);
+                window.Close();
+            }
+            finally { try { Directory.Delete(dir, true); } catch { } }
         });
     }
 }

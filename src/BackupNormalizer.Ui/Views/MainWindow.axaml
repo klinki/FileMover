@@ -67,6 +67,10 @@
           <Path Data="M7,7H17V10L21,6L17,2V5H5V11H7V7M17,17H7V14L3,18L7,22V19H19V13H17V17Z"
                 Fill="{DynamicResource SystemBaseHighColor}" Stretch="Uniform" />
         </Button>
+        <Button Click="OnShowStaged" ToolTip.Tip="Staged operations" Width="30" Height="30" Padding="5">
+          <Path Data="M9,5H7A2,2 0 0,0 5,7V19A2,2 0 0,0 7,21H17A2,2 0 0,0 19,19V7A2,2 0 0,0 17,5H15V4A2,2 0 0,0 13,2H11A2,2 0 0,0 9,4V5M9,7H15V5H9V7M7,9H17V11H7V9M7,13H15V15H7V13M7,17H13V19H7V17Z"
+                Fill="{DynamicResource SystemBaseHighColor}" Stretch="Uniform" />
+        </Button>
       </StackPanel>
     </Border>
 
@@ -103,8 +107,7 @@
         <WrapPanel Orientation="Horizontal" ItemSpacing="6">
           <Button Content="F5 Copy (stage)" Command="{Binding StageCopyCommand}" />
           <Button Content="F6 Move (stage)" Command="{Binding StageMoveCommand}" />
-          <Button Content="F7 Mkdir (stage)" Command="{Binding StageMkdirCommand}" />
-          <TextBox Text="{Binding NewFolderName}" Width="140" PlaceholderText="new folder name" />
+          <Button Content="F7 Mkdir (stage)" Click="OnMkdir" />
           <Button Content="F8 Delete (stage trash)" Command="{Binding StageTrashCommand}" />
           <Button Content="Save JSON" Command="{Binding SaveJsonCommand}" />
           <Button Content="Write to DB" Command="{Binding WriteToDbCommand}" />
@@ -114,9 +117,9 @@
     </Border>
 
     <!-- Main area: two panels + staged list -->
-    <Grid RowDefinitions="*,220" ColumnDefinitions="*,*">
+    <Grid ColumnDefinitions="*,Auto,*">
       <!-- Left panel -->
-      <Border Grid.Row="0" Grid.Column="0" Margin="6" BorderBrush="DodgerBlue" BorderThickness="2" CornerRadius="4"
+      <Border Grid.Column="0" Margin="0,6,0,6" BorderBrush="DodgerBlue" BorderThickness="2" CornerRadius="4"
               IsVisible="{Binding IsLeftActive}">
         <DockPanel>
           <StackPanel DockPanel.Dock="Top" Orientation="Vertical" Spacing="2" Margin="4">
@@ -165,7 +168,7 @@
           </DataGrid>
         </DockPanel>
       </Border>
-      <Border Grid.Row="0" Grid.Column="0" Margin="6" BorderBrush="Gray" BorderThickness="1" CornerRadius="4"
+      <Border Grid.Column="0" Margin="0,6,0,6" BorderBrush="Gray" BorderThickness="1" CornerRadius="4"
               IsVisible="{Binding !IsLeftActive}">
         <DockPanel>
           <StackPanel DockPanel.Dock="Top" Orientation="Vertical" Spacing="2" Margin="4">
@@ -215,8 +218,10 @@
         </DockPanel>
       </Border>
 
+      <GridSplitter Grid.Column="1" Width="6" ResizeBehavior="PreviousAndNext" Background="Gray" />
+
       <!-- Right panel -->
-      <Border Grid.Row="0" Grid.Column="1" Margin="6" BorderBrush="DodgerBlue" BorderThickness="2" CornerRadius="4"
+      <Border Grid.Column="2" Margin="0,6,0,6" BorderBrush="DodgerBlue" BorderThickness="2" CornerRadius="4"
               IsVisible="{Binding !IsLeftActive}">
         <DockPanel>
           <StackPanel DockPanel.Dock="Top" Orientation="Vertical" Spacing="2" Margin="4">
@@ -265,7 +270,7 @@
           </DataGrid>
         </DockPanel>
       </Border>
-      <Border Grid.Row="0" Grid.Column="1" Margin="6" BorderBrush="Gray" BorderThickness="1" CornerRadius="4"
+      <Border Grid.Column="2" Margin="0,6,0,6" BorderBrush="Gray" BorderThickness="1" CornerRadius="4"
               IsVisible="{Binding IsLeftActive}">
         <DockPanel>
           <StackPanel DockPanel.Dock="Top" Orientation="Vertical" Spacing="2" Margin="4">
@@ -315,29 +320,6 @@
         </DockPanel>
       </Border>
 
-      <!-- Staged operations -->
-      <Border Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="2" Margin="6" BorderBrush="Gray" BorderThickness="1" CornerRadius="4">
-        <DockPanel>
-          <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Spacing="6" Margin="4">
-            <TextBlock Text="Staged operations (plan-only)" FontWeight="Bold" VerticalAlignment="Center" />
-            <Button Content="Remove selected" Command="{Binding RemoveStagedCommand}" CommandParameter="{Binding ElementName=StagedList, Path=SelectedItem}" />
-            <Button Content="Clear" Command="{Binding ClearStagedCommand}" />
-          </StackPanel>
-          <ListBox x:Name="StagedList" ItemsSource="{Binding Staged}">
-            <ListBox.ItemTemplate>
-              <DataTemplate x:DataType="vm:StagedOpItem">
-                <Grid ColumnDefinitions="70,*,*,90,110">
-                  <TextBlock Grid.Column="0" Text="{Binding Type}" FontWeight="Bold" />
-                  <TextBlock Grid.Column="1" Text="{Binding Source}" TextTrimming="CharacterEllipsis" />
-                  <TextBlock Grid.Column="2" Text="{Binding Dest}" TextTrimming="CharacterEllipsis" />
-                  <TextBlock Grid.Column="3" Text="{Binding SizeText}" HorizontalAlignment="Right" />
-                  <TextBlock Grid.Column="4" Text="{Binding HashShort}" />
-                </Grid>
-              </DataTemplate>
-            </ListBox.ItemTemplate>
-          </ListBox>
-        </DockPanel>
-      </Border>
     </Grid>
   </DockPanel>
 </Window>

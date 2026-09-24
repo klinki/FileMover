@@ -422,3 +422,64 @@ public sealed class MainViewModelPanelTests : IDisposable
         Assert.Contains(vm.Left.Entries, e => e.Name == "new.txt");
     }
 }
+
+public sealed class VirtualDirTests : IDisposable
+{
+    private readonly string _dir = Path.Combine(Path.GetTempPath(), "bn-virtual-" + Guid.NewGuid().ToString("N"));
+    public VirtualDirTests() { Directory.CreateDirectory(_dir); }
+    public void Dispose() { try { Directory.Delete(_dir, true); } catch { } }
+
+    [Fact]
+    public void Virtual_Child_Appears_Sorted_With_Dirs_And_Navigates()
+    {
+        Directory.CreateDirectory(Path.Combine(_dir, "real"));
+        var panel = new FilePanelViewModel { CurrentPath = _dir };
+        panel.VirtualDirs.Add(Path.Combine(_dir, "zz-staged"));
+        panel.Refresh();
+        var virt = panel.Entries.Single(e => e.Name == "zz-staged");
+        Assert.True(virt.IsDirectory);
+        Assert.True(virt.IsVirtual);
+        Assert.Contains("staged", panel.Status);
+        // Navigable: enter shows empty virtual location with ".." back up.
+        Assert.True(panel.NavigateTo(virt));
+        Assert.Equal(Path.Combine(_dir, "zz-staged"), panel.CurrentPath);
+        Assert.Contains(panel.Entries, e => e.IsParentEntry);
+        Assert.True(panel.NavigateTo(panel.Entries[0]));
+        Assert.Equal(_dir, panel.CurrentPath);
+    }
+
+    [Fact]
+    public void Real_Directory_Wins_Over_Virtual_Same_Name()
+    {
+        Directory.CreateDirectory(Path.Combine(_dir, "same"));
+        var panel = new FilePanelViewModel { CurrentPath = _dir };
+        panel.VirtualDirs.Add(Path.Combine(_dir, "same"));
+        panel.Refresh();
+        var matches = panel.Entries.Where(e => e.Name == "same").ToList();
+        Assert.Single(matches);
+        Assert.False(matches[0].IsVirtual);
+    }
+
+    [Fact]
+    public void StageMkdirFromDialog_Publishes_Virtual_In_Both_Panels()
+    {
+        var sub = Path.Combine(_dir, "sub");
+        Directory.CreateDirectory(sub);
+        var vm = new MainViewModel { BasePath = _dir };
+        vm.ApplyBase();
+        vm.Left.CurrentPath = sub; vm.Left.Refresh();
+        vm.Right.CurrentPath = _dir; vm.Right.Refresh();
+        vm.StageMkdirFromDialog("newdir");
+        Assert.Contains(vm.Staged, o => o.Type == "MKDIR");
+        Assert.Contains(vm.Left.Entries, e => e.Name == "newdir" && e.IsVirtual);
+        // Other panel navigates in and sees it too once refreshed there.
+        vm.Right.CurrentPath = sub; vm.Right.Refresh();
+        Assert.Contains(vm.Right.Entries, e => e.Name == "newdir" && e.IsVirtual);
+        // Invalid + duplicate names refused without staging.
+        int before = vm.Staged.Count;
+        vm.StageMkdirFromDialog("");
+        vm.StageMkdirFromDialog("..");
+        vm.StageMkdirFromDialog("newdir");
+        Assert.Equal(before, vm.Staged.Count);
+    }
+}

@@ -295,6 +295,22 @@ public partial class MainWindow : Window
         => this.GetLogicalDescendants().OfType<DataGrid>()
             .FirstOrDefault(g => ((g.Tag as string) ?? "Left") == (side ?? "Left") && g.IsEffectivelyVisible);
 
+    private StagedOperationsWindow? _stagedWindow;
+
+    private void OnShowStaged(object? sender, RoutedEventArgs e)
+    {
+        if (_stagedWindow == null)
+        {
+            _stagedWindow = new StagedOperationsWindow { DataContext = DataContext };
+            _stagedWindow.Closed += (_, _) => _stagedWindow = null;
+            _stagedWindow.Show();
+        }
+        else
+        {
+            _stagedWindow.Activate();
+        }
+    }
+
     // --- Drop: schedule MOVE into the target panel directory (plan-only) ---
 
     private void OnGridDragOver(object? sender, DragEventArgs e)
@@ -346,8 +362,18 @@ public partial class MainWindow : Window
         }
     }
 
-    // --- Double-click navigates (Left=activate left, etc.) ---
+    // --- F7: TC-style mkdir dialog; confirmed name becomes a staged virtual dir ---
 
+    private async void OnMkdir(object? sender, RoutedEventArgs e)
+    {
+        if (Vm == null) return;
+        var dialog = new MkdirDialog();
+        string? name = await dialog.ShowDialog<string?>(this);
+        if (!string.IsNullOrWhiteSpace(name))
+            Vm.StageMkdirFromDialog(name);
+    }
+
+    // --- Double-click navigates (Left=activate left, etc.) ---
     private void OnLeftDoubleTapped(object? sender, TappedEventArgs e)
     {
         if (Vm == null) return;
