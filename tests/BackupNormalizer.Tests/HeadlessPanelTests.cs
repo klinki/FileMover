@@ -158,6 +158,7 @@ public sealed class HeadlessPanelTests : IDisposable
                 Assert.Equal(Color.Parse(text), RowText("a.txt"));
                 Assert.Equal(Color.Parse(marked), RowText("b.jpg"));
                 grid.SelectedItem = vm.Left.Entries.First(e => e.Name == "a.txt");
+                grid.ScrollIntoView(vm.Left.Entries.First(e => e.Name == "a.txt"), null);
                 Pump4();
                 var selectedRow = grid.GetVisualDescendants().OfType<DataGridRow>()
                     .First(r => ((FileEntryItem)r.DataContext!).Name == "a.txt");

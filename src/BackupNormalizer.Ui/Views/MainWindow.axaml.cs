@@ -407,6 +407,15 @@ public partial class MainWindow : Window
             Vm.StageMkdirFromDialog(name);
     }
 
+    private void OnDriveClick(object? sender, RoutedEventArgs e)
+    {
+        if (Vm == null || sender is not Button button || button.CommandParameter is not DriveView drive)
+            return;
+        var panel = (button.Tag as string) == "Right" ? Vm.Right : Vm.Left;
+        Vm.IsLeftActive = (button.Tag as string) != "Right";
+        panel.GoToDrive(drive);
+    }
+
     // --- Double-click navigates (Left=activate left, etc.) ---
     private void OnLeftDoubleTapped(object? sender, TappedEventArgs e)
     {

@@ -74,6 +74,8 @@ public sealed partial class MainViewModel : ViewModelBase
         Right.VirtualDirs = VirtualDirs;
         Left.CurrentPath = BasePath;
         Right.CurrentPath = BasePath;
+        Left.RefreshDrives();
+        Right.RefreshDrives();
         Left.Refresh();
         Right.Refresh();
     }
@@ -109,6 +111,8 @@ public sealed partial class MainViewModel : ViewModelBase
     [RelayCommand]
     public void RefreshAll()
     {
+        Left.RefreshDrives();
+        Right.RefreshDrives();
         Left.Refresh();
         Right.Refresh();
         StatusMessage = "Panels refreshed.";

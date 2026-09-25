@@ -514,3 +514,47 @@ public sealed class StagedRemovalTests : IDisposable
         vm.RemoveStaged(null); // no-op, never throws
     }
 }
+
+public sealed class DriveBarTests : IDisposable
+{
+    private readonly string _dir = Path.Combine(Path.GetTempPath(), "bn-drivebar-" + Guid.NewGuid().ToString("N"));
+    public DriveBarTests() { Directory.CreateDirectory(_dir); }
+    public void Dispose() { try { Directory.Delete(_dir, true); } catch { } }
+
+    [Fact]
+    public void RefreshDrives_Lists_Ready_Drives_With_Space()
+    {
+        var panel = new FilePanelViewModel { CurrentPath = _dir };
+        panel.RefreshDrives();
+        Assert.NotEmpty(panel.Drives);
+        Assert.All(panel.Drives, d =>
+        {
+            Assert.False(string.IsNullOrEmpty(d.Root));
+            Assert.True(d.TotalBytes > 0);
+            Assert.True(d.FreeBytes >= 0 && d.FreeBytes <= d.TotalBytes);
+            Assert.Contains("free", d.Display);
+        });
+    }
+
+    [Fact]
+    public void GoToDrive_Navigates_And_Updates_Status()
+    {
+        string root = Path.GetPathRoot(Path.GetFullPath(_dir))!;
+        var panel = new FilePanelViewModel { CurrentPath = _dir };
+        panel.RefreshDrives();
+        panel.GoToDrive(new DriveView(root, "", 1, 2));
+        Assert.Equal(root, panel.CurrentPath);
+        Assert.Contains("free of", panel.DriveStatus);
+        panel.GoToDrive(null); // no-op, never throws
+    }
+
+    [Fact]
+    public void FormatBytes_Uses_Largest_Fitting_Unit()
+    {
+        Assert.Equal("0 B", DriveView.FormatBytes(0));
+        Assert.Equal("512 B", DriveView.FormatBytes(512));
+        Assert.Equal("2.0 KB", DriveView.FormatBytes(2048));
+        Assert.Equal("3.5 MB", DriveView.FormatBytes((long)(3.5 * 1024 * 1024)));
+        Assert.Equal("120.4 GB", DriveView.FormatBytes((long)(120.4 * 1024 * 1024 * 1024)));
+    }
+}

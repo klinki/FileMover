@@ -4,8 +4,31 @@ using System.Collections.ObjectModel;
 using System.IO;
 using System.Linq;
 using CommunityToolkit.Mvvm.ComponentModel;
+using CommunityToolkit.Mvvm.Input;
 
 namespace BackupNormalizer.Ui.ViewModels;
+
+/// <summary>One ready drive for the TC-style drive bar.</summary>
+public sealed record DriveView(string Root, string Label, long FreeBytes, long TotalBytes)
+{
+    public string Display => string.IsNullOrEmpty(Label) || Label == Root
+        ? $"{Root} {FormatBytes(FreeBytes)} free"
+        : $"{Root} ({Label}) {FormatBytes(FreeBytes)} free";
+
+    public string Tooltip =>
+        $"{Root}{Environment.NewLine}{Label}{Environment.NewLine}{FormatBytes(FreeBytes)} free of {FormatBytes(TotalBytes)}";
+
+    public static string FormatBytes(long bytes)
+    {
+        double value = bytes;
+        string unit = "B";
+        if (value >= 1024.0 * 1024 * 1024) { value /= 1024.0 * 1024 * 1024; unit = "GB"; }
+        else if (value >= 1024.0 * 1024) { value /= 1024.0 * 1024; unit = "MB"; }
+        else if (value >= 1024.0) { value /= 1024.0; unit = "KB"; }
+        else return $"{bytes} B";
+        return string.Create(System.Globalization.CultureInfo.InvariantCulture, $"{value:F1} {unit}");
+    }
+}
 
 public sealed partial class FileEntryItem : ObservableObject
 {
@@ -79,6 +102,73 @@ public sealed partial class FilePanelViewModel : ObservableObject
     /// Owned by MainViewModel; merged into listings so virtual dirs are navigable.
     /// </summary>
     public HashSet<string> VirtualDirs { get; set; } = new(StringComparer.OrdinalIgnoreCase);
+
+    public ObservableCollection<DriveView> Drives { get; } = new();
+
+    [ObservableProperty]
+    public partial DriveView? SelectedDrive { get; set; }
+
+    /// <summary>Set while syncing <see cref="SelectedDrive"/> programmatically so the
+    /// change doesn't navigate (ComboBox selection would otherwise jump to the root).</summary>
+    internal bool SuppressDriveNavigation { get; set; }
+
+    partial void OnSelectedDriveChanged(DriveView? value)
+    {
+        if (SuppressDriveNavigation || value == null) return;
+        GoToDrive(value);
+    }
+
+    [ObservableProperty]
+    public partial string DriveStatus { get; set; } = "";
+
+    /// <summary>Rebuilds the drive bar; only ready drives get a button.</summary>
+    public void RefreshDrives()
+    {
+        Drives.Clear();
+        try
+        {
+            foreach (var drive in DriveInfo.GetDrives().Where(d =>
+            {
+                try { return d.IsReady; } catch { return false; }
+            }).OrderBy(d => d.Name, StringComparer.Ordinal))
+            {
+                long free, total;
+                try { free = drive.AvailableFreeSpace; total = drive.TotalSize; }
+                catch { continue; }
+                if (total <= 0) continue; // pseudo-volumes and unready mounts
+                string label;
+                try { label = drive.VolumeLabel; } catch { label = ""; }
+                Drives.Add(new DriveView(drive.Name, label, free, total));
+            }
+        }
+        catch { }
+        UpdateDriveStatus();
+    }
+
+    private void UpdateDriveStatus()
+    {
+        DriveView? match = null;
+        foreach (var drive in Drives)
+        {
+            var cmp = OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
+            if (CurrentPath.StartsWith(drive.Root, cmp) && (match == null || drive.Root.Length > match.Root.Length))
+                match = drive;
+        }
+        DriveStatus = match == null
+            ? ""
+            : $"{DriveView.FormatBytes(match.FreeBytes)} free of {DriveView.FormatBytes(match.TotalBytes)}";
+        SuppressDriveNavigation = true;
+        try { SelectedDrive = match; }
+        finally { SuppressDriveNavigation = false; }
+    }
+
+    [RelayCommand]
+    public void GoToDrive(DriveView? drive)
+    {
+        if (drive == null || !Directory.Exists(drive.Root)) return;
+        CurrentPath = drive.Root;
+        Refresh();
+    }
 
     public string SortColumn { get; private set; } = "Name";
     public bool SortAscending { get; private set; } = true;
@@ -156,6 +246,7 @@ public sealed partial class FilePanelViewModel : ObservableObject
             }
             SortEntries();
             Status = $"{dirs} dirs, {files} files" + (staged > 0 ? $", {staged} staged" : "");
+            UpdateDriveStatus();
         }
         catch (Exception ex)
         {

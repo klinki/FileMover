@@ -111,9 +111,22 @@
         <DockPanel>
           <StackPanel DockPanel.Dock="Top" Orientation="Vertical" Spacing="2" Margin="4">
             <TextBlock Text="◀ LEFT (active source/dest — click to activate)" FontWeight="Bold" />
+            <ItemsControl ItemsSource="{Binding Left.Drives}">
+              <ItemsControl.ItemsPanel>
+                <ItemsPanelTemplate>
+                  <WrapPanel Orientation="Horizontal" />
+                </ItemsPanelTemplate>
+              </ItemsControl.ItemsPanel>
+              <ItemsControl.ItemTemplate>
+                <DataTemplate x:DataType="vm:DriveView">
+                  <Button Content="{Binding Display}" Tag="Left" CommandParameter="{Binding}" Click="OnDriveClick" Margin="0,0,2,2" Padding="6,2" ToolTip.Tip="{Binding Tooltip}" />
+                </DataTemplate>
+              </ItemsControl.ItemTemplate>
+            </ItemsControl>
             <TextBox Text="{Binding Left.CurrentPath}" IsReadOnly="True" />
             <StackPanel Orientation="Horizontal" Spacing="4">
               <TextBlock Text="{Binding Left.Status}" VerticalAlignment="Center" />
+              <TextBlock Text="{Binding Left.DriveStatus}" VerticalAlignment="Center" FontStyle="Italic" />
             </StackPanel>
           </StackPanel>
           <DataGrid x:Name="LeftList" Tag="Left"
@@ -160,9 +173,22 @@
         <DockPanel>
           <StackPanel DockPanel.Dock="Top" Orientation="Vertical" Spacing="2" Margin="4">
             <TextBlock Text="LEFT (click to activate)" />
+            <ItemsControl ItemsSource="{Binding Left.Drives}">
+              <ItemsControl.ItemsPanel>
+                <ItemsPanelTemplate>
+                  <WrapPanel Orientation="Horizontal" />
+                </ItemsPanelTemplate>
+              </ItemsControl.ItemsPanel>
+              <ItemsControl.ItemTemplate>
+                <DataTemplate x:DataType="vm:DriveView">
+                  <Button Content="{Binding Display}" Tag="Left" CommandParameter="{Binding}" Click="OnDriveClick" Margin="0,0,2,2" Padding="6,2" ToolTip.Tip="{Binding Tooltip}" />
+                </DataTemplate>
+              </ItemsControl.ItemTemplate>
+            </ItemsControl>
             <TextBox Text="{Binding Left.CurrentPath}" IsReadOnly="True" />
             <StackPanel Orientation="Horizontal" Spacing="4">
               <TextBlock Text="{Binding Left.Status}" VerticalAlignment="Center" />
+              <TextBlock Text="{Binding Left.DriveStatus}" VerticalAlignment="Center" FontStyle="Italic" />
             </StackPanel>
           </StackPanel>
           <DataGrid Tag="Left"
@@ -213,9 +239,22 @@
         <DockPanel>
           <StackPanel DockPanel.Dock="Top" Orientation="Vertical" Spacing="2" Margin="4">
             <TextBlock Text="▶ RIGHT (active source/dest — click to activate)" FontWeight="Bold" />
+            <ItemsControl ItemsSource="{Binding Right.Drives}">
+              <ItemsControl.ItemsPanel>
+                <ItemsPanelTemplate>
+                  <WrapPanel Orientation="Horizontal" />
+                </ItemsPanelTemplate>
+              </ItemsControl.ItemsPanel>
+              <ItemsControl.ItemTemplate>
+                <DataTemplate x:DataType="vm:DriveView">
+                  <Button Content="{Binding Display}" Tag="Right" CommandParameter="{Binding}" Click="OnDriveClick" Margin="0,0,2,2" Padding="6,2" ToolTip.Tip="{Binding Tooltip}" />
+                </DataTemplate>
+              </ItemsControl.ItemTemplate>
+            </ItemsControl>
             <TextBox Text="{Binding Right.CurrentPath}" IsReadOnly="True" />
             <StackPanel Orientation="Horizontal" Spacing="4">
               <TextBlock Text="{Binding Right.Status}" VerticalAlignment="Center" />
+              <TextBlock Text="{Binding Right.DriveStatus}" VerticalAlignment="Center" FontStyle="Italic" />
             </StackPanel>
           </StackPanel>
           <DataGrid x:Name="RightList" Tag="Right"
@@ -262,9 +301,22 @@
         <DockPanel>
           <StackPanel DockPanel.Dock="Top" Orientation="Vertical" Spacing="2" Margin="4">
             <TextBlock Text="RIGHT (click to activate)" />
+            <ItemsControl ItemsSource="{Binding Right.Drives}">
+              <ItemsControl.ItemsPanel>
+                <ItemsPanelTemplate>
+                  <WrapPanel Orientation="Horizontal" />
+                </ItemsPanelTemplate>
+              </ItemsControl.ItemsPanel>
+              <ItemsControl.ItemTemplate>
+                <DataTemplate x:DataType="vm:DriveView">
+                  <Button Content="{Binding Display}" Tag="Right" CommandParameter="{Binding}" Click="OnDriveClick" Margin="0,0,2,2" Padding="6,2" ToolTip.Tip="{Binding Tooltip}" />
+                </DataTemplate>
+              </ItemsControl.ItemTemplate>
+            </ItemsControl>
             <TextBox Text="{Binding Right.CurrentPath}" IsReadOnly="True" />
             <StackPanel Orientation="Horizontal" Spacing="4">
               <TextBlock Text="{Binding Right.Status}" VerticalAlignment="Center" />
+              <TextBlock Text="{Binding Right.DriveStatus}" VerticalAlignment="Center" FontStyle="Italic" />
             </StackPanel>
           </StackPanel>
           <DataGrid Tag="Right"
