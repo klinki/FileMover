@@ -1,17 +1,24 @@
 namespace BackupNormalizer;
 
+/// <summary>One enumerated filesystem entry. MFT mode fills metadata directly;
+/// recursive mode leaves it empty and the scanner stats each file.</summary>
+public sealed record FsEntry(string Path, bool IsDirectory, long Size, DateTime ModifiedUtc,
+    DateTime CreatedUtc, bool HasMetadata, bool IsReparse, string? Error);
+
 /// <summary>Scanner §7-8: cheap metadata first, no symlink follow, incremental reuse.</summary>
 public sealed class Scanner
 {
     private readonly Database _db;
     private readonly IContentHasher _hasher;
     private readonly string _algo;
+    private readonly string _mftMode;
 
-    public Scanner(Database db, string? algo = null)
+    public Scanner(Database db, string? algo = null, string? mftMode = null)
     {
         _db = db;
         _algo = HasherFactory.NormalizeAlgorithm(algo ?? "sha256");
         _hasher = HasherFactory.Create(_algo);
+        _mftMode = mftMode ?? "off";
     }
 
     public (int scanned, int errors) ScanRoot(string rootId)
@@ -19,11 +26,27 @@ public sealed class Scanner
         var root = _db.GetRoot(rootId) ?? throw new InvalidOperationException($"unknown root '{rootId}'");
         long scanId = _db.BeginScan(rootId);
         int scanned = 0, errors = 0;
+        NtfsMftEnumerator.NtfsVolume? mft = null;
         try
         {
             if (!Directory.Exists(root.Path))
                 throw new DirectoryNotFoundException($"root path not found: {root.Path}");
-            foreach (var scanEntry in EnumerateForScan(root.Path))
+            IEnumerable<FsEntry> entries;
+            if (NtfsMftEnumerator.TryCreate(root.Path, _mftMode, out var volume, out string? note))
+            {
+                if (note != null) Log.Info(note);
+                mft = volume;
+                string volumeRoot = Path.GetPathRoot(Path.GetFullPath(root.Path))!;
+                entries = volume!.EnumerateFiles(volumeRoot, root.Path)
+                    .Select(f => new FsEntry(f.FullPath, false, f.Size, f.ModifiedUtc, f.CreatedUtc,
+                        HasMetadata: true, IsReparse: f.IsReparse, Error: null));
+            }
+            else
+            {
+                if (note != null) Log.Info(note);
+                entries = EnumerateRecursive(root.Path);
+            }
+            foreach (var scanEntry in entries)
             {
                 if (scanEntry.Error != null)
                 {
@@ -36,21 +59,40 @@ public sealed class Scanner
                     string rel;
                     rel = Paths.GetRelative(root.Path, file);
                     rel = Paths.NormalizeRelative(rel);
-                    var fi = new FileInfo(file);
-                    // ReparsePoint already filtered, but double-check
-                    if (fi.Attributes.HasFlag(FileAttributes.ReparsePoint))
+                    bool isReparse;
+                    long sizeBefore;
+                    string mBefore;
+                    string cBefore;
+                    string name;
+                    if (scanEntry.HasMetadata)
                     {
-                        _db.UpsertFileEntry(new FileEntryRow(0, rootId, rel, fi.Name, 0,
-                            fi.LastWriteTimeUtc.ToString("o"), SafeTime(fi.CreationTimeUtc), null, scanId, FileStatus.UnsupportedEntry, "symlink"));
+                        isReparse = scanEntry.IsReparse;
+                        sizeBefore = scanEntry.Size;
+                        mBefore = scanEntry.ModifiedUtc.ToString("o");
+                        cBefore = scanEntry.CreatedUtc.ToString("o");
+                        name = Path.GetFileName(file);
+                    }
+                    else
+                    {
+                        var fi = new FileInfo(file);
+                        // ReparsePoint already filtered, but double-check
+                        isReparse = fi.Attributes.HasFlag(FileAttributes.ReparsePoint);
+                        sizeBefore = fi.Length;
+                        mBefore = fi.LastWriteTimeUtc.ToString("o");
+                        cBefore = SafeTime(fi.CreationTimeUtc);
+                        name = fi.Name;
+                    }
+                    if (isReparse)
+                    {
+                        _db.UpsertFileEntry(new FileEntryRow(0, rootId, rel, name, 0,
+                            mBefore, cBefore, null, scanId, FileStatus.UnsupportedEntry, "symlink"));
                         errors++;
                         continue;
                     }
-                    long sizeBefore = fi.Length;
-                    string mBefore = fi.LastWriteTimeUtc.ToString("o");
                     // incremental reuse check (§8): same root+path+size+mtime => reuse hash
                     var prev = _db.GetFileEntry(rootId, rel);
-                    var entry = new FileEntryRow(0, rootId, rel, fi.Name, sizeBefore, mBefore,
-                        SafeTime(fi.CreationTimeUtc), null, scanId, FileStatus.Ok, null);
+                    var entry = new FileEntryRow(0, rootId, rel, name, sizeBefore, mBefore,
+                        cBefore, null, scanId, FileStatus.Ok, null);
                     long id = _db.UpsertFileEntry(entry);
                     // If metadata changed vs previous hash, mark stale (§8)
                     if (prev != null)
@@ -83,6 +125,10 @@ public sealed class Scanner
             try { _db.FinishScan(scanId, ScanStatus.Failed); } catch { }
             throw;
         }
+        finally
+        {
+            mft?.Dispose();
+        }
     }
 
     private void TryRecordError(string rootId, string full, string rootPath, long scanId, string status, string msg)
@@ -96,9 +142,7 @@ public sealed class Scanner
         catch { }
     }
 
-    private sealed record ScanEntry(string? Path, string? Error);
-
-    private static IEnumerable<ScanEntry> EnumerateForScan(string root)
+    private static IEnumerable<FsEntry> EnumerateRecursive(string root)
     {
         var stack = new Stack<string>();
         stack.Push(root);
@@ -109,21 +153,27 @@ public sealed class Scanner
             string? issue = null;
             try { entries = Directory.GetFileSystemEntries(dir); }
             catch (Exception ex) when (ex is UnauthorizedAccessException or IOException) { issue = ex.Message; }
-            if (issue != null) { yield return new ScanEntry(dir, issue); continue; }
+            if (issue != null) { yield return new FsEntry(dir, false, 0, default, default, false, false, issue); continue; }
             foreach (var path in entries!)
             {
                 FileAttributes? attr = null;
                 issue = null;
                 try { attr = File.GetAttributes(path); }
                 catch (Exception ex) when (ex is UnauthorizedAccessException or IOException) { issue = ex.Message; }
-                if (issue != null) { yield return new ScanEntry(path, issue); continue; }
-                if (attr!.Value.HasFlag(FileAttributes.ReparsePoint))
+                if (issue != null)
                 {
-                    if (!attr.Value.HasFlag(FileAttributes.Directory)) yield return new ScanEntry(path, null);
+                    yield return new FsEntry(path, false, 0, default, default, false, false, issue);
                     continue;
                 }
-                if (attr.Value.HasFlag(FileAttributes.Directory)) stack.Push(path);
-                else yield return new ScanEntry(path, null);
+                bool isDir = attr!.Value.HasFlag(FileAttributes.Directory);
+                bool isReparse = attr.Value.HasFlag(FileAttributes.ReparsePoint);
+                if (isReparse)
+                {
+                    if (!isDir) yield return new FsEntry(path, false, 0, default, default, false, true, null);
+                    continue;
+                }
+                if (isDir) stack.Push(path);
+                else yield return new FsEntry(path, false, 0, default, default, false, false, null);
             }
         }
     }

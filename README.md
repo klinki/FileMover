@@ -40,6 +40,24 @@ bn plan export photos-001 --db ./target.db --output ./photos-001.json
 
 The source root defines the desired paths for that run. To reverse the direction, swap the source and target arguments and scan both roots again first. Diff reports source-only, target-only, changed, identical, and unverified files. It can compare historical snapshots of the same directory. Automatic planning requires two disjoint directories and a complete scan of each root.
 
+### Fast NTFS scanning (Windows only, opt-in)
+
+On large NTFS drives, `scan` can read the Master File Table directly instead
+of walking directories (sizes and timestamps included, no per-file stat
+calls). It needs an NTFS volume and administrator rights, and it is off by
+default:
+
+```bash
+bn scan photos --db ./source.db --mft auto     # use when available, else fall back
+bn scan photos --db ./source.db --mft require  # fail loudly when unavailable
+bn --elevate scan photos --db ./source.db --mft auto  # restart elevated via UAC first
+```
+
+`--mft` can also be set persistently with `"mftMode": "auto"` in
+`backup-normalizer.json`. Hashing still reads every file, so this only
+accelerates the metadata pass. Validate once per drive by scanning both ways
+and diffing — the result must be empty.
+
 `plan` only writes operations to the target database. It keeps identical target files, moves matching target files to desired paths, and copies bytes from the source when needed. It moves an extra target file to recoverable trash only when the target has another verified copy of its content. A file at a desired path with different content becomes a conflict; the planner does not overwrite it. Empty directories are outside the inventory.
 
 ## Execute

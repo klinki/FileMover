@@ -42,7 +42,7 @@ public static class Cli
               init [--db PATH] [--config PATH]
               root add <id> <path> [--name N] [--writable true|false] [--db PATH]
               root list [--db PATH]
-              scan <rootId|--all> [--db PATH]
+              scan <rootId|--all> [--db PATH] [--mft off|auto|require]
               hash --needed [--db PATH] [--parallelism N] | hash <rootId> --all [--db PATH]
               plan --source-db S.db --source-root R --target-db T.db --target-root R [--plan ID]
               plan show <plan-id> [--db PATH] | plan export <plan-id> [--format json] [--output F] [--db PATH]
@@ -55,6 +55,8 @@ public static class Cli
               db-test [--db PATH] | scan-test <path> | --version
             Each database can inventory one drive with multiple named roots. Select the source and target
             for each diff or plan. Automatic plans require fully scanned, disjoint roots.
+            --mft auto uses fast NTFS direct enumeration on Windows (needs NTFS + admin, else falls back);
+            --mft require fails loudly instead. --elevate restarts the app elevated via UAC when needed.
             """);
         return 0;
     }
@@ -110,8 +112,9 @@ public static class Cli
         if (a.Length == 0) return Fail("scan <rootId|--all>");
         string db = Opt(a, "--db", AppConfig.Load(Opt(a, "--config", AppConfig.DefaultPath)).Database);
         string algo = Opt(a, "--hash-algo", AppConfig.Load(Opt(a, "--config", AppConfig.DefaultPath)).HashAlgorithm);
+        string mft = Opt(a, "--mft", AppConfig.Load(Opt(a, "--config", AppConfig.DefaultPath)).MftMode);
         using var d = new Database(db);
-        var sc = new Scanner(d, algo);
+        var sc = new Scanner(d, algo, mft);
         int totalErrors = 0;
         if (a[0] == "--all")
         {

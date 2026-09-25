@@ -9,6 +9,7 @@ public sealed class AppConfig
     public int HashParallelism { get; set; } = 2;
     public int CopyParallelism { get; set; } = 1;
     public string TrashDirectoryName { get; set; } = ".backup-normalizer-trash";
+    public string MftMode { get; set; } = "off";
 
     public static string DefaultPath => "./backup-normalizer.json";
 
