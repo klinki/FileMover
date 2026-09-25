@@ -83,6 +83,10 @@ public sealed partial class MainViewModel : ViewModelBase
     public FilePanelViewModel Active => IsLeftActive ? Left : Right;
     public FilePanelViewModel Inactive => IsLeftActive ? Right : Left;
 
+    /// <summary>TC shows drive buttons on Windows, a drive combobox on Unix.</summary>
+    public bool ShowDriveButtons => OperatingSystem.IsWindows();
+    public bool ShowDriveCombo => !ShowDriveButtons;
+
     [RelayCommand]
     public void ApplyBase()
     {

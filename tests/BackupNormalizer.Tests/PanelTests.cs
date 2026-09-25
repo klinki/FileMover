@@ -558,3 +558,43 @@ public sealed class DriveBarTests : IDisposable
         Assert.Equal("120.4 GB", DriveView.FormatBytes((long)(120.4 * 1024 * 1024 * 1024)));
     }
 }
+
+public sealed class DriveComboTests : IDisposable
+{
+    private readonly string _dir = Path.Combine(Path.GetTempPath(), "bn-drivecombo-" + Guid.NewGuid().ToString("N"));
+    public DriveComboTests()
+    {
+        Directory.CreateDirectory(Path.Combine(_dir, "sub"));
+        File.WriteAllText(Path.Combine(_dir, "sub", "f.txt"), "x");
+    }
+    public void Dispose() { try { Directory.Delete(_dir, true); } catch { } }
+
+    [Fact]
+    public void Selecting_Drive_Navigates_To_Its_Root()
+    {
+        var sub = Path.Combine(_dir, "sub");
+        Directory.CreateDirectory(sub);
+        var panel = new FilePanelViewModel { CurrentPath = _dir };
+        panel.RefreshDrives();
+        panel.SelectedDrive = new DriveView(sub, "", 1, 2);
+        Assert.Equal(sub, panel.CurrentPath);
+    }
+
+    [Fact]
+    public void Programmatic_Sync_Never_Jumps_To_Root()
+    {
+        var panel = new FilePanelViewModel { CurrentPath = Path.Combine(_dir, "sub") };
+        panel.RefreshDrives();
+        panel.Refresh();
+        Assert.Equal(Path.Combine(_dir, "sub"), panel.CurrentPath);
+        Assert.NotNull(panel.SelectedDrive);
+    }
+
+    [Fact]
+    public void Platform_Selects_Buttons_Or_Combo()
+    {
+        var vm = new MainViewModel();
+        Assert.Equal(OperatingSystem.IsWindows(), vm.ShowDriveButtons);
+        Assert.Equal(!OperatingSystem.IsWindows(), vm.ShowDriveCombo);
+    }
+}

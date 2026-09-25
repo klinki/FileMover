@@ -111,7 +111,16 @@
         <DockPanel>
           <StackPanel DockPanel.Dock="Top" Orientation="Vertical" Spacing="2" Margin="4">
             <TextBlock Text="◀ LEFT (active source/dest — click to activate)" FontWeight="Bold" />
-            <ItemsControl ItemsSource="{Binding Left.Drives}">
+            <ComboBox ItemsSource="{Binding Left.Drives}" SelectedItem="{Binding Left.SelectedDrive}"
+                      IsVisible="{Binding ShowDriveCombo}" MinWidth="200" Margin="0,0,0,2"
+                      ToolTip.Tip="Select drive">
+              <ComboBox.ItemTemplate>
+                <DataTemplate x:DataType="vm:DriveView">
+                  <TextBlock Text="{Binding Display}" ToolTip.Tip="{Binding Tooltip}" />
+                </DataTemplate>
+              </ComboBox.ItemTemplate>
+            </ComboBox>
+            <ItemsControl IsVisible="{Binding ShowDriveButtons}" ItemsSource="{Binding Left.Drives}">
               <ItemsControl.ItemsPanel>
                 <ItemsPanelTemplate>
                   <WrapPanel Orientation="Horizontal" />
@@ -126,7 +135,6 @@
             <TextBox Text="{Binding Left.CurrentPath}" IsReadOnly="True" />
             <StackPanel Orientation="Horizontal" Spacing="4">
               <TextBlock Text="{Binding Left.Status}" VerticalAlignment="Center" />
-              <TextBlock Text="{Binding Left.DriveStatus}" VerticalAlignment="Center" FontStyle="Italic" />
             </StackPanel>
           </StackPanel>
           <DataGrid x:Name="LeftList" Tag="Left"
@@ -173,7 +181,16 @@
         <DockPanel>
           <StackPanel DockPanel.Dock="Top" Orientation="Vertical" Spacing="2" Margin="4">
             <TextBlock Text="LEFT (click to activate)" />
-            <ItemsControl ItemsSource="{Binding Left.Drives}">
+            <ComboBox ItemsSource="{Binding Left.Drives}" SelectedItem="{Binding Left.SelectedDrive}"
+                      IsVisible="{Binding ShowDriveCombo}" MinWidth="200" Margin="0,0,0,2"
+                      ToolTip.Tip="Select drive">
+              <ComboBox.ItemTemplate>
+                <DataTemplate x:DataType="vm:DriveView">
+                  <TextBlock Text="{Binding Display}" ToolTip.Tip="{Binding Tooltip}" />
+                </DataTemplate>
+              </ComboBox.ItemTemplate>
+            </ComboBox>
+            <ItemsControl IsVisible="{Binding ShowDriveButtons}" ItemsSource="{Binding Left.Drives}">
               <ItemsControl.ItemsPanel>
                 <ItemsPanelTemplate>
                   <WrapPanel Orientation="Horizontal" />
@@ -188,7 +205,6 @@
             <TextBox Text="{Binding Left.CurrentPath}" IsReadOnly="True" />
             <StackPanel Orientation="Horizontal" Spacing="4">
               <TextBlock Text="{Binding Left.Status}" VerticalAlignment="Center" />
-              <TextBlock Text="{Binding Left.DriveStatus}" VerticalAlignment="Center" FontStyle="Italic" />
             </StackPanel>
           </StackPanel>
           <DataGrid Tag="Left"
@@ -239,7 +255,16 @@
         <DockPanel>
           <StackPanel DockPanel.Dock="Top" Orientation="Vertical" Spacing="2" Margin="4">
             <TextBlock Text="▶ RIGHT (active source/dest — click to activate)" FontWeight="Bold" />
-            <ItemsControl ItemsSource="{Binding Right.Drives}">
+            <ComboBox ItemsSource="{Binding Right.Drives}" SelectedItem="{Binding Right.SelectedDrive}"
+                      IsVisible="{Binding ShowDriveCombo}" MinWidth="200" Margin="0,0,0,2"
+                      ToolTip.Tip="Select drive">
+              <ComboBox.ItemTemplate>
+                <DataTemplate x:DataType="vm:DriveView">
+                  <TextBlock Text="{Binding Display}" ToolTip.Tip="{Binding Tooltip}" />
+                </DataTemplate>
+              </ComboBox.ItemTemplate>
+            </ComboBox>
+            <ItemsControl IsVisible="{Binding ShowDriveButtons}" ItemsSource="{Binding Right.Drives}">
               <ItemsControl.ItemsPanel>
                 <ItemsPanelTemplate>
                   <WrapPanel Orientation="Horizontal" />
@@ -301,7 +326,16 @@
         <DockPanel>
           <StackPanel DockPanel.Dock="Top" Orientation="Vertical" Spacing="2" Margin="4">
             <TextBlock Text="RIGHT (click to activate)" />
-            <ItemsControl ItemsSource="{Binding Right.Drives}">
+            <ComboBox ItemsSource="{Binding Right.Drives}" SelectedItem="{Binding Right.SelectedDrive}"
+                      IsVisible="{Binding ShowDriveCombo}" MinWidth="200" Margin="0,0,0,2"
+                      ToolTip.Tip="Select drive">
+              <ComboBox.ItemTemplate>
+                <DataTemplate x:DataType="vm:DriveView">
+                  <TextBlock Text="{Binding Display}" ToolTip.Tip="{Binding Tooltip}" />
+                </DataTemplate>
+              </ComboBox.ItemTemplate>
+            </ComboBox>
+            <ItemsControl IsVisible="{Binding ShowDriveButtons}" ItemsSource="{Binding Right.Drives}">
               <ItemsControl.ItemsPanel>
                 <ItemsPanelTemplate>
                   <WrapPanel Orientation="Horizontal" />
