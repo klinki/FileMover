@@ -2,15 +2,6 @@ using System.Text.Json;
 
 namespace BackupNormalizer;
 
-public sealed class RootConfig
-{
-    public string Id { get; set; } = "";
-    public string Name { get; set; } = "";
-    public string Path { get; set; } = "";
-    public string Role { get; set; } = "Unknown";
-    public bool Writable { get; set; } = true;
-}
-
 public sealed class AppConfig
 {
     public string Database { get; set; } = "./backup-normalizer.db";
@@ -18,7 +9,6 @@ public sealed class AppConfig
     public int HashParallelism { get; set; } = 2;
     public int CopyParallelism { get; set; } = 1;
     public string TrashDirectoryName { get; set; } = ".backup-normalizer-trash";
-    public List<RootConfig> Roots { get; set; } = new();
 
     public static string DefaultPath => "./backup-normalizer.json";
 

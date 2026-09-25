@@ -248,15 +248,8 @@ public static class Cli
 
     private static (Dictionary<string, int> Counts, long EstBytes) PlanSummary(Database db, string planId)
     {
-        var counts = db.Context.PlanOperations
-            .Where(operation => operation.PlanId == planId)
-            .GroupBy(operation => operation.Type)
-            .Select(group => new { Type = group.Key, Count = group.Count() })
-            .ToDictionary(row => row.Type, row => row.Count);
-        long est = db.Context.Plans
-            .Where(plan => plan.Id == planId)
-            .Select(plan => (long?)plan.EstimatedBytesCopied)
-            .SingleOrDefault() ?? 0L;
+        var counts = db.GetOperationCounts(planId);
+        long est = db.GetPlan(planId)?.EstimatedBytesCopied ?? 0L;
         return (counts, est);
     }
 
@@ -267,35 +260,22 @@ public static class Cli
         string? sourcePathOverride = Has(a, "--source-path") ? Opt(a, "--source-path", "") : null;
         string? targetPathOverride = Has(a, "--target-path") ? Opt(a, "--target-path", "") : null;
         using var d = new Database(db);
-        var plan = d.Context.Plans.SingleOrDefault(item => item.Id == a[0]);
+        var plan = d.GetPlan(a[0]);
         if (plan == null) return Fail($"unknown plan '{a[0]}'");
         string sourcePath = Path.GetFullPath(sourcePathOverride ?? plan.SourceRootPath);
         string targetPath = Path.GetFullPath(targetPathOverride ?? plan.TargetRootPath);
         int ok = 0, bad = 0;
         var hasher = HasherFactory.Create(null);
-        var operations = d.Context.PlanOperations
-            .Where(operation => operation.PlanId == a[0])
-            .Select(operation => new
-            {
-                operation.Type,
-                operation.SourceKind,
-                operation.SourceRootId,
-                operation.SourcePath,
-                operation.DestinationRootId,
-                operation.DestinationPath,
-                operation.ExpectedSize,
-                operation.ExpectedHash,
-            })
-            .ToList();
-        if (operations.Any(operation => operation.SourceKind == "Source") && Paths.RootsOverlap(sourcePath, targetPath))
+        var operations = d.ListPlanOperations(a[0]);
+        if (operations.Any(operation => operation.SourceKind == SourceScope.Source) && Paths.RootsOverlap(sourcePath, targetPath))
             return Fail("source and target paths overlap; verification requires disjoint roots");
         foreach (var operation in operations)
         {
             string type = operation.Type;
-            if (type is "KEEP" or "VERIFY" or "MOVE" or "COPY")
+            if (type is OpType.Keep or OpType.Verify or OpType.Move or OpType.Copy)
             {
-                string? dp = operation.DestinationPath;
-                if (operation.DestinationRootId != plan.TargetRootId || dp == null) continue;
+                string? dp = operation.DestPath;
+                if (operation.DestRoot != plan.TargetRootId || dp == null) continue;
                 string abs;
                 try { abs = Paths.CombineRoot(targetPath, dp); }
                 catch (InvalidOperationException) { Console.WriteLine($"INVALID-PATH {dp}"); bad++; continue; }
@@ -370,15 +350,14 @@ public static class Cli
             using var d = new Database(tmp);
             d.UpsertRoot(new StorageRootRow("t", "t", Path.GetTempPath(), true, "test", "unknown", Database.UtcNow()));
             long sid = d.BeginScan("t");
-            d.UpsertFileEntry(new FileEntryRow(0, "t", "a.txt", "a.txt", 3, Database.UtcNow(), null, null, sid, "Ok", null));
+            d.UpsertFileEntry(new FileEntryRow(0, "t", "a.txt", "a.txt", 3, Database.UtcNow(), null, null, sid, FileStatus.Ok, null));
             var got = d.ListFiles("t");
             if (got.Count != 1) throw new Exception("readback failed");
-            using var tx = d.Context.Database.BeginTransaction();
-            d.UpsertFileEntry(new FileEntryRow(0, "t", "b.txt", "b.txt", 1, Database.UtcNow(), null, null, sid, "Ok", null));
+            using var tx = d.BeginTransaction();
+            d.UpsertFileEntry(new FileEntryRow(0, "t", "b.txt", "b.txt", 1, Database.UtcNow(), null, null, sid, FileStatus.Ok, null));
             tx.Rollback();
-            d.Context.ChangeTracker.Clear();
             if (d.ListFiles("t").Count != 1) throw new Exception("rollback failed");
-            d.FinishScan(sid, "Completed");
+            d.FinishScan(sid, ScanStatus.Completed);
             Console.WriteLine("db-test: PASS (create/insert/read/commit/rollback ok)");
             return 0;
         }

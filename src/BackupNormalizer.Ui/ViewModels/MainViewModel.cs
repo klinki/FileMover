@@ -158,8 +158,8 @@ public sealed partial class MainViewModel : ViewModelBase
         int added = 0;
         foreach (var op in ops)
         {
-            string src = op.Type == "MKDIR" ? "" : op.SourceRel;
-            string dst = op.Type == "TRASH" ? "" : (op.DestRel ?? op.SourceRel);
+            string src = op.Type == OpType.Mkdir ? "" : op.SourceRel;
+            string dst = op.Type == OpType.Trash ? "" : (op.DestRel ?? op.SourceRel);
             if (_stagedCore.Any(s => s.Type == op.Type && s.SourceRel == op.SourceRel && (s.DestRel ?? "") == (op.DestRel ?? "")))
                 continue; // dedupe
             _stagedCore.Add(op);
@@ -172,11 +172,11 @@ public sealed partial class MainViewModel : ViewModelBase
 
     private void UpdateSummary()
     {
-        int mkdir = _stagedCore.Count(o => o.Type == "MKDIR");
-        int move = _stagedCore.Count(o => o.Type == "MOVE");
-        int copy = _stagedCore.Count(o => o.Type == "COPY");
-        int trash = _stagedCore.Count(o => o.Type == "TRASH");
-        long bytes = _stagedCore.Where(o => o.Type == "COPY").Sum(o => o.ExpectedSize);
+        int mkdir = _stagedCore.Count(o => o.Type == OpType.Mkdir);
+        int move = _stagedCore.Count(o => o.Type == OpType.Move);
+        int copy = _stagedCore.Count(o => o.Type == OpType.Copy);
+        int trash = _stagedCore.Count(o => o.Type == OpType.Trash);
+        long bytes = _stagedCore.Where(o => o.Type == OpType.Copy).Sum(o => o.ExpectedSize);
         PlanSummary = _stagedCore.Count == 0
             ? "No staged operations."
             : $"Staged: MKDIR {mkdir}  MOVE {move}  COPY {copy}  TRASH {trash}  | bytes to copy: {bytes:N0}";

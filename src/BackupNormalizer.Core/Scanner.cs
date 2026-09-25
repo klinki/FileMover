@@ -41,7 +41,7 @@ public sealed class Scanner
                     if (fi.Attributes.HasFlag(FileAttributes.ReparsePoint))
                     {
                         _db.UpsertFileEntry(new FileEntryRow(0, rootId, rel, fi.Name, 0,
-                            fi.LastWriteTimeUtc.ToString("o"), SafeTime(fi.CreationTimeUtc), null, scanId, "UnsupportedEntry", "symlink"));
+                            fi.LastWriteTimeUtc.ToString("o"), SafeTime(fi.CreationTimeUtc), null, scanId, FileStatus.UnsupportedEntry, "symlink"));
                         errors++;
                         continue;
                     }
@@ -50,7 +50,7 @@ public sealed class Scanner
                     // incremental reuse check (§8): same root+path+size+mtime => reuse hash
                     var prev = _db.GetFileEntry(rootId, rel);
                     var entry = new FileEntryRow(0, rootId, rel, fi.Name, sizeBefore, mBefore,
-                        SafeTime(fi.CreationTimeUtc), null, scanId, "Ok", null);
+                        SafeTime(fi.CreationTimeUtc), null, scanId, FileStatus.Ok, null);
                     long id = _db.UpsertFileEntry(entry);
                     // If metadata changed vs previous hash, mark stale (§8)
                     if (prev != null)
@@ -64,23 +64,23 @@ public sealed class Scanner
                 catch (Exception ex) when (ex is UnauthorizedAccessException or IOException or ArgumentException)
                 {
                     errors++;
-                    TryRecordError(rootId, file, root.Path, scanId, "ScanError", ex.Message);
+                    TryRecordError(rootId, file, root.Path, scanId, FileStatus.ScanError, ex.Message);
                 }
             }
             if (errors == 0)
             {
                 _db.MarkUnseenFilesMissing(rootId, scanId);
-                _db.FinishScan(scanId, "Completed");
+                _db.FinishScan(scanId, ScanStatus.Completed);
             }
             else
             {
-                _db.FinishScan(scanId, "Incomplete");
+                _db.FinishScan(scanId, ScanStatus.Incomplete);
             }
             return (scanned, errors);
         }
         catch
         {
-            try { _db.FinishScan(scanId, "Failed"); } catch { }
+            try { _db.FinishScan(scanId, ScanStatus.Failed); } catch { }
             throw;
         }
     }
@@ -175,7 +175,7 @@ public sealed class Scanner
         var lockObj = new object();
         Parallel.ForEach(files, opts, f =>
         {
-            if (f.Status != "Ok")
+            if (f.Status != FileStatus.Ok)
             {
                 Interlocked.Increment(ref skipped);
                 return;
@@ -185,7 +185,7 @@ public sealed class Scanner
                 if (!all)
                 {
                     var existing = _db.GetHash(f.Id, _algo);
-                    if (existing != null && existing.State == "Ok" && existing.SizeAtHash == f.Size && existing.ModifiedUtcAtHash == f.ModifiedUtc)
+                    if (existing != null && existing.State == HashState.Ok && existing.SizeAtHash == f.Size && existing.ModifiedUtcAtHash == f.ModifiedUtc)
                     {
                         Interlocked.Increment(ref skipped);
                         return;
@@ -215,12 +215,12 @@ public sealed class Scanner
                     if (lenBefore != lenAfter || mBefore != mAfter)
                     {
                         // §7.4 unstable
-                        _db.UpsertHash(new FileHashRow(f.Id, _algo, digest, lenBefore, mBefore, Database.UtcNow(), "Unstable"));
+                        _db.UpsertHash(new FileHashRow(f.Id, _algo, digest, lenBefore, mBefore, Database.UtcNow(), HashState.Unstable));
                         Interlocked.Increment(ref unstable);
                     }
                     else
                     {
-                        _db.UpsertHash(new FileHashRow(f.Id, _algo, digest, lenBefore, mBefore, Database.UtcNow(), "Ok"));
+                        _db.UpsertHash(new FileHashRow(f.Id, _algo, digest, lenBefore, mBefore, Database.UtcNow(), HashState.Ok));
                         Interlocked.Increment(ref hashed);
                     }
                 }

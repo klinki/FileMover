@@ -21,16 +21,13 @@ public static class Matcher
     {
         var out_ = new List<PhysicalFile>();
         var roots = db.ListRoots().ToDictionary(r => r.Id);
-        foreach (var f in db.ListFiles(rootFilter))
+        foreach (var f in db.ListFilesWithHashes(rootFilter, algo))
         {
-            if (f.Status != "Ok") continue;
+            if (f.Status != FileStatus.Ok) continue;
             if (!roots.TryGetValue(f.StorageRootId, out var r)) continue;
             string basePath = r.Path;
             if (pathOverride != null && pathOverride.TryGetValue(f.StorageRootId, out var ov)) basePath = ov;
-            var h = db.GetHash(f.Id, algo);
-            string? digest = h?.State == "Ok" && h.SizeAtHash == f.Size && h.ModifiedUtcAtHash == f.ModifiedUtc
-                ? h.Digest : null;
-            out_.Add(new PhysicalFile(f.StorageRootId, f.RelativePath, f.Size, digest, f.ModifiedUtc, Paths.CombineRoot(basePath, f.RelativePath)));
+            out_.Add(new PhysicalFile(f.StorageRootId, f.RelativePath, f.Size, f.Digest, f.ModifiedUtc, Paths.CombineRoot(basePath, f.RelativePath)));
         }
         return out_;
     }

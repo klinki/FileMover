@@ -13,7 +13,12 @@ public sealed class Database : IDisposable
     private readonly bool _readOnly;
 
     public string DbPath { get; }
-    public BackupNormalizerDbContext Context { get; }
+
+    // Lifetime policy: one DbContext per Database facade. All reads are
+    // AsNoTracking projections and all writes are ExecuteUpdate/AddAndSave
+    // (detached immediately), so the change tracker stays empty outside
+    // explicit transactions. Never hold entities across calls.
+    internal BackupNormalizerDbContext Context { get; }
 
     public Database(string dbPath) : this(dbPath, readOnly: false) { }
 
@@ -50,7 +55,6 @@ public sealed class Database : IDisposable
             // Keep the connection open so connection-scoped settings such as synchronous=NORMAL
             // remain in effect for the lifetime of this database facade.
             Context.Database.OpenConnection();
-            RejectPreReleaseSchema();
             if (!readOnly)
             {
                 Context.Database.ExecuteSqlRaw("PRAGMA journal_mode=WAL;");
@@ -66,33 +70,6 @@ public sealed class Database : IDisposable
     }
 
     public void Dispose() => Context.Dispose();
-
-    private void RejectPreReleaseSchema()
-    {
-        var connection = Context.Database.GetDbConnection();
-        bool HasTable(string name)
-        {
-            using var command = connection.CreateCommand();
-            command.CommandText = "SELECT 1 FROM sqlite_master WHERE type='table' AND name=$name LIMIT 1";
-            var parameter = command.CreateParameter(); parameter.ParameterName = "$name"; parameter.Value = name;
-            command.Parameters.Add(parameter);
-            return command.ExecuteScalar() != null;
-        }
-        HashSet<string> Columns(string table)
-        {
-            using var command = connection.CreateCommand();
-            command.CommandText = $"PRAGMA table_info('{table}')";
-            using var reader = command.ExecuteReader();
-            var columns = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            while (reader.Read()) columns.Add(reader.GetString(1));
-            return columns;
-        }
-
-        bool oldRootSchema = HasTable("StorageRoot") && Columns("StorageRoot").Contains("Role");
-        bool oldPlanSchema = HasTable("Plan") && Columns("Plan").Contains("CanonicalRootId");
-        if (oldRootSchema || oldPlanSchema || HasTable("CanonicalEntry"))
-            throw new InvalidOperationException("This database uses the previous pre-release schema. Move or delete it manually, then run 'init' to create a new database. The database was not changed.");
-    }
 
     public static string UtcNow() => DateTime.UtcNow.ToString("o");
 
@@ -116,14 +93,14 @@ public sealed class Database : IDisposable
                 Context.FileHashes
                     .Where(hash => Context.FileEntries.Any(entry =>
                         entry.Id == hash.FileEntryId && entry.StorageRootId == r.Id))
-                    .ExecuteUpdate(setters => setters.SetProperty(hash => hash.State, "Stale"));
+                    .ExecuteUpdate(setters => setters.SetProperty(hash => hash.State, HashState.Stale));
                 var now = UtcNow();
                 AddAndSave(Context.Scans, new ScanEntity
                 {
                     StorageRootId = r.Id,
                     StartedUtc = now,
                     CompletedUtc = now,
-                    Status = "Invalidated",
+                    Status = ScanStatus.Invalidated,
                 });
             }
             return;
@@ -156,7 +133,7 @@ public sealed class Database : IDisposable
     public long BeginScan(string rootId)
     {
         EnsureWritable();
-        var scan = new ScanEntity { StorageRootId = rootId, StartedUtc = UtcNow(), Status = "Started" };
+        var scan = new ScanEntity { StorageRootId = rootId, StartedUtc = UtcNow(), Status = ScanStatus.Started };
         AddAndSave(Context.Scans, scan);
         return scan.Id;
     }
@@ -181,9 +158,9 @@ public sealed class Database : IDisposable
     {
         EnsureWritable();
         return Context.FileEntries
-            .Where(x => x.StorageRootId == rootId && x.LastSeenScanId != scanId && x.Status != "Missing")
+            .Where(x => x.StorageRootId == rootId && x.LastSeenScanId != scanId && x.Status != FileStatus.Missing)
             .ExecuteUpdate(setters => setters
-                .SetProperty(x => x.Status, "Missing")
+                .SetProperty(x => x.Status, FileStatus.Missing)
                 .SetProperty(x => x.Error, (string?)null));
     }
 
@@ -244,6 +221,33 @@ public sealed class Database : IDisposable
             .ToList();
     }
 
+    public sealed record FileWithHashRow(long Id, string StorageRootId, string RelativePath, string Name,
+        long Size, string ModifiedUtc, string? CreatedUtc, string? FileIdentity, long LastSeenScanId,
+        string Status, string? Error, string? Digest);
+
+    /// <summary>
+    /// File entries with their usable full-file digest in a single query.
+    /// A digest counts only when it is fresh (Ok state, matching size+mtime).
+    /// </summary>
+    public List<FileWithHashRow> ListFilesWithHashes(string? rootId, string algorithm)
+    {
+        var entries = Context.FileEntries.AsNoTracking();
+        if (rootId != null) entries = entries.Where(x => x.StorageRootId == rootId);
+        return entries
+            .OrderBy(x => x.StorageRootId)
+            .ThenBy(x => x.RelativePath)
+            .GroupJoin(Context.FileHashes.AsNoTracking().Where(h => h.Algorithm == algorithm),
+                entry => entry.Id, hash => hash.FileEntryId,
+                (entry, hashes) => new { entry, digest = hashes
+                    .Where(h => h.State == HashState.Ok && h.SizeAtHash == entry.Size && h.ModifiedUtcAtHash == entry.ModifiedUtc)
+                    .Select(h => h.Digest)
+                    .FirstOrDefault() })
+            .Select(x => new FileWithHashRow(x.entry.Id, x.entry.StorageRootId, x.entry.RelativePath,
+                x.entry.Name, x.entry.Size, x.entry.ModifiedUtc, x.entry.CreatedUtc, x.entry.FileIdentity,
+                x.entry.LastSeenScanId, x.entry.Status, x.entry.Error, x.digest))
+            .ToList();
+    }
+
     public FileHashRow? GetHash(long fileEntryId, string algo) => Context.FileHashes
         .AsNoTracking()
         .Where(x => x.FileEntryId == fileEntryId && x.Algorithm == algo)
@@ -284,12 +288,12 @@ public sealed class Database : IDisposable
         EnsureWritable();
         Context.FileHashes
             .Where(x => x.FileEntryId == fileEntryId && x.Algorithm == algo)
-            .ExecuteUpdate(setters => setters.SetProperty(x => x.State, "Stale"));
+            .ExecuteUpdate(setters => setters.SetProperty(x => x.State, HashState.Stale));
     }
 
     // ---- Plans ----
     public void InsertPlan(string planId, string sourceDatabasePath, string sourceRootId, string sourceRootPath,
-        string targetRootId, string targetRootPath, long estBytes, string status = "Planned")
+        string targetRootId, string targetRootPath, long estBytes, string status = PlanStatus.Planned)
     {
         EnsureWritable();
         AddAndSave(Context.Plans, new PlanEntity
@@ -307,7 +311,7 @@ public sealed class Database : IDisposable
     }
 
     public void InsertOperation(string planId, int seq, string type, string? sourceKind, string? srcRoot,
-        string? srcPath, string? dstRoot, string? dstPath, long size, string? hash, string status = "Planned")
+        string? srcPath, string? dstRoot, string? dstPath, long size, string? hash, string status = OpStatus.Planned)
     {
         EnsureWritable();
         AddAndSave(Context.PlanOperations, new PlanOperationEntity
@@ -336,13 +340,169 @@ public sealed class Database : IDisposable
     {
         var query = Context.PlanOperations.AsNoTracking().Where(x => x.PlanId == planId);
         if (onlyProblems)
-            query = query.Where(x => x.Status == "Conflict" || x.Status == "Failed" || x.Status == "Skipped");
+            query = query.Where(x => x.Status == OpStatus.Conflict || x.Status == OpStatus.Failed || x.Status == OpStatus.Skipped);
 
         return query.OrderBy(x => x.Sequence)
             .Select(x => new PlanOperationRow(x.Id, x.Sequence, x.Type, x.SourceKind, x.SourceRootId, x.SourcePath,
                 x.DestinationRootId, x.DestinationPath, x.ExpectedSize, x.ExpectedHash, x.Status, x.Error))
             .ToList();
     }
+
+    public sealed record PlanInfo(string Id, string CreatedUtc, string SourceDatabasePath,
+        string SourceRootId, string SourceRootPath, string TargetRootId, string TargetRootPath,
+        string Status, long EstimatedBytesCopied);
+
+    public PlanInfo? GetPlan(string planId) => Context.Plans.AsNoTracking()
+        .Where(x => x.Id == planId)
+        .Select(x => new PlanInfo(x.Id, x.CreatedUtc, x.SourceDatabasePath, x.SourceRootId,
+            x.SourceRootPath, x.TargetRootId, x.TargetRootPath, x.Status, x.EstimatedBytesCopied))
+        .FirstOrDefault();
+
+    public void UpdatePlanStatus(string planId, string status)
+    {
+        EnsureWritable();
+        Context.Plans
+            .Where(x => x.Id == planId)
+            .ExecuteUpdate(setters => setters.SetProperty(x => x.Status, status));
+    }
+
+    public Dictionary<string, int> GetOperationCounts(string planId) => Context.PlanOperations
+        .AsNoTracking()
+        .Where(x => x.PlanId == planId)
+        .GroupBy(x => x.Type)
+        .Select(g => new { g.Key, Count = g.Count() })
+        .ToDictionary(x => x.Key, x => x.Count);
+
+    public void MarkOperationStarted(long operationId, string startedUtc)
+    {
+        EnsureWritable();
+        Context.PlanOperations
+            .Where(x => x.Id == operationId)
+            .ExecuteUpdate(setters => setters
+                .SetProperty(x => x.Status, OpStatus.Started)
+                .SetProperty(x => x.StartedUtc, startedUtc));
+    }
+
+    public void MarkOperation(long operationId, string status, string? error, string completedUtc)
+    {
+        EnsureWritable();
+        Context.PlanOperations
+            .Where(x => x.Id == operationId)
+            .ExecuteUpdate(setters => setters
+                .SetProperty(x => x.Status, status)
+                .SetProperty(x => x.CompletedUtc, completedUtc)
+                .SetProperty(x => x.Error, error));
+    }
+
+    public void AddExecutionLog(long operationId, string level, string message, string timestampUtc)
+    {
+        EnsureWritable();
+        AddAndSave(Context.ExecutionLogs, new ExecutionLogEntity
+        {
+            PlanOperationId = operationId,
+            Level = level,
+            Message = message,
+            TimestampUtc = timestampUtc,
+        });
+    }
+
+    public sealed record CopyCandidate(string RootId, string RelativePath, long Size);
+
+    public List<CopyCandidate> ListCompletedCopies(string planId, string hash) => Context.PlanOperations
+        .AsNoTracking()
+        .Where(x => x.PlanId == planId && x.Status == OpStatus.Completed && x.ExpectedHash == hash
+            && (x.Type == OpType.Copy || x.Type == OpType.Move)
+            && x.DestinationRootId != null && x.DestinationPath != null)
+        .Select(x => new CopyCandidate(x.DestinationRootId!, x.DestinationPath!, x.ExpectedSize))
+        .ToList();
+
+    public List<CopyCandidate> ListContentCopies(string targetRootId, string excludeRootId, string excludePath, string hash) =>
+        (from fileHash in Context.FileHashes.AsNoTracking()
+         join entry in Context.FileEntries.AsNoTracking() on fileHash.FileEntryId equals entry.Id
+         where fileHash.Digest == hash && fileHash.State == HashState.Ok && entry.Status == FileStatus.Ok
+            && entry.StorageRootId == targetRootId
+            && !(entry.StorageRootId == excludeRootId && entry.RelativePath == excludePath)
+         select new CopyCandidate(entry.StorageRootId, entry.RelativePath, entry.Size))
+        .ToList();
+
+    public sealed record PlanOperationSeed(int Sequence, string Type, string? SourceKind,
+        string? SourceRoot, string? SourcePath, string? DestRoot, string? DestPath,
+        long ExpectedSize, string? ExpectedHash);
+
+    public void AddPlanWithOperations(string planId, string createdUtc, string sourceDatabasePath,
+        string sourceRootId, string sourceRootPath, string targetRootId, string targetRootPath,
+        string status, long estimatedBytesCopied, IEnumerable<PlanOperationSeed> operations)
+    {
+        EnsureWritable();
+        using var transaction = Context.Database.BeginTransaction();
+        Context.Plans.Add(new PlanEntity
+        {
+            Id = planId,
+            CreatedUtc = createdUtc,
+            SourceDatabasePath = sourceDatabasePath,
+            SourceRootId = sourceRootId,
+            SourceRootPath = sourceRootPath,
+            TargetRootId = targetRootId,
+            TargetRootPath = targetRootPath,
+            Status = status,
+            EstimatedBytesCopied = estimatedBytesCopied,
+        });
+        foreach (var op in operations)
+        {
+            Context.PlanOperations.Add(new PlanOperationEntity
+            {
+                PlanId = planId,
+                Sequence = op.Sequence,
+                Type = op.Type,
+                SourceKind = op.SourceKind,
+                SourceRootId = op.SourceRoot,
+                SourcePath = op.SourcePath,
+                DestinationRootId = op.DestRoot,
+                DestinationPath = op.DestPath,
+                ExpectedSize = op.ExpectedSize,
+                ExpectedHash = op.ExpectedHash,
+                Status = OpStatus.Planned,
+            });
+        }
+        Context.SaveChanges();
+        transaction.Commit();
+        Context.ChangeTracker.Clear();
+    }
+
+    public sealed class DatabaseTransaction : IDisposable
+    {
+        private readonly Database _database;
+        private readonly Microsoft.EntityFrameworkCore.Storage.IDbContextTransaction _transaction;
+        private bool _completed;
+
+        internal DatabaseTransaction(Database database)
+        {
+            _database = database;
+            _transaction = database.Context.Database.BeginTransaction();
+        }
+
+        public void Commit() { _transaction.Commit(); _completed = true; }
+        public void Rollback() { _transaction.Rollback(); _completed = true; _database.Context.ChangeTracker.Clear(); }
+
+        public void Dispose()
+        {
+            if (!_completed)
+            {
+                try { _transaction.Rollback(); } catch { }
+                _database.Context.ChangeTracker.Clear();
+            }
+            _transaction.Dispose();
+        }
+    }
+
+    public DatabaseTransaction BeginTransaction()
+    {
+        EnsureWritable();
+        return new DatabaseTransaction(this);
+    }
+
+    public List<string> AppliedMigrations() => Context.Database.GetAppliedMigrations().ToList();
+    public List<string> PendingMigrations() => Context.Database.GetPendingMigrations().ToList();
 
     private static System.Linq.Expressions.Expression<Func<FileEntryEntity, FileEntryRow>> ToFileEntryRow() => x =>
         new FileEntryRow(x.Id, x.StorageRootId, x.RelativePath, x.Name, x.Size, x.ModifiedUtc,

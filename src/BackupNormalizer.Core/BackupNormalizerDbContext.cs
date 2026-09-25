@@ -38,7 +38,7 @@ public sealed class BackupNormalizerDbContext(DbContextOptions<BackupNormalizerD
             entity.Property(x => x.StorageRootId).HasColumnName("StorageRootId").IsRequired();
             entity.Property(x => x.StartedUtc).HasColumnName("StartedUtc").IsRequired();
             entity.Property(x => x.CompletedUtc).HasColumnName("CompletedUtc");
-            entity.Property(x => x.Status).HasColumnName("Status").HasDefaultValue("Started");
+            entity.Property(x => x.Status).HasColumnName("Status").HasDefaultValue(ScanStatus.Started);
             entity.HasOne<StorageRootEntity>().WithMany().HasForeignKey(x => x.StorageRootId).OnDelete(DeleteBehavior.NoAction);
         });
 
@@ -55,7 +55,7 @@ public sealed class BackupNormalizerDbContext(DbContextOptions<BackupNormalizerD
             entity.Property(x => x.CreatedUtc).HasColumnName("CreatedUtc");
             entity.Property(x => x.FileIdentity).HasColumnName("FileIdentity");
             entity.Property(x => x.LastSeenScanId).HasColumnName("LastSeenScanId");
-            entity.Property(x => x.Status).HasColumnName("Status").HasDefaultValue("Ok");
+            entity.Property(x => x.Status).HasColumnName("Status").HasDefaultValue(FileStatus.Ok);
             entity.Property(x => x.Error).HasColumnName("Error");
             entity.HasAlternateKey(x => new { x.StorageRootId, x.RelativePath });
             entity.HasIndex(x => x.StorageRootId).HasDatabaseName("IX_FileEntry_Root");
@@ -73,7 +73,7 @@ public sealed class BackupNormalizerDbContext(DbContextOptions<BackupNormalizerD
             entity.Property(x => x.SizeAtHash).HasColumnName("SizeAtHash");
             entity.Property(x => x.ModifiedUtcAtHash).HasColumnName("ModifiedUtcAtHash").IsRequired();
             entity.Property(x => x.CalculatedUtc).HasColumnName("CalculatedUtc").IsRequired();
-            entity.Property(x => x.State).HasColumnName("State").HasDefaultValue("Ok");
+            entity.Property(x => x.State).HasColumnName("State").HasDefaultValue(HashState.Ok);
             entity.HasIndex(x => new { x.Algorithm, x.Digest }).HasDatabaseName("IX_FileHash_Digest");
             entity.HasOne<FileEntryEntity>().WithMany().HasForeignKey(x => x.FileEntryId).OnDelete(DeleteBehavior.Cascade);
         });
@@ -89,7 +89,7 @@ public sealed class BackupNormalizerDbContext(DbContextOptions<BackupNormalizerD
             entity.Property(x => x.SourceRootPath).HasColumnName("SourceRootPath").IsRequired();
             entity.Property(x => x.TargetRootId).HasColumnName("TargetRootId").IsRequired();
             entity.Property(x => x.TargetRootPath).HasColumnName("TargetRootPath").IsRequired();
-            entity.Property(x => x.Status).HasColumnName("Status").HasDefaultValue("Planned");
+            entity.Property(x => x.Status).HasColumnName("Status").HasDefaultValue(PlanStatus.Planned);
             entity.Property(x => x.EstimatedBytesCopied).HasColumnName("EstimatedBytesCopied").HasDefaultValue(0L);
         });
 
@@ -108,7 +108,7 @@ public sealed class BackupNormalizerDbContext(DbContextOptions<BackupNormalizerD
             entity.Property(x => x.DestinationPath).HasColumnName("DestinationPath");
             entity.Property(x => x.ExpectedSize).HasColumnName("ExpectedSize").HasDefaultValue(0L);
             entity.Property(x => x.ExpectedHash).HasColumnName("ExpectedHash");
-            entity.Property(x => x.Status).HasColumnName("Status").HasDefaultValue("Planned");
+            entity.Property(x => x.Status).HasColumnName("Status").HasDefaultValue(OpStatus.Planned);
             entity.Property(x => x.StartedUtc).HasColumnName("StartedUtc");
             entity.Property(x => x.CompletedUtc).HasColumnName("CompletedUtc");
             entity.Property(x => x.Error).HasColumnName("Error");

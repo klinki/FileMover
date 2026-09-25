@@ -41,7 +41,7 @@ public static class PlanStaging
     {
         EnsureUnderBase(basePath, absNewDir);
         string rel = Paths.NormalizeRelative(Paths.GetRelative(basePath, absNewDir));
-        return [new StagedOp("MKDIR", "", rel, 0, null)];
+        return [new StagedOp(OpType.Mkdir, "", rel, 0, null)];
     }
 
     public static List<StagedOp> StageTrash(string basePath, string absTarget)
@@ -52,19 +52,19 @@ public static class PlanStaging
         {
             var (size, hash) = IdentityOf(f);
             string rel = Paths.NormalizeRelative(Paths.GetRelative(basePath, f));
-            ops.Add(new StagedOp("TRASH", rel, null, size, hash));
+            ops.Add(new StagedOp(OpType.Trash, rel, null, size, hash));
         }
         return ops;
     }
 
     public static List<StagedOp> StageCopy(string basePath, string absSource, string absDestDir)
     {
-        return StageCopyOrMove(basePath, absSource, absDestDir, "COPY");
+        return StageCopyOrMove(basePath, absSource, absDestDir, OpType.Copy);
     }
 
     public static List<StagedOp> StageMove(string basePath, string absSource, string absDestDir)
     {
-        return StageCopyOrMove(basePath, absSource, absDestDir, "MOVE");
+        return StageCopyOrMove(basePath, absSource, absDestDir, OpType.Move);
     }
 
     private static List<StagedOp> StageCopyOrMove(string basePath, string absSource, string absDestDir, string type)
@@ -76,7 +76,7 @@ public static class PlanStaging
         void EnsureMkdirRel(string dirRel)
         {
             if (string.IsNullOrEmpty(dirRel) || !mkdirs.Add(dirRel)) return;
-            ops.Add(new StagedOp("MKDIR", "", dirRel, 0, null));
+            ops.Add(new StagedOp(OpType.Mkdir, "", dirRel, 0, null));
         }
         if (File.Exists(absSource))
         {
@@ -120,19 +120,19 @@ public static class PlanStaging
         int seq = 1;
         long bytesToCopy = 0;
         // Deterministic order: MKDIR, MOVE, COPY, TRASH, then rest.
-        foreach (var s in staged.OrderBy(o => o.Type == "MKDIR" ? 0 : o.Type == "MOVE" ? 1 : o.Type == "COPY" ? 2 : o.Type == "TRASH" ? 3 : 4))
+        foreach (var s in staged.OrderBy(o => o.Type == OpType.Mkdir ? 0 : o.Type == OpType.Move ? 1 : o.Type == OpType.Copy ? 2 : o.Type == OpType.Trash ? 3 : 4))
         {
-            string? srcRoot = s.Type == "MKDIR" ? null : rootId;
-            string? srcPath = s.Type == "MKDIR" ? null : s.SourceRel;
+            string? srcRoot = s.Type == OpType.Mkdir ? null : rootId;
+            string? srcPath = s.Type == OpType.Mkdir ? null : s.SourceRel;
             string? dstRoot = rootId;
             string? dstPath = s.Type switch
             {
-                "MKDIR" => s.DestRel ?? s.SourceRel,
-                "TRASH" => null,
+                OpType.Mkdir => s.DestRel ?? s.SourceRel,
+                OpType.Trash => null,
                 _ => s.DestRel,
             };
-            if (s.Type == "COPY") bytesToCopy += s.ExpectedSize;
-            ops.Add(new PlanOpDoc(seq++, s.Type, srcRoot == null ? null : "Target",
+            if (s.Type == OpType.Copy) bytesToCopy += s.ExpectedSize;
+            ops.Add(new PlanOpDoc(seq++, s.Type, srcRoot == null ? null : SourceScope.Target,
                 srcRoot, srcPath, dstRoot, dstPath, s.ExpectedSize, s.ExpectedHash));
         }
         string fullPath = Path.GetFullPath(rootPath);
@@ -153,65 +153,33 @@ public static class PlanStaging
             throw new InvalidOperationException($"plan target root '{doc.TargetRoot}' does not match database root '{rootId}'");
         foreach (var operation in doc.Operations)
         {
-            if (operation.Type is not ("KEEP" or "MKDIR" or "MOVE" or "COPY" or "TRASH" or "VERIFY"))
+            if (operation.Type is not (OpType.Keep or OpType.Mkdir or OpType.Move or OpType.Copy or OpType.Trash or OpType.Verify))
                 throw new InvalidOperationException($"operation {operation.Id} has an unsupported type");
             if (operation.DestinationRoot != null && operation.DestinationRoot != doc.TargetRoot)
                 throw new InvalidOperationException($"operation {operation.Id} destination is outside the plan target root");
-            if (operation.SourceKind == "Target" && operation.SourceRoot != doc.TargetRoot)
+            if (operation.SourceKind == SourceScope.Target && operation.SourceRoot != doc.TargetRoot)
                 throw new InvalidOperationException($"operation {operation.Id} target-local source is outside the plan target root");
-            if (operation.SourceKind == "Source" && operation.SourceRoot != doc.SourceRoot)
+            if (operation.SourceKind == SourceScope.Source && operation.SourceRoot != doc.SourceRoot)
                 throw new InvalidOperationException($"operation {operation.Id} source root disagrees with plan metadata");
             if (operation.SourcePath != null)
                 _ = Paths.CombineRoot(operation.SourceKind == "Source" ? doc.SourcePath! : rootPath, operation.SourcePath);
             if (operation.DestinationPath != null)
                 _ = Paths.CombineRoot(rootPath, operation.DestinationPath);
         }
-        var context = db.Context;
-        if (context.Plans.Any(plan => plan.Id == doc.PlanId))
+        if (db.PlanExists(doc.PlanId))
             throw new InvalidOperationException($"plan '{doc.PlanId}' already exists (immutable, §18)");
         if (db.GetRoot(rootId) == null)
             db.UpsertRoot(new StorageRootRow(rootId, rootId, Path.GetFullPath(rootPath), true,
                 Paths.GetFileSystemId(rootPath), Paths.DetectCaseSensitivity(rootPath), Database.UtcNow()));
 
-        using var transaction = context.Database.BeginTransaction();
-        var planEntity = new PlanEntity
-        {
-            Id = doc.PlanId,
-            CreatedUtc = Database.UtcNow(),
-            SourceDatabasePath = string.IsNullOrEmpty(doc.SourceDatabasePath) ? db.DbPath : Path.GetFullPath(doc.SourceDatabasePath),
-            SourceRootId = doc.SourceRoot ?? rootId,
-            SourceRootPath = Path.GetFullPath(doc.SourcePath ?? rootPath),
-            TargetRootId = doc.TargetRoot,
-            TargetRootPath = Path.GetFullPath(rootPath),
-            Status = "Planned",
-            EstimatedBytesCopied = doc.EstimatedBytesCopied,
-        };
-        context.Plans.Add(planEntity);
-        var planOperations = new List<PlanOperationEntity>();
-        foreach (var o in doc.Operations.OrderBy(o => o.Id))
-        {
-            var planOperation = new PlanOperationEntity
-            {
-                PlanId = doc.PlanId,
-                Sequence = o.Id,
-                Type = o.Type,
-                SourceKind = o.SourceKind ?? "Target",
-                SourceRootId = o.SourceRoot,
-                SourcePath = o.SourcePath,
-                DestinationRootId = o.DestinationRoot,
-                DestinationPath = o.DestinationPath,
-                ExpectedSize = o.ExpectedSize,
-                ExpectedHash = o.ExpectedHash,
-                Status = "Planned",
-            };
-            planOperations.Add(planOperation);
-            context.PlanOperations.Add(planOperation);
-        }
-        context.SaveChanges();
-        transaction.Commit();
-        context.Entry(planEntity).State = Microsoft.EntityFrameworkCore.EntityState.Detached;
-        foreach (var operation in planOperations)
-            context.Entry(operation).State = Microsoft.EntityFrameworkCore.EntityState.Detached;
+        db.AddPlanWithOperations(doc.PlanId, Database.UtcNow(),
+            string.IsNullOrEmpty(doc.SourceDatabasePath) ? db.DbPath : Path.GetFullPath(doc.SourceDatabasePath),
+            doc.SourceRoot ?? rootId, Path.GetFullPath(doc.SourcePath ?? rootPath),
+            doc.TargetRoot, Path.GetFullPath(rootPath),
+            PlanStatus.Planned, doc.EstimatedBytesCopied,
+            doc.Operations.OrderBy(o => o.Id).Select(o => new Database.PlanOperationSeed(
+                o.Id, o.Type, o.SourceKind ?? SourceScope.Target, o.SourceRoot, o.SourcePath,
+                o.DestinationRoot, o.DestinationPath, o.ExpectedSize, o.ExpectedHash)));
     }
 
     /// <summary>Import a plan JSON file into a DB (CLI `plan import` + UI "Write to .db" helper).</summary>
@@ -229,9 +197,9 @@ public static class PlanStaging
             throw new InvalidOperationException($"invalid or legacy plan file (missing plan/root metadata): {jsonPath}");
         foreach (var o in doc.Operations)
         {
-            if (o.Type is not ("KEEP" or "MKDIR" or "MOVE" or "COPY" or "TRASH" or "VERIFY"))
+            if (o.Type is not (OpType.Keep or OpType.Mkdir or OpType.Move or OpType.Copy or OpType.Trash or OpType.Verify))
                 throw new InvalidOperationException($"invalid operation type '{o.Type}' in {jsonPath}");
-            if (o.SourceRoot != null && o.SourceKind is not ("Source" or "Target"))
+            if (o.SourceRoot != null && o.SourceKind is not (SourceScope.Source or SourceScope.Target))
                 throw new InvalidOperationException($"invalid source kind in operation {o.Id} in {jsonPath}");
         }
         return doc;

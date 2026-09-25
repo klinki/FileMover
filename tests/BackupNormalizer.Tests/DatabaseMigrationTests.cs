@@ -1,5 +1,4 @@
 using BackupNormalizer;
-using Microsoft.EntityFrameworkCore;
 
 namespace BackupNormalizer.Tests;
 
@@ -13,13 +12,13 @@ public sealed class DatabaseMigrationTests
         {
             using (var db = new Database(path))
             {
-                Assert.Single(db.Context.Database.GetAppliedMigrations());
-                Assert.Empty(db.Context.Database.GetPendingMigrations());
+                Assert.Single(db.AppliedMigrations());
+                Assert.Empty(db.PendingMigrations());
             }
 
             using var reopened = new Database(path);
-            Assert.Single(reopened.Context.Database.GetAppliedMigrations());
-            Assert.Empty(reopened.Context.Database.GetPendingMigrations());
+            Assert.Single(reopened.AppliedMigrations());
+            Assert.Empty(reopened.PendingMigrations());
         }
         finally
         {

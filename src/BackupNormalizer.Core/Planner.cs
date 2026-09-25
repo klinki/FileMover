@@ -33,13 +33,13 @@ public sealed class Planner
         var targetRoot = _targetDb.GetRoot(targetRootId)
             ?? throw new InvalidOperationException($"unknown target root '{targetRootId}'");
         if (!targetRoot.Writable) throw new InvalidOperationException($"target root '{targetRootId}' is read-only");
-        if (sourceDb.LatestScanStatus(sourceRootId) != "Completed")
+        if (sourceDb.LatestScanStatus(sourceRootId) != ScanStatus.Completed)
             throw new InvalidOperationException($"source root '{sourceRootId}' needs a complete successful scan before planning");
-        if (_targetDb.LatestScanStatus(targetRootId) != "Completed")
+        if (_targetDb.LatestScanStatus(targetRootId) != ScanStatus.Completed)
             throw new InvalidOperationException($"target root '{targetRootId}' needs a complete successful scan before planning");
         if (Paths.RootsOverlap(sourceRoot.Path, targetRoot.Path))
             throw new InvalidOperationException("source and target root paths overlap; automatic plans require disjoint roots");
-        if (_targetDb.Context.Plans.Any(plan => plan.Id == planId))
+        if (_targetDb.PlanExists(planId))
             throw new InvalidOperationException($"plan '{planId}' already exists (plans are immutable)");
 
         var sourceFiles = Matcher.LoadFromDb(sourceDb, _algo, sourceRootId)
@@ -64,7 +64,7 @@ public sealed class Planner
         {
             var dir = rel.Contains('/') ? rel[..rel.LastIndexOf('/')] : null;
             if (dir == null || !mkdirs.Add(dir)) return;
-            ops.Add(new PlanOp("MKDIR", null, null, null, targetRootId, dir, 0, null));
+            ops.Add(new PlanOp(OpType.Mkdir, null, null, null, targetRootId, dir, 0, null));
             mkdir++;
         }
 
@@ -88,7 +88,7 @@ public sealed class Planner
                 if (existing.Size == want.Size && existing.Hash != null &&
                     string.Equals(existing.Hash, want.Hash, StringComparison.OrdinalIgnoreCase))
                 {
-                    ops.Add(new PlanOp("KEEP", "Target", targetRootId, existing.RelativePath,
+                    ops.Add(new PlanOp(OpType.Keep, SourceScope.Target, targetRootId, existing.RelativePath,
                         targetRootId, want.RelativePath, want.Size, want.Hash));
                     keep++;
                 }
@@ -96,7 +96,7 @@ public sealed class Planner
                 {
                     // The executor verifies the destination against the source identity and
                     // reports a conflict if it differs. It never overwrites the target file.
-                    ops.Add(new PlanOp("VERIFY", "Target", targetRootId, existing.RelativePath,
+                    ops.Add(new PlanOp(OpType.Verify, SourceScope.Target, targetRootId, existing.RelativePath,
                         targetRootId, want.RelativePath, want.Size, want.Hash));
                 }
                 continue;
@@ -109,7 +109,7 @@ public sealed class Planner
             if (moveSource != null)
             {
                 EnsureMkdir(want.RelativePath);
-                ops.Add(new PlanOp("MOVE", "Target", targetRootId, moveSource.RelativePath,
+                ops.Add(new PlanOp(OpType.Move, SourceScope.Target, targetRootId, moveSource.RelativePath,
                     targetRootId, want.RelativePath, want.Size, want.Hash));
                 move++;
                 bytesAvoided += want.Size;
@@ -120,7 +120,7 @@ public sealed class Planner
             else if (plannedCopies.TryGetValue((want.Size, want.Hash), out var priorCopies) && priorCopies.Count > 0)
             {
                 EnsureMkdir(want.RelativePath);
-                ops.Add(new PlanOp("COPY", "Target", targetRootId, priorCopies[0],
+                ops.Add(new PlanOp(OpType.Copy, SourceScope.Target, targetRootId, priorCopies[0],
                     targetRootId, want.RelativePath, want.Size, want.Hash));
                 copy++;
                 bytesToCopy += want.Size;
@@ -129,7 +129,7 @@ public sealed class Planner
             else
             {
                 EnsureMkdir(want.RelativePath);
-                ops.Add(new PlanOp("COPY", "Source", sourceRootId, want.RelativePath,
+                ops.Add(new PlanOp(OpType.Copy, SourceScope.Source, sourceRootId, want.RelativePath,
                     targetRootId, want.RelativePath, want.Size, want.Hash));
                 copy++;
                 bytesToCopy += want.Size;
@@ -148,7 +148,7 @@ public sealed class Planner
         var desiredContent = sourceFiles.Where(file => file.Hash != null)
             .Select(file => (file.Size, file.Hash!)).ToHashSet();
         var targetContentToKeep = ops
-            .Where(op => op.Type is "KEEP" or "MOVE" or "COPY")
+            .Where(op => op.Type is OpType.Keep or OpType.Move or OpType.Copy)
             .Where(op => op.ExpectedHash != null)
             .Select(op => (op.ExpectedSize, op.ExpectedHash!))
             .ToHashSet();
@@ -157,70 +157,39 @@ public sealed class Planner
             if (desired.ContainsKey(extra.RelativePath) || movedSources.Contains(extra.RelativePath) || extra.Hash == null) continue;
             var key = (extra.Size, extra.Hash);
             if (!desiredContent.Contains(key) || !targetContentToKeep.Contains(key)) continue;
-            ops.Add(new PlanOp("TRASH", "Target", targetRootId, extra.RelativePath,
+            ops.Add(new PlanOp(OpType.Trash, SourceScope.Target, targetRootId, extra.RelativePath,
                 targetRootId, null, extra.Size, extra.Hash));
             trash++;
         }
 
-        using var transaction = _targetDb.Context.Database.BeginTransaction();
-        var plan = new PlanEntity
-        {
-            Id = planId,
-            CreatedUtc = Database.UtcNow(),
-            SourceDatabasePath = sourceDb.DbPath,
-            SourceRootId = sourceRootId,
-            SourceRootPath = Path.GetFullPath(sourceRoot.Path),
-            TargetRootId = targetRootId,
-            TargetRootPath = Path.GetFullPath(targetRoot.Path),
-            Status = "Planned",
-            EstimatedBytesCopied = bytesToCopy,
-        };
-        _targetDb.Context.Plans.Add(plan);
-        int seq = 1;
-        foreach (var op in ops.OrderBy(OperationOrder))
-        {
-            _targetDb.Context.PlanOperations.Add(new PlanOperationEntity
-            {
-                PlanId = planId,
-                Sequence = seq++,
-                Type = op.Type,
-                SourceKind = op.SourceKind,
-                SourceRootId = op.SourceRoot,
-                SourcePath = op.SourcePath,
-                DestinationRootId = op.DestRoot,
-                DestinationPath = op.DestPath,
-                ExpectedSize = op.ExpectedSize,
-                ExpectedHash = op.ExpectedHash,
-                Status = "Planned",
-            });
-        }
-        _targetDb.Context.SaveChanges();
-        transaction.Commit();
-        _targetDb.Context.ChangeTracker.Clear();
+        _targetDb.AddPlanWithOperations(planId, Database.UtcNow(), sourceDb.DbPath,
+            sourceRootId, Path.GetFullPath(sourceRoot.Path), targetRootId, Path.GetFullPath(targetRoot.Path),
+            PlanStatus.Planned, bytesToCopy,
+            ops.OrderBy(OperationOrder).Select((op, index) => new Database.PlanOperationSeed(
+                index + 1, op.Type, op.SourceKind, op.SourceRoot, op.SourcePath,
+                op.DestRoot, op.DestPath, op.ExpectedSize, op.ExpectedHash)));
         return new PlanResult(planId, keep, move, copy, trash, mkdir, bytesToCopy, bytesAvoided);
     }
 
     private static int OperationOrder(PlanOp op) => op.Type switch
     {
-        "MKDIR" => 0,
-        "KEEP" => 1,
-        "MOVE" => 2,
-        "COPY" => 3,
-        "VERIFY" => 4,
-        "TRASH" => 5,
+        OpType.Mkdir => 0,
+        OpType.Keep => 1,
+        OpType.Move => 2,
+        OpType.Copy => 3,
+        OpType.Verify => 4,
+        OpType.Trash => 5,
         _ => 6,
     };
 
     public PlanDoc ExportPlan(string planId)
     {
-        var plan = _targetDb.Context.Plans.SingleOrDefault(item => item.Id == planId)
+        var plan = _targetDb.GetPlan(planId)
             ?? throw new InvalidOperationException($"unknown plan '{planId}'");
-        var ops = _targetDb.Context.PlanOperations
-            .Where(operation => operation.PlanId == planId)
-            .OrderBy(operation => operation.Sequence)
+        var ops = _targetDb.ListPlanOperations(planId)
             .Select(operation => new PlanOpDoc(operation.Sequence, operation.Type,
-                operation.SourceKind, operation.SourceRootId, operation.SourcePath,
-                operation.DestinationRootId, operation.DestinationPath,
+                operation.SourceKind, operation.SourceRoot, operation.SourcePath,
+                operation.DestRoot, operation.DestPath,
                 operation.ExpectedSize, operation.ExpectedHash))
             .ToList();
         return new PlanDoc(planId, plan.CreatedUtc, plan.EstimatedBytesCopied,
