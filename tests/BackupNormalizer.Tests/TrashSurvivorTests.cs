@@ -18,7 +18,7 @@ public sealed class TrashSurvivorTests : IDisposable
     private static string ScanHash(string dbPath, string rootId, string path)
     {
         using var db = new Database(dbPath);
-        db.UpsertRoot(new StorageRootRow(rootId, rootId, path, "Backup", true, "fs", "unknown", Database.UtcNow()));
+        db.UpsertRoot(new StorageRootRow(rootId, rootId, path, true, "fs", "unknown", Database.UtcNow()));
         var sc = new Scanner(db);
         sc.ScanRoot(rootId);
         sc.HashNeeded(rootId, true, 1);
@@ -37,8 +37,8 @@ public sealed class TrashSurvivorTests : IDisposable
         string hash = DigestOf(Path.Combine(data, "victim.txt"));
         using (var db = new Database(dbp))
         {
-            db.InsertPlan("p-lonely", "disk", 0);
-            db.InsertOperation("p-lonely", 1, "TRASH", "disk", "victim.txt", "disk", null, 12, hash);
+            db.InsertPlan("p-lonely", dbp, "disk", data, "disk", data, 0);
+            db.InsertOperation("p-lonely", 1, "TRASH", "Target", "disk", "victim.txt", "disk", null, 12, hash);
         }
         using (var db = new Database(dbp))
         {
@@ -57,9 +57,9 @@ public sealed class TrashSurvivorTests : IDisposable
         string hash = DigestOf(Path.Combine(data, "orig.txt"));
         using (var db = new Database(dbp))
         {
-            db.InsertPlan("p-copytrash", "disk", 12);
-            db.InsertOperation("p-copytrash", 1, "COPY", "disk", "orig.txt", "disk", "copy.txt", 12, hash);
-            db.InsertOperation("p-copytrash", 2, "TRASH", "disk", "orig.txt", "disk", null, 12, hash);
+            db.InsertPlan("p-copytrash", dbp, "disk", data, "disk", data, 12);
+            db.InsertOperation("p-copytrash", 1, "COPY", "Target", "disk", "orig.txt", "disk", "copy.txt", 12, hash);
+            db.InsertOperation("p-copytrash", 2, "TRASH", "Target", "disk", "orig.txt", "disk", null, 12, hash);
         }
         using (var db = new Database(dbp))
         {
@@ -83,8 +83,8 @@ public sealed class TrashSurvivorTests : IDisposable
         File.Delete(Path.Combine(data, "keep.txt"));
         using (var db = new Database(dbp))
         {
-            db.InsertPlan("p-drift", "disk", 0);
-            db.InsertOperation("p-drift", 1, "TRASH", "disk", "dup.txt", "disk", null, 13, hash);
+            db.InsertPlan("p-drift", dbp, "disk", data, "disk", data, 0);
+            db.InsertOperation("p-drift", 1, "TRASH", "Target", "disk", "dup.txt", "disk", null, 12, hash);
         }
         using (var db = new Database(dbp))
         {
@@ -109,10 +109,10 @@ public sealed class PlanConflictsTests
             string dbp = Path.Combine(dir, "c.db");
             using (var db = new Database(dbp))
             {
-                db.UpsertRoot(new StorageRootRow("d", "d", dir, "Backup", true, "fs", "unknown", Database.UtcNow()));
+                db.UpsertRoot(new StorageRootRow("d", "d", dir, true, "fs", "unknown", Database.UtcNow()));
                 new Scanner(db).ScanRoot("d");
-                db.InsertPlan("pc", "d", 0);
-                db.InsertOperation("pc", 1, "TRASH", "d", "v.txt", "d", null, 1, "deadbeef");
+                db.InsertPlan("pc", dbp, "d", dir, "d", dir, 0);
+                db.InsertOperation("pc", 1, "TRASH", "Target", "d", "v.txt", "d", null, 1, "deadbeef");
             }
             using (var db = new Database(dbp))
             {

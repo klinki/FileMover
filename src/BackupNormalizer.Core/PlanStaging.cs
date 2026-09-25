@@ -6,7 +6,7 @@ namespace BackupNormalizer;
 /// Plan staging for the Total Commander style UI (drive-local, plan-only).
 /// The UI never touches user files: it records intents with preconditions
 /// (size + full hash) so the existing <see cref="Executor"/> can run them
-/// later, including on another drive via --map-root.
+/// later, including on another drive via --target-path.
 /// </summary>
 public static class PlanStaging
 {
@@ -14,13 +14,11 @@ public static class PlanStaging
 
     private static void EnsureUnderBase(string basePath, string absPath)
     {
-        string baseFull = Path.GetFullPath(basePath).TrimEnd(Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar;
-        string full = Path.GetFullPath(absPath);
-        bool under = full.StartsWith(baseFull, OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal)
-            || string.Equals(full.TrimEnd(Path.DirectorySeparatorChar), baseFull.TrimEnd(Path.DirectorySeparatorChar),
-                OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal);
-        if (!under)
+        try { _ = Paths.GetRelative(basePath, absPath); }
+        catch
+        {
             throw new InvalidOperationException($"Path '{absPath}' is outside drive-local base '{basePath}'");
+        }
     }
 
     private static (long Size, string Hash) IdentityOf(string absFile)
@@ -116,7 +114,7 @@ public static class PlanStaging
     }
 
     /// <summary>Build an executor-compatible <see cref="PlanDoc"/> from staged ops.</summary>
-    public static PlanDoc BuildPlanDoc(string planId, string rootId, IEnumerable<StagedOp> staged)
+    public static PlanDoc BuildPlanDoc(string planId, string rootId, string rootPath, IEnumerable<StagedOp> staged)
     {
         var ops = new List<PlanOpDoc>();
         int seq = 1;
@@ -126,7 +124,7 @@ public static class PlanStaging
         {
             string? srcRoot = s.Type == "MKDIR" ? null : rootId;
             string? srcPath = s.Type == "MKDIR" ? null : s.SourceRel;
-            string? dstRoot = s.Type == "TRASH" ? rootId : rootId;
+            string? dstRoot = rootId;
             string? dstPath = s.Type switch
             {
                 "MKDIR" => s.DestRel ?? s.SourceRel,
@@ -134,21 +132,45 @@ public static class PlanStaging
                 _ => s.DestRel,
             };
             if (s.Type == "COPY") bytesToCopy += s.ExpectedSize;
-            ops.Add(new PlanOpDoc(seq++, s.Type, srcRoot, srcPath, dstRoot, dstPath, s.ExpectedSize, s.ExpectedHash));
+            ops.Add(new PlanOpDoc(seq++, s.Type, srcRoot == null ? null : "Target",
+                srcRoot, srcPath, dstRoot, dstPath, s.ExpectedSize, s.ExpectedHash));
         }
-        return new PlanDoc(planId, Database.UtcNow(), bytesToCopy, ops);
+        string fullPath = Path.GetFullPath(rootPath);
+        return new PlanDoc(planId, Database.UtcNow(), bytesToCopy, null,
+            rootId, fullPath, rootId, fullPath, ops);
     }
 
     public static string ToJson(PlanDoc doc) => Planner.ToJson(doc);
 
     /// <summary>Write a plan doc into a DB so the existing executor can run it.</summary>
-    public static void WriteToDatabase(Database db, PlanDoc doc, string rootId, string rootPath, string role = "Backup")
+    public static void WriteToDatabase(Database db, PlanDoc doc, string rootId, string rootPath)
     {
+        if (string.IsNullOrWhiteSpace(doc.SourceRoot) || string.IsNullOrWhiteSpace(doc.SourcePath)
+            || string.IsNullOrWhiteSpace(doc.TargetRoot) || string.IsNullOrWhiteSpace(doc.TargetPath)
+            || doc.Operations == null || doc.Operations.Count == 0)
+            throw new InvalidOperationException("plan is missing source, target, or operations");
+        if (!string.Equals(rootId, doc.TargetRoot, StringComparison.Ordinal))
+            throw new InvalidOperationException($"plan target root '{doc.TargetRoot}' does not match database root '{rootId}'");
+        foreach (var operation in doc.Operations)
+        {
+            if (operation.Type is not ("KEEP" or "MKDIR" or "MOVE" or "COPY" or "TRASH" or "VERIFY"))
+                throw new InvalidOperationException($"operation {operation.Id} has an unsupported type");
+            if (operation.DestinationRoot != null && operation.DestinationRoot != doc.TargetRoot)
+                throw new InvalidOperationException($"operation {operation.Id} destination is outside the plan target root");
+            if (operation.SourceKind == "Target" && operation.SourceRoot != doc.TargetRoot)
+                throw new InvalidOperationException($"operation {operation.Id} target-local source is outside the plan target root");
+            if (operation.SourceKind == "Source" && operation.SourceRoot != doc.SourceRoot)
+                throw new InvalidOperationException($"operation {operation.Id} source root disagrees with plan metadata");
+            if (operation.SourcePath != null)
+                _ = Paths.CombineRoot(operation.SourceKind == "Source" ? doc.SourcePath! : rootPath, operation.SourcePath);
+            if (operation.DestinationPath != null)
+                _ = Paths.CombineRoot(rootPath, operation.DestinationPath);
+        }
         var context = db.Context;
         if (context.Plans.Any(plan => plan.Id == doc.PlanId))
             throw new InvalidOperationException($"plan '{doc.PlanId}' already exists (immutable, §18)");
         if (db.GetRoot(rootId) == null)
-            db.UpsertRoot(new StorageRootRow(rootId, rootId, Path.GetFullPath(rootPath), role, true,
+            db.UpsertRoot(new StorageRootRow(rootId, rootId, Path.GetFullPath(rootPath), true,
                 Paths.GetFileSystemId(rootPath), Paths.DetectCaseSensitivity(rootPath), Database.UtcNow()));
 
         using var transaction = context.Database.BeginTransaction();
@@ -156,7 +178,11 @@ public static class PlanStaging
         {
             Id = doc.PlanId,
             CreatedUtc = Database.UtcNow(),
-            CanonicalRootId = rootId,
+            SourceDatabasePath = string.IsNullOrEmpty(doc.SourceDatabasePath) ? db.DbPath : Path.GetFullPath(doc.SourceDatabasePath),
+            SourceRootId = doc.SourceRoot ?? rootId,
+            SourceRootPath = Path.GetFullPath(doc.SourcePath ?? rootPath),
+            TargetRootId = doc.TargetRoot,
+            TargetRootPath = Path.GetFullPath(rootPath),
             Status = "Planned",
             EstimatedBytesCopied = doc.EstimatedBytesCopied,
         };
@@ -169,6 +195,7 @@ public static class PlanStaging
                 PlanId = doc.PlanId,
                 Sequence = o.Id,
                 Type = o.Type,
+                SourceKind = o.SourceKind ?? "Target",
                 SourceRootId = o.SourceRoot,
                 SourcePath = o.SourcePath,
                 DestinationRootId = o.DestinationRoot,
@@ -196,12 +223,16 @@ public static class PlanStaging
             PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
             PropertyNameCaseInsensitive = true,
         }) ?? throw new InvalidOperationException($"invalid plan file: {jsonPath}");
-        if (string.IsNullOrWhiteSpace(doc.PlanId) || doc.Operations.Count == 0)
-            throw new InvalidOperationException($"invalid plan file (missing planId/operations): {jsonPath}");
+        if (string.IsNullOrWhiteSpace(doc.PlanId) || doc.Operations == null || doc.Operations.Count == 0
+            || string.IsNullOrWhiteSpace(doc.SourceRoot) || string.IsNullOrWhiteSpace(doc.SourcePath)
+            || string.IsNullOrWhiteSpace(doc.TargetRoot) || string.IsNullOrWhiteSpace(doc.TargetPath))
+            throw new InvalidOperationException($"invalid or legacy plan file (missing plan/root metadata): {jsonPath}");
         foreach (var o in doc.Operations)
         {
-            if (o.Type is not ("KEEP" or "MKDIR" or "MOVE" or "COPY" or "TRASH" or "DELETE" or "VERIFY"))
+            if (o.Type is not ("KEEP" or "MKDIR" or "MOVE" or "COPY" or "TRASH" or "VERIFY"))
                 throw new InvalidOperationException($"invalid operation type '{o.Type}' in {jsonPath}");
+            if (o.SourceRoot != null && o.SourceKind is not ("Source" or "Target"))
+                throw new InvalidOperationException($"invalid source kind in operation {o.Id} in {jsonPath}");
         }
         return doc;
     }

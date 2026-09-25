@@ -3,7 +3,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace BackupNormalizer;
 
-public sealed record StorageRootRow(string Id, string Name, string Path, string Role, bool Writable, string FileSystemId, string CaseSensitivity, string CreatedUtc);
+public sealed record StorageRootRow(string Id, string Name, string Path, bool Writable, string FileSystemId, string CaseSensitivity, string CreatedUtc);
 public sealed record ScanRow(long Id, string StorageRootId, string StartedUtc, string? CompletedUtc, string Status);
 public sealed record FileEntryRow(long Id, string StorageRootId, string RelativePath, string Name, long Size, string ModifiedUtc, string? CreatedUtc, string? FileIdentity, long LastSeenScanId, string Status, string? Error);
 public sealed record FileHashRow(long FileEntryId, string Algorithm, string Digest, long SizeAtHash, string ModifiedUtcAtHash, string CalculatedUtc, string State);
@@ -16,6 +16,8 @@ public sealed class Database : IDisposable
     public BackupNormalizerDbContext Context { get; }
 
     public Database(string dbPath) : this(dbPath, readOnly: false) { }
+
+    public static Database OpenReadOnly(string dbPath) => new(dbPath, readOnly: true);
 
     internal Database(string dbPath, bool readOnly)
     {
@@ -48,6 +50,7 @@ public sealed class Database : IDisposable
             // Keep the connection open so connection-scoped settings such as synchronous=NORMAL
             // remain in effect for the lifetime of this database facade.
             Context.Database.OpenConnection();
+            RejectPreReleaseSchema();
             if (!readOnly)
             {
                 Context.Database.ExecuteSqlRaw("PRAGMA journal_mode=WAL;");
@@ -64,24 +67,65 @@ public sealed class Database : IDisposable
 
     public void Dispose() => Context.Dispose();
 
+    private void RejectPreReleaseSchema()
+    {
+        var connection = Context.Database.GetDbConnection();
+        bool HasTable(string name)
+        {
+            using var command = connection.CreateCommand();
+            command.CommandText = "SELECT 1 FROM sqlite_master WHERE type='table' AND name=$name LIMIT 1";
+            var parameter = command.CreateParameter(); parameter.ParameterName = "$name"; parameter.Value = name;
+            command.Parameters.Add(parameter);
+            return command.ExecuteScalar() != null;
+        }
+        HashSet<string> Columns(string table)
+        {
+            using var command = connection.CreateCommand();
+            command.CommandText = $"PRAGMA table_info('{table}')";
+            using var reader = command.ExecuteReader();
+            var columns = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            while (reader.Read()) columns.Add(reader.GetString(1));
+            return columns;
+        }
+
+        bool oldRootSchema = HasTable("StorageRoot") && Columns("StorageRoot").Contains("Role");
+        bool oldPlanSchema = HasTable("Plan") && Columns("Plan").Contains("CanonicalRootId");
+        if (oldRootSchema || oldPlanSchema || HasTable("CanonicalEntry"))
+            throw new InvalidOperationException("This database uses the previous pre-release schema. Move or delete it manually, then run 'init' to create a new database. The database was not changed.");
+    }
+
     public static string UtcNow() => DateTime.UtcNow.ToString("o");
 
     // ---- Roots ----
     public void UpsertRoot(StorageRootRow r)
     {
         EnsureWritable();
-        var exists = Context.StorageRoots.Any(x => x.Id == r.Id);
-        if (exists)
+        var previousPath = Context.StorageRoots.Where(x => x.Id == r.Id).Select(x => x.Path).FirstOrDefault();
+        if (previousPath != null)
         {
             Context.StorageRoots
                 .Where(x => x.Id == r.Id)
                 .ExecuteUpdate(setters => setters
                     .SetProperty(x => x.Name, r.Name)
                     .SetProperty(x => x.Path, r.Path)
-                    .SetProperty(x => x.Role, r.Role)
                     .SetProperty(x => x.Writable, r.Writable)
                     .SetProperty(x => x.FileSystemId, r.FileSystemId)
                     .SetProperty(x => x.CaseSensitivity, r.CaseSensitivity));
+            if (!Paths.PathEquals(previousPath, r.Path))
+            {
+                Context.FileHashes
+                    .Where(hash => Context.FileEntries.Any(entry =>
+                        entry.Id == hash.FileEntryId && entry.StorageRootId == r.Id))
+                    .ExecuteUpdate(setters => setters.SetProperty(hash => hash.State, "Stale"));
+                var now = UtcNow();
+                AddAndSave(Context.Scans, new ScanEntity
+                {
+                    StorageRootId = r.Id,
+                    StartedUtc = now,
+                    CompletedUtc = now,
+                    Status = "Invalidated",
+                });
+            }
             return;
         }
 
@@ -90,7 +134,6 @@ public sealed class Database : IDisposable
             Id = r.Id,
             Name = r.Name,
             Path = r.Path,
-            Role = r.Role,
             Writable = r.Writable,
             FileSystemId = r.FileSystemId,
             CaseSensitivity = r.CaseSensitivity,
@@ -101,13 +144,13 @@ public sealed class Database : IDisposable
     public List<StorageRootRow> ListRoots() => Context.StorageRoots
         .AsNoTracking()
         .OrderBy(x => x.Id)
-        .Select(x => new StorageRootRow(x.Id, x.Name, x.Path, x.Role, x.Writable, x.FileSystemId, x.CaseSensitivity, x.CreatedUtc))
+        .Select(x => new StorageRootRow(x.Id, x.Name, x.Path, x.Writable, x.FileSystemId, x.CaseSensitivity, x.CreatedUtc))
         .ToList();
 
     public StorageRootRow? GetRoot(string id) => Context.StorageRoots
         .AsNoTracking()
         .Where(x => x.Id == id)
-        .Select(x => new StorageRootRow(x.Id, x.Name, x.Path, x.Role, x.Writable, x.FileSystemId, x.CaseSensitivity, x.CreatedUtc))
+        .Select(x => new StorageRootRow(x.Id, x.Name, x.Path, x.Writable, x.FileSystemId, x.CaseSensitivity, x.CreatedUtc))
         .FirstOrDefault();
 
     public long BeginScan(string rootId)
@@ -126,6 +169,22 @@ public sealed class Database : IDisposable
             .ExecuteUpdate(setters => setters
                 .SetProperty(x => x.CompletedUtc, UtcNow())
                 .SetProperty(x => x.Status, status));
+    }
+
+    public string? LatestScanStatus(string rootId) => Context.Scans.AsNoTracking()
+        .Where(x => x.StorageRootId == rootId)
+        .OrderByDescending(x => x.Id)
+        .Select(x => x.Status)
+        .FirstOrDefault();
+
+    public int MarkUnseenFilesMissing(string rootId, long scanId)
+    {
+        EnsureWritable();
+        return Context.FileEntries
+            .Where(x => x.StorageRootId == rootId && x.LastSeenScanId != scanId && x.Status != "Missing")
+            .ExecuteUpdate(setters => setters
+                .SetProperty(x => x.Status, "Missing")
+                .SetProperty(x => x.Error, (string?)null));
     }
 
     public FileEntryRow? GetFileEntry(string rootId, string rel) => Context.FileEntries
@@ -229,20 +288,26 @@ public sealed class Database : IDisposable
     }
 
     // ---- Plans ----
-    public void InsertPlan(string planId, string canonicalRootId, long estBytes, string status = "Planned")
+    public void InsertPlan(string planId, string sourceDatabasePath, string sourceRootId, string sourceRootPath,
+        string targetRootId, string targetRootPath, long estBytes, string status = "Planned")
     {
         EnsureWritable();
         AddAndSave(Context.Plans, new PlanEntity
         {
             Id = planId,
             CreatedUtc = UtcNow(),
-            CanonicalRootId = canonicalRootId,
+            SourceDatabasePath = sourceDatabasePath,
+            SourceRootId = sourceRootId,
+            SourceRootPath = sourceRootPath,
+            TargetRootId = targetRootId,
+            TargetRootPath = targetRootPath,
             Status = status,
             EstimatedBytesCopied = estBytes
         });
     }
 
-    public void InsertOperation(string planId, int seq, string type, string? srcRoot, string? srcPath, string? dstRoot, string? dstPath, long size, string? hash, string status = "Planned")
+    public void InsertOperation(string planId, int seq, string type, string? sourceKind, string? srcRoot,
+        string? srcPath, string? dstRoot, string? dstPath, long size, string? hash, string status = "Planned")
     {
         EnsureWritable();
         AddAndSave(Context.PlanOperations, new PlanOperationEntity
@@ -250,6 +315,7 @@ public sealed class Database : IDisposable
             PlanId = planId,
             Sequence = seq,
             Type = type,
+            SourceKind = sourceKind,
             SourceRootId = srcRoot,
             SourcePath = srcPath,
             DestinationRootId = dstRoot,
@@ -262,7 +328,7 @@ public sealed class Database : IDisposable
 
     public bool PlanExists(string planId) => Context.Plans.AsNoTracking().Any(x => x.Id == planId);
 
-    public sealed record PlanOperationRow(long Id, int Sequence, string Type,
+    public sealed record PlanOperationRow(long Id, int Sequence, string Type, string? SourceKind,
         string? SourceRoot, string? SourcePath, string? DestRoot, string? DestPath,
         long ExpectedSize, string? ExpectedHash, string Status, string? Error);
 
@@ -273,7 +339,7 @@ public sealed class Database : IDisposable
             query = query.Where(x => x.Status == "Conflict" || x.Status == "Failed" || x.Status == "Skipped");
 
         return query.OrderBy(x => x.Sequence)
-            .Select(x => new PlanOperationRow(x.Id, x.Sequence, x.Type, x.SourceRootId, x.SourcePath,
+            .Select(x => new PlanOperationRow(x.Id, x.Sequence, x.Type, x.SourceKind, x.SourceRootId, x.SourcePath,
                 x.DestinationRootId, x.DestinationPath, x.ExpectedSize, x.ExpectedHash, x.Status, x.Error))
             .ToList();
     }

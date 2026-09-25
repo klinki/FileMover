@@ -1,4 +1,5 @@
 using BackupNormalizer;
+using Microsoft.Data.Sqlite;
 
 namespace BackupNormalizer.Tests;
 
@@ -57,17 +58,6 @@ public sealed class MatcherTests
         Assert.Equal(2, groups.Count);
     }
 
-    [Fact]
-    public void Source_Selection_Prefers_Canonical_Role()
-    {
-        var cands = new List<PhysicalFile>
-        {
-            new("archive", "x", 10, "h", "", "/very/long/archive/path/x"),
-            new("nas", "x", 10, "h", "", "/s"),
-        };
-        var roles = new Dictionary<string, string> { ["archive"] = "Archive", ["nas"] = "Canonical" };
-        Assert.Equal("nas", CopyCost.PickSource(cands, roles)!.RootId);
-    }
 }
 
 public sealed class HashCacheTests : IDisposable
@@ -83,7 +73,7 @@ public sealed class HashCacheTests : IDisposable
         var dataDir = Path.Combine(_dir, "data"); Directory.CreateDirectory(dataDir);
         File.WriteAllText(Path.Combine(dataDir, "a.txt"), "hello");
         using var db = new Database(_db);
-        db.UpsertRoot(new StorageRootRow("r", "r", dataDir, "Backup", true, "fs", "unknown", Database.UtcNow()));
+        db.UpsertRoot(new StorageRootRow("r", "r", dataDir, true, "fs", "unknown", Database.UtcNow()));
         var sc = new Scanner(db);
         sc.ScanRoot("r");
         var r1 = sc.HashNeeded("r", true, 1);
@@ -91,5 +81,32 @@ public sealed class HashCacheTests : IDisposable
         var r2 = sc.HashNeeded("r", false, 1);
         Assert.Equal(0, r2.hashed);
         Assert.Equal(1, r2.skipped);
+    }
+}
+
+public sealed class SchemaCompatibilityTests
+{
+    [Fact]
+    public void Old_Role_Schema_Is_Rejected_Without_Modification()
+    {
+        var path = Path.Combine(Path.GetTempPath(), "bn-old-" + Guid.NewGuid().ToString("N") + ".db");
+        try
+        {
+            using (var connection = new SqliteConnection($"Data Source={path}"))
+            {
+                connection.Open();
+                using var command = connection.CreateCommand();
+                command.CommandText = "CREATE TABLE StorageRoot (Id TEXT PRIMARY KEY, Role TEXT);";
+                command.ExecuteNonQuery();
+            }
+            var error = Assert.Throws<InvalidOperationException>(() => new Database(path));
+            Assert.Contains("previous pre-release schema", error.Message);
+            using var reopened = new SqliteConnection($"Data Source={path}");
+            reopened.Open();
+            using var check = reopened.CreateCommand();
+            check.CommandText = "SELECT COUNT(*) FROM sqlite_master WHERE name = '__EFMigrationsHistory'";
+            Assert.Equal(0L, check.ExecuteScalar());
+        }
+        finally { try { File.Delete(path); } catch { } }
     }
 }

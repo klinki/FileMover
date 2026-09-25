@@ -300,7 +300,7 @@ public sealed partial class MainViewModel : ViewModelBase
         {
             if (_stagedCore.Count == 0) { StatusMessage = "Nothing to save: stage operations first (F5/F6/F7/F8)."; return; }
             if (string.IsNullOrWhiteSpace(PlanId)) { StatusMessage = "Plan ID is required."; return; }
-            var doc = BackupNormalizer.PlanStaging.BuildPlanDoc(PlanId.Trim(), RootId.Trim(), _stagedCore);
+            var doc = BackupNormalizer.PlanStaging.BuildPlanDoc(PlanId.Trim(), RootId.Trim(), BasePath, _stagedCore);
             File.WriteAllText(JsonPath, BackupNormalizer.PlanStaging.ToJson(doc));
             StatusMessage = $"Saved plan {doc.PlanId} ({doc.Operations.Count} ops) to {JsonPath}. Execute later with: plan import + execute.";
         }
@@ -313,7 +313,7 @@ public sealed partial class MainViewModel : ViewModelBase
         try
         {
             if (_stagedCore.Count == 0) { StatusMessage = "Nothing to write: stage operations first."; return; }
-            var doc = BackupNormalizer.PlanStaging.BuildPlanDoc(PlanId.Trim(), RootId.Trim(), _stagedCore);
+            var doc = BackupNormalizer.PlanStaging.BuildPlanDoc(PlanId.Trim(), RootId.Trim(), BasePath, _stagedCore);
             using var db = new BackupNormalizer.Database(DbPath);
             BackupNormalizer.PlanStaging.WriteToDatabase(db, doc, RootId.Trim(), BasePath);
             StatusMessage = $"Wrote plan {doc.PlanId} ({doc.Operations.Count} ops) into {DbPath}. Run: execute {doc.PlanId} --db {DbPath}.";

@@ -5,7 +5,6 @@ public sealed class StorageRootEntity
     public string Id { get; set; } = string.Empty;
     public string Name { get; set; } = string.Empty;
     public string Path { get; set; } = string.Empty;
-    public string Role { get; set; } = string.Empty;
     public bool Writable { get; set; }
     public string FileSystemId { get; set; } = string.Empty;
     public string CaseSensitivity { get; set; } = string.Empty;
@@ -47,20 +46,15 @@ public sealed class FileHashEntity
     public string State { get; set; } = string.Empty;
 }
 
-public sealed class CanonicalEntryEntity
-{
-    public long Id { get; set; }
-    public string RelativePath { get; set; } = string.Empty;
-    public long Size { get; set; }
-    public string? ExpectedHash { get; set; }
-    public long? SourceFileEntryId { get; set; }
-}
-
 public sealed class PlanEntity
 {
     public string Id { get; set; } = string.Empty;
     public string CreatedUtc { get; set; } = string.Empty;
-    public string CanonicalRootId { get; set; } = string.Empty;
+    public string SourceDatabasePath { get; set; } = string.Empty;
+    public string SourceRootId { get; set; } = string.Empty;
+    public string SourceRootPath { get; set; } = string.Empty;
+    public string TargetRootId { get; set; } = string.Empty;
+    public string TargetRootPath { get; set; } = string.Empty;
     public string Status { get; set; } = string.Empty;
     public long EstimatedBytesCopied { get; set; }
 }
@@ -71,6 +65,7 @@ public sealed class PlanOperationEntity
     public string PlanId { get; set; } = string.Empty;
     public int Sequence { get; set; }
     public string Type { get; set; } = string.Empty;
+    public string? SourceKind { get; set; }
     public string? SourceRootId { get; set; }
     public string? SourcePath { get; set; }
     public string? DestinationRootId { get; set; }

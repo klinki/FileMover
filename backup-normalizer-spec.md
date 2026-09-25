@@ -1,5 +1,7 @@
 # Backup Normalizer — Implementation Specification
 
+This is the original design specification, retained for history. Its permanent root roles, central inventory imports, and command examples do not describe the current application. Use the [README](README.md) for commands and the [approved per-drive design](docs/features/per-drive-root-comparison/implementation-plan.md) for the current source and target model.
+
 ## 1. Purpose
 
 Backup Normalizer is a cross-platform .NET application for reconciling and normalizing file trees that are spread across multiple disks or storage devices.

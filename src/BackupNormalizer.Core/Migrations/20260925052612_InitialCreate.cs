@@ -11,22 +11,6 @@ namespace BackupNormalizer.Core.Migrations
         protected override void Up(MigrationBuilder migrationBuilder)
         {
             migrationBuilder.CreateTable(
-                name: "CanonicalEntry",
-                columns: table => new
-                {
-                    Id = table.Column<long>(type: "INTEGER", nullable: false)
-                        .Annotation("Sqlite:Autoincrement", true),
-                    RelativePath = table.Column<string>(type: "TEXT", nullable: false),
-                    Size = table.Column<long>(type: "INTEGER", nullable: false),
-                    ExpectedHash = table.Column<string>(type: "TEXT", nullable: true),
-                    SourceFileEntryId = table.Column<long>(type: "INTEGER", nullable: true)
-                },
-                constraints: table =>
-                {
-                    table.PrimaryKey("PK_CanonicalEntry", x => x.Id);
-                });
-
-            migrationBuilder.CreateTable(
                 name: "ExecutionLog",
                 columns: table => new
                 {
@@ -48,7 +32,11 @@ namespace BackupNormalizer.Core.Migrations
                 {
                     Id = table.Column<string>(type: "TEXT", nullable: false),
                     CreatedUtc = table.Column<string>(type: "TEXT", nullable: false),
-                    CanonicalRootId = table.Column<string>(type: "TEXT", nullable: false),
+                    SourceDatabasePath = table.Column<string>(type: "TEXT", nullable: false),
+                    SourceRootId = table.Column<string>(type: "TEXT", nullable: false),
+                    SourceRootPath = table.Column<string>(type: "TEXT", nullable: false),
+                    TargetRootId = table.Column<string>(type: "TEXT", nullable: false),
+                    TargetRootPath = table.Column<string>(type: "TEXT", nullable: false),
                     Status = table.Column<string>(type: "TEXT", nullable: false, defaultValue: "Planned"),
                     EstimatedBytesCopied = table.Column<long>(type: "INTEGER", nullable: false, defaultValue: 0L)
                 },
@@ -64,7 +52,6 @@ namespace BackupNormalizer.Core.Migrations
                     Id = table.Column<string>(type: "TEXT", nullable: false),
                     Name = table.Column<string>(type: "TEXT", nullable: false),
                     Path = table.Column<string>(type: "TEXT", nullable: false),
-                    Role = table.Column<string>(type: "TEXT", nullable: false, defaultValue: "Unknown"),
                     Writable = table.Column<bool>(type: "INTEGER", nullable: false, defaultValue: true),
                     FileSystemId = table.Column<string>(type: "TEXT", nullable: false, defaultValue: "unknown"),
                     CaseSensitivity = table.Column<string>(type: "TEXT", nullable: false, defaultValue: "unknown"),
@@ -84,6 +71,7 @@ namespace BackupNormalizer.Core.Migrations
                     PlanId = table.Column<string>(type: "TEXT", nullable: false),
                     Sequence = table.Column<int>(type: "INTEGER", nullable: false),
                     Type = table.Column<string>(type: "TEXT", nullable: false),
+                    SourceKind = table.Column<string>(type: "TEXT", nullable: true),
                     SourceRootId = table.Column<string>(type: "TEXT", nullable: true),
                     SourcePath = table.Column<string>(type: "TEXT", nullable: true),
                     DestinationRootId = table.Column<string>(type: "TEXT", nullable: true),
@@ -207,9 +195,6 @@ namespace BackupNormalizer.Core.Migrations
         /// <inheritdoc />
         protected override void Down(MigrationBuilder migrationBuilder)
         {
-            migrationBuilder.DropTable(
-                name: "CanonicalEntry");
-
             migrationBuilder.DropTable(
                 name: "ExecutionLog");
 

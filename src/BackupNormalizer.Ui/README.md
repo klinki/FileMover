@@ -19,7 +19,7 @@ scanner, see the repo README).
 1. **Set the base.** `Base (drive-local)` is the logical root everything is
    staged against (e.g. `/Volumes/D1`). Press **Apply**. All staged paths
    are stored relative to the `Root` id (default `disk`), so the same plan
-   can later run on another drive via the CLI's `--map-root`.
+   can later run on another drive via the CLI's `--target-path`.
 2. **Browse.** Two panels, `..` goes up, double-click enters folders.
    Toolbar icons: refresh active panel, swap panels. Double-clicking the
    divider restores 50/50.
@@ -42,9 +42,9 @@ scanner, see the repo README).
    `ui-plan.db`.
 6. **Execute with the CLI** (the only thing that modifies files):
    ```bash
-   dotnet run --project src/BackupNormalizer -- plan import ./ui-plan.json --db ./ui-plan.db --root-path /Volumes/D1
-   dotnet run --project src/BackupNormalizer -- execute <plan-id> --db ./ui-plan.db --map-root disk=/Volumes/D1
-   dotnet run --project src/BackupNormalizer -- verify <plan-id> --db ./ui-plan.db --map-root disk=/Volumes/D1
+   dotnet run --project src/BackupNormalizer -- plan import ./ui-plan.json --db ./ui-plan.db --target-path /Volumes/D1
+   dotnet run --project src/BackupNormalizer -- execute <plan-id> --db ./ui-plan.db --target-path /Volumes/D1
+   dotnet run --project src/BackupNormalizer -- verify <plan-id> --db ./ui-plan.db --target-path /Volumes/D1
    ```
    The executor re-validates every size/hash before acting, refuses to
    overwrite different content, and moves trash to
@@ -52,7 +52,7 @@ scanner, see the repo README).
 
 ## Notes
 
-- Plans are immutable and drive-local; replaying on an identical drive is
-  just `--map-root`, drifted content fails safely as a conflict.
+- Plans are immutable and drive-local; replaying on an identical drive uses
+  `--target-path`. Drifted content fails safely as a conflict.
 - F7 folders, marks and cursor are UI-only state; rescans/refreshes rebuild
   listings from disk plus staged virtuals.

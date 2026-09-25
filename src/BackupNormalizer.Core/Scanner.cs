@@ -17,19 +17,24 @@ public sealed class Scanner
     public (int scanned, int errors) ScanRoot(string rootId)
     {
         var root = _db.GetRoot(rootId) ?? throw new InvalidOperationException($"unknown root '{rootId}'");
-        if (!Directory.Exists(root.Path))
-            throw new DirectoryNotFoundException($"root path not found: {root.Path}");
         long scanId = _db.BeginScan(rootId);
         int scanned = 0, errors = 0;
         try
         {
-            foreach (var file in EnumerateFilesSafe(root.Path))
+            if (!Directory.Exists(root.Path))
+                throw new DirectoryNotFoundException($"root path not found: {root.Path}");
+            foreach (var scanEntry in EnumerateForScan(root.Path))
             {
+                if (scanEntry.Error != null)
+                {
+                    errors++;
+                    continue;
+                }
+                var file = scanEntry.Path!;
                 try
                 {
                     string rel;
-                    try { rel = Paths.GetRelative(root.Path, file); }
-                    catch { continue; }
+                    rel = Paths.GetRelative(root.Path, file);
                     rel = Paths.NormalizeRelative(rel);
                     var fi = new FileInfo(file);
                     // ReparsePoint already filtered, but double-check
@@ -56,23 +61,21 @@ public sealed class Scanner
                     }
                     scanned++;
                 }
-                catch (UnauthorizedAccessException ex)
+                catch (Exception ex) when (ex is UnauthorizedAccessException or IOException or ArgumentException)
                 {
                     errors++;
-                    TryRecordError(rootId, file, root.Path, scanId, "AccessDenied", ex.Message);
-                }
-                catch (FileNotFoundException ex)
-                {
-                    errors++;
-                    TryRecordError(rootId, file, root.Path, scanId, "NotFound", ex.Message);
-                }
-                catch (IOException ex)
-                {
-                    errors++;
-                    TryRecordError(rootId, file, root.Path, scanId, "IoError", ex.Message);
+                    TryRecordError(rootId, file, root.Path, scanId, "ScanError", ex.Message);
                 }
             }
-            _db.FinishScan(scanId, "Completed");
+            if (errors == 0)
+            {
+                _db.MarkUnseenFilesMissing(rootId, scanId);
+                _db.FinishScan(scanId, "Completed");
+            }
+            else
+            {
+                _db.FinishScan(scanId, "Incomplete");
+            }
             return (scanned, errors);
         }
         catch
@@ -91,6 +94,38 @@ public sealed class Scanner
                 Database.UtcNow(), null, null, scanId, status, msg));
         }
         catch { }
+    }
+
+    private sealed record ScanEntry(string? Path, string? Error);
+
+    private static IEnumerable<ScanEntry> EnumerateForScan(string root)
+    {
+        var stack = new Stack<string>();
+        stack.Push(root);
+        while (stack.Count > 0)
+        {
+            var dir = stack.Pop();
+            string[]? entries = null;
+            string? issue = null;
+            try { entries = Directory.GetFileSystemEntries(dir); }
+            catch (Exception ex) when (ex is UnauthorizedAccessException or IOException) { issue = ex.Message; }
+            if (issue != null) { yield return new ScanEntry(dir, issue); continue; }
+            foreach (var path in entries!)
+            {
+                FileAttributes? attr = null;
+                issue = null;
+                try { attr = File.GetAttributes(path); }
+                catch (Exception ex) when (ex is UnauthorizedAccessException or IOException) { issue = ex.Message; }
+                if (issue != null) { yield return new ScanEntry(path, issue); continue; }
+                if (attr!.Value.HasFlag(FileAttributes.ReparsePoint))
+                {
+                    if (!attr.Value.HasFlag(FileAttributes.Directory)) yield return new ScanEntry(path, null);
+                    continue;
+                }
+                if (attr.Value.HasFlag(FileAttributes.Directory)) stack.Push(path);
+                else yield return new ScanEntry(path, null);
+            }
+        }
     }
 
     public static IEnumerable<string> EnumerateFilesSafe(string root)

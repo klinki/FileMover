@@ -26,7 +26,7 @@ public sealed class UiStagingTests : IDisposable
         Assert.False(File.Exists(Path.Combine(baseDir, "New", "a.txt"))); // plan-only
         var staged = PlanStaging.StageMove(baseDir, Path.Combine(baseDir, "Old", "a.txt"), Path.Combine(baseDir, "New"));
         Assert.Contains(staged, s => s.Type == "MOVE");
-        var doc = PlanStaging.BuildPlanDoc("ui-001", "disk", staged);
+        var doc = PlanStaging.BuildPlanDoc("ui-001", "disk", baseDir, staged);
         string json = PlanStaging.ToJson(doc);
         Assert.Contains("MOVE", json);
 
@@ -38,7 +38,7 @@ public sealed class UiStagingTests : IDisposable
             Assert.True(db.PlanExists("ui-001"));
         using (var db = new Database(dbp))
         {
-            var sum = new Executor(db).Execute("ui-001", new Dictionary<string, string> { ["disk"] = baseDir });
+            var sum = new Executor(db).Execute("ui-001", targetPathOverride: baseDir);
             Assert.Equal(0, sum.Failed);
             Assert.Equal(0, sum.Conflicts);
         }
@@ -54,7 +54,7 @@ public sealed class UiStagingTests : IDisposable
         W(a, "Old/a.txt", "same-bytes");
         Directory.CreateDirectory(Path.Combine(a, "New"));
         var staged = PlanStaging.StageMove(a, Path.Combine(a, "Old", "a.txt"), Path.Combine(a, "New"));
-        var doc = PlanStaging.BuildPlanDoc("ui-remap", "disk", staged);
+        var doc = PlanStaging.BuildPlanDoc("ui-remap", "disk", a, staged);
         string jsonPath = Path.Combine(_dir, "ui-remap.json");
         File.WriteAllText(jsonPath, PlanStaging.ToJson(doc));
 
@@ -70,7 +70,7 @@ public sealed class UiStagingTests : IDisposable
             PlanStaging.WriteToDatabase(db, imported, "disk", b);
         using (var db = new Database(dbp))
         {
-            var sum = new Executor(db).Execute("ui-remap", new Dictionary<string, string> { ["disk"] = b });
+            var sum = new Executor(db).Execute("ui-remap", targetPathOverride: b);
             Assert.Equal(0, sum.Failed);
         }
         Assert.True(File.Exists(Path.Combine(b, "New", "a.txt")));
@@ -83,7 +83,7 @@ public sealed class UiStagingTests : IDisposable
         W(a, "Old/a.txt", "good");
         Directory.CreateDirectory(Path.Combine(a, "New"));
         var staged = PlanStaging.StageMove(a, Path.Combine(a, "Old", "a.txt"), Path.Combine(a, "New"));
-        var doc = PlanStaging.BuildPlanDoc("ui-stale", "disk", staged);
+        var doc = PlanStaging.BuildPlanDoc("ui-stale", "disk", a, staged);
 
         var b = Path.Combine(_dir, "B2"); Directory.CreateDirectory(b);
         W(b, "Old/a.txt", "DIFFERENT-bytes");
@@ -93,7 +93,7 @@ public sealed class UiStagingTests : IDisposable
             PlanStaging.WriteToDatabase(db, doc, "disk", b);
         using (var db = new Database(dbp))
         {
-            var sum = new Executor(db).Execute("ui-stale", new Dictionary<string, string> { ["disk"] = b });
+            var sum = new Executor(db).Execute("ui-stale", targetPathOverride: b);
             Assert.True(sum.Failed + sum.Conflicts > 0);
         }
         // Drifted file must NOT have been moved over

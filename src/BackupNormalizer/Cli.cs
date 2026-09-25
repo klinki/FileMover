@@ -21,7 +21,6 @@ public static class Cli
                 "execute" => Execute(args[1..]),
                 "verify" => Verify(args[1..]),
                 "purge" => Purge(args[1..]),
-                "inventory" => Inv(args[1..]),
                 "diff" => Diff(args[1..]),
                 "db-test" => DbTest(args[1..]),
                 "scan-test" => ScanTest(args[1..]),
@@ -38,26 +37,24 @@ public static class Cli
     private static int Help()
     {
         Console.WriteLine("""
-            backup-normalizer 0.1.0 — safe file-tree normalization (§26 + 2-DB extension)
-            Usage: BackupNormalizer <command> [options]
+            backup-normalizer 0.1.0 — per-drive source/target comparison
+              Usage: BackupNormalizer <command> [options]
               init [--db PATH] [--config PATH]
-              root add <id> <path> [--role R] [--name N] [--writable true|false] [--db PATH]
+              root add <id> <path> [--name N] [--writable true|false] [--db PATH]
               root list [--db PATH]
               scan <rootId|--all> [--db PATH]
               hash --needed [--db PATH] [--parallelism N] | hash <rootId> --all [--db PATH]
-              plan --canonical <rootId> [--db PATH] [--plan ID]
-              plan --canonical-db C.db --target-db T.db [--canonical-root R] --target-root R [--plan ID] [--out-db T.db]
+              plan --source-db S.db --source-root R --target-db T.db --target-root R [--plan ID]
               plan show <plan-id> [--db PATH] | plan export <plan-id> [--format json] [--output F] [--db PATH]
-              plan import <plan.json> [--db PATH] [--root-path ABS] [--role R]
+              plan import <plan.json> [--db PATH] [--target-path ABS]
               plan conflicts <plan-id> [--db PATH]
-              execute <plan-id> [--db PATH] [--map-root id=path ...] [--resume] [--stop-on-error] [--yes]
-              verify <plan-id> [--db PATH] [--map-root id=path ...]
+              execute <plan-id> [--db PATH] [--source-path ABS] [--target-path ABS] [--resume] [--stop-on-error] [--yes]
+              verify <plan-id> [--db PATH] [--source-path ABS] [--target-path ABS]
               purge --older-than 30d --yes [--db PATH] [--path ROOTPATH]
-              inventory export <rootId> --output F [--db PATH] | inventory import <file> [--db PATH]
-              diff --old A.db --new B.db
+              diff --source-db S.db --source-root R --target-db T.db --target-root R
               db-test [--db PATH] | scan-test <path> | --version
-            2-DB mode: scan each drive to its own .db, then diff/plan with --old/--canonical-db + --new/--target-db,
-                       then execute with --map-root to migrate the plan to other drives.
+            Each database can inventory one drive with multiple named roots. Select the source and target
+            for each diff or plan. Automatic plans require fully scanned, disjoint roots.
             """);
         return 0;
     }
@@ -73,18 +70,6 @@ public static class Cli
         return env ?? fallback;
     }
     private static bool Has(string[] a, string name) => a.Contains(name);
-    private static Dictionary<string, string> MapRoots(string[] a)
-    {
-        var d = new Dictionary<string, string>();
-        for (int i = 0; i < a.Length - 1; i++)
-            if (a[i] == "--map-root")
-            {
-                var kv = a[i + 1].Split('=', 2);
-                if (kv.Length == 2) d[kv[0]] = kv[1];
-            }
-        return d;
-    }
-
     private static int Init(string[] a)
     {
         string db = Opt(a, "--db", AppConfig.Load(Opt(a, "--config", AppConfig.DefaultPath)).Database);
@@ -103,21 +88,21 @@ public static class Cli
         if (a[0] == "list")
         {
             using var d = new Database(db);
-            foreach (var r in d.ListRoots()) Console.WriteLine($"{r.Id}\t{r.Name}\t{r.Path}\t{r.Role}\twritable={r.Writable}");
+            foreach (var r in d.ListRoots()) Console.WriteLine($"{r.Id}\t{r.Name}\t{r.Path}\twritable={r.Writable}");
             return 0;
         }
         if (a[0] == "add" && a.Length >= 3)
         {
             string id = a[1], path = Path.GetFullPath(a[2]);
-            string role = Opt(a, "--role", "Unknown"), name = Opt(a, "--name", id);
+            string name = Opt(a, "--name", id);
             bool writable = !string.Equals(Opt(a, "--writable", "true"), "false", StringComparison.OrdinalIgnoreCase);
             if (!Directory.Exists(path)) return Fail($"path not found: {path}");
             using var d = new Database(db);
-            d.UpsertRoot(new StorageRootRow(id, name, path, role, writable, Paths.GetFileSystemId(path), Paths.DetectCaseSensitivity(path), Database.UtcNow()));
+            d.UpsertRoot(new StorageRootRow(id, name, path, writable, Paths.GetFileSystemId(path), Paths.DetectCaseSensitivity(path), Database.UtcNow()));
             Console.WriteLine($"root '{id}' -> {path}");
             return 0;
         }
-        return Fail("root add <id> <path> [--role R] | root list");
+        return Fail("root add <id> <path> [--name N] [--writable true|false] | root list");
     }
 
     private static int Scan(string[] a)
@@ -127,18 +112,20 @@ public static class Cli
         string algo = Opt(a, "--hash-algo", AppConfig.Load(Opt(a, "--config", AppConfig.DefaultPath)).HashAlgorithm);
         using var d = new Database(db);
         var sc = new Scanner(d, algo);
+        int totalErrors = 0;
         if (a[0] == "--all")
         {
             foreach (var r in d.ListRoots())
             {
                 var (s, e) = sc.ScanRoot(r.Id);
-                Console.WriteLine($"scan {r.Id}: {s} files, {e} errors");
+                Console.WriteLine($"scan {r.Id}: {s} files, {e} errors ({(e == 0 ? "complete" : "incomplete")})");
+                totalErrors += e;
             }
-            return 0;
+            return totalErrors == 0 ? 0 : 3;
         }
         var (scanned, errors) = sc.ScanRoot(a[0]);
-        Console.WriteLine($"scan {a[0]}: {scanned} files, {errors} errors");
-        return 0;
+        Console.WriteLine($"scan {a[0]}: {scanned} files, {errors} errors ({(errors == 0 ? "complete" : "incomplete")})");
+        return errors == 0 ? 0 : 3;
     }
 
     private static int Hash(string[] a)
@@ -165,7 +152,9 @@ public static class Cli
             using var d = new Database(db);
             var doc = new Planner(d).ExportPlan(a[1]);
             Console.WriteLine($"Plan {doc.PlanId} created {doc.CreatedUtc} estBytes={doc.EstimatedBytesCopied}");
-            foreach (var o in doc.Operations) Console.WriteLine($"  {o.Id:D4} {o.Type,-7} {o.SourceRoot}:{o.SourcePath} -> {o.DestinationRoot}:{o.DestinationPath} size={o.ExpectedSize}");
+            Console.WriteLine($"Source: {doc.SourceRoot} at {doc.SourcePath}");
+            Console.WriteLine($"Target: {doc.TargetRoot} at {doc.TargetPath}");
+            foreach (var o in doc.Operations) Console.WriteLine($"  {o.Id:D4} {o.Type,-7} {o.SourceKind}:{o.SourceRoot}:{o.SourcePath} -> {o.DestinationRoot}:{o.DestinationPath} size={o.ExpectedSize}");
             return 0;
         }
         if (a[0] == "export" && a.Length >= 2)
@@ -195,49 +184,27 @@ public static class Cli
         {
             // UI-generated plan JSON -> DB, so the same executor can run it.
             string db = Opt(a, "--db", AppConfig.Load(Opt(a, "--config", AppConfig.DefaultPath)).Database);
-            string rootPath = Opt(a, "--root-path", "");
-            string role = Opt(a, "--role", "Backup");
+            string targetPath = Opt(a, "--target-path", "");
             var doc = PlanStaging.ImportJson(a[1]);
-            string rootId = doc.Operations.FirstOrDefault(o => o.SourceRoot != null)?.SourceRoot
-                ?? doc.Operations.FirstOrDefault(o => o.DestinationRoot != null)?.DestinationRoot ?? "disk";
-            if (string.IsNullOrEmpty(rootPath))
-            {
-                using var probe = new Database(db);
-                var existing = probe.GetRoot(rootId);
-                if (existing == null)
-                    return Fail($"plan import needs --root-path <abs-path> for root '{rootId}' (or register the root first)");
-                rootPath = existing.Path;
-                role = existing.Role;
-            }
             using var d = new Database(db);
-            PlanStaging.WriteToDatabase(d, doc, rootId, rootPath, role);
+            string rootPath = targetPath;
+            if (string.IsNullOrEmpty(rootPath)) rootPath = d.GetRoot(doc.TargetRoot)?.Path ?? doc.TargetPath;
+            PlanStaging.WriteToDatabase(d, doc, doc.TargetRoot, rootPath);
             Console.WriteLine($"imported plan {doc.PlanId} ({doc.Operations.Count} ops) into {db}");
             return 0;
         }
-        // two-DB mode?
-        if (Has(a, "--canonical-db") || Has(a, "--target-db") || Has(a, "--old"))
-        {
-            string cdb = Has(a, "--canonical-db") ? Opt(a, "--canonical-db", "") : Opt(a, "--old", "");
-            string tdb = Has(a, "--target-db") ? Opt(a, "--target-db", "") : Opt(a, "--new", Opt(a, "--target-db", ""));
-            string? canonRoot = Has(a, "--canonical-root") ? Opt(a, "--canonical-root", "") : null;
-            string targetRoot = Opt(a, "--target-root", "");
-            string planId = Opt(a, "--plan", DateTime.UtcNow.ToString("yyyy-MM-dd-HHmmss"));
-            if (string.IsNullOrEmpty(cdb) || string.IsNullOrEmpty(tdb) || string.IsNullOrEmpty(targetRoot))
-                return Fail("two-DB plan needs --canonical-db/--old, --target-db/--new and --target-root");
-            using var cd = new Database(cdb);
-            using var td = new Database(tdb);
-            var res = new Planner(td).PlanFromSnapshot(cd, string.IsNullOrEmpty(canonRoot) ? null : canonRoot, targetRoot, planId);
-            PrintPlan(res);
-            return 0;
-        }
-        // single-DB (spec default): plan --canonical <rootId>
-        string sdb = Opt(a, "--db", AppConfig.Load(Opt(a, "--config", AppConfig.DefaultPath)).Database);
-        string canon = Opt(a, "--canonical", "");
-        if (string.IsNullOrEmpty(canon)) return Fail("plan --canonical <rootId> [--plan ID] [--db PATH]");
-        string pid = Opt(a, "--plan", DateTime.UtcNow.ToString("yyyy-MM-dd-HHmmss"));
-        using var sdd = new Database(sdb);
-        var r2 = new Planner(sdd).PlanSingleDb(canon, pid);
-        PrintPlan(r2);
+        string sourceDbPath = Opt(a, "--source-db", "");
+        string sourceRoot = Opt(a, "--source-root", "");
+        string targetDbPath = Opt(a, "--target-db", "");
+        string targetRoot = Opt(a, "--target-root", "");
+        if (string.IsNullOrEmpty(sourceDbPath) || string.IsNullOrEmpty(sourceRoot)
+            || string.IsNullOrEmpty(targetDbPath) || string.IsNullOrEmpty(targetRoot))
+            return Fail("plan requires --source-db S.db --source-root R --target-db T.db --target-root R");
+        string planId = Opt(a, "--plan", DateTime.UtcNow.ToString("yyyy-MM-dd-HHmmss"));
+        using var td = new Database(targetDbPath);
+        using var sd = Paths.PathEquals(sourceDbPath, targetDbPath) ? null : Database.OpenReadOnly(sourceDbPath);
+        var result = new Planner(td).PlanFromRoots(sd ?? td, sourceRoot, targetRoot, planId);
+        PrintPlan(result);
         return 0;
     }
 
@@ -247,14 +214,15 @@ public static class Cli
         Console.WriteLine($"KEEP {r.Keep}  MOVE {r.Move}  COPY {r.Copy}  TRASH {r.Trash}  MKDIR {r.Mkdir}");
         Console.WriteLine($"Bytes requiring actual copying: {r.BytesToCopy}");
         Console.WriteLine($"Bytes avoided through moves: {r.BytesAvoided}");
-        Console.WriteLine("No files were modified (dry-run, §19).");
+        Console.WriteLine("No files were modified.");
     }
 
     private static int Execute(string[] a)
     {
         if (a.Length == 0) return Fail("execute <plan-id>");
         string db = Opt(a, "--db", AppConfig.Load(Opt(a, "--config", AppConfig.DefaultPath)).Database);
-        var map = MapRoots(a);
+        string? sourcePath = Has(a, "--source-path") ? Opt(a, "--source-path", "") : null;
+        string? targetPath = Has(a, "--target-path") ? Opt(a, "--target-path", "") : null;
         using var d = new Database(db);
         if (!d.PlanExists(a[0])) return Fail($"unknown plan '{a[0]}'");
         if (!Has(a, "--yes"))
@@ -273,7 +241,7 @@ public static class Cli
                 return 2;
             }
         }
-        var sum = new Executor(d).Execute(a[0], map, Has(a, "--resume"), Has(a, "--stop-on-error"));
+        var sum = new Executor(d).Execute(a[0], sourcePath, targetPath, Has(a, "--resume"), Has(a, "--stop-on-error"));
         Console.WriteLine($"execute {a[0]}: completed={sum.Completed} failed={sum.Failed} conflicts={sum.Conflicts}");
         return sum.Failed == 0 && sum.Conflicts == 0 ? 0 : 3;
     }
@@ -296,10 +264,13 @@ public static class Cli
     {
         if (a.Length == 0) return Fail("verify <plan-id>");
         string db = Opt(a, "--db", AppConfig.Load(Opt(a, "--config", AppConfig.DefaultPath)).Database);
-        var map = MapRoots(a);
+        string? sourcePathOverride = Has(a, "--source-path") ? Opt(a, "--source-path", "") : null;
+        string? targetPathOverride = Has(a, "--target-path") ? Opt(a, "--target-path", "") : null;
         using var d = new Database(db);
-        // Verify = re-run VERIFY ops + destination checks via executor path: execute only VERIFY by direct check
-        var roots = d.ListRoots().ToDictionary(r => r.Id);
+        var plan = d.Context.Plans.SingleOrDefault(item => item.Id == a[0]);
+        if (plan == null) return Fail($"unknown plan '{a[0]}'");
+        string sourcePath = Path.GetFullPath(sourcePathOverride ?? plan.SourceRootPath);
+        string targetPath = Path.GetFullPath(targetPathOverride ?? plan.TargetRootPath);
         int ok = 0, bad = 0;
         var hasher = HasherFactory.Create(null);
         var operations = d.Context.PlanOperations
@@ -307,30 +278,34 @@ public static class Cli
             .Select(operation => new
             {
                 operation.Type,
+                operation.SourceKind,
+                operation.SourceRootId,
+                operation.SourcePath,
                 operation.DestinationRootId,
                 operation.DestinationPath,
                 operation.ExpectedSize,
                 operation.ExpectedHash,
             })
             .ToList();
+        if (operations.Any(operation => operation.SourceKind == "Source") && Paths.RootsOverlap(sourcePath, targetPath))
+            return Fail("source and target paths overlap; verification requires disjoint roots");
         foreach (var operation in operations)
         {
             string type = operation.Type;
             if (type is "KEEP" or "VERIFY" or "MOVE" or "COPY")
             {
-                string? dr = operation.DestinationRootId;
                 string? dp = operation.DestinationPath;
-                if (dr == null || dp == null) continue;
-                string basePath = map.TryGetValue(dr, out var ov) ? ov : roots.TryGetValue(dr, out var rr) ? rr.Path : "";
-                if (string.IsNullOrEmpty(basePath)) { bad++; continue; }
-                string abs = Paths.CombineRoot(basePath, dp);
-                if (!File.Exists(abs)) { Console.WriteLine($"MISSING {dr}:{dp}"); bad++; continue; }
+                if (operation.DestinationRootId != plan.TargetRootId || dp == null) continue;
+                string abs;
+                try { abs = Paths.CombineRoot(targetPath, dp); }
+                catch (InvalidOperationException) { Console.WriteLine($"INVALID-PATH {dp}"); bad++; continue; }
+                if (!File.Exists(abs)) { Console.WriteLine($"MISSING {plan.TargetRootId}:{dp}"); bad++; continue; }
                 long sz = operation.ExpectedSize;
                 string? eh = operation.ExpectedHash;
                 var fi = new FileInfo(abs);
-                if (sz != 0 && fi.Length != sz) { Console.WriteLine($"SIZE-MISMATCH {dr}:{dp}"); bad++; continue; }
+                if (sz != 0 && fi.Length != sz) { Console.WriteLine($"SIZE-MISMATCH {plan.TargetRootId}:{dp}"); bad++; continue; }
                 if (eh != null && !string.Equals(hasher.HashFile(abs, fi.Length), eh, StringComparison.OrdinalIgnoreCase))
-                { Console.WriteLine($"HASH-MISMATCH {dr}:{dp}"); bad++; continue; }
+                { Console.WriteLine($"HASH-MISMATCH {plan.TargetRootId}:{dp}"); bad++; continue; }
                 ok++;
             }
         }
@@ -372,27 +347,16 @@ public static class Cli
         return 0;
     }
 
-    private static int Inv(string[] a)
-    {
-        if (a.Length == 0) return Fail("inventory export|import");
-        string db = Opt(a, "--db", AppConfig.Load(Opt(a, "--config", AppConfig.DefaultPath)).Database);
-        if (a[0] == "export" && a.Length >= 2)
-        {
-            string outF = Opt(a, "--output", "");
-            if (string.IsNullOrEmpty(outF)) return Fail("inventory export <rootId> --output FILE");
-            Inventory.ExportRoot(db, a[1], outF);
-            return 0;
-        }
-        if (a[0] == "import" && a.Length >= 2) { Inventory.ImportFile(db, a[1]); return 0; }
-        return Fail("inventory export <rootId> --output F | inventory import <file>");
-    }
-
     private static int Diff(string[] a)
     {
-        string old = Opt(a, "--old", ""), nw = Opt(a, "--new", "");
-        if (string.IsNullOrEmpty(old) || string.IsNullOrEmpty(nw)) return Fail("diff --old A.db --new B.db");
-        var s = Inventory.Diff(old, nw);
-        Console.WriteLine($"only-in-old: {s.OnlyInOld}  only-in-new: {s.OnlyInNew}  changed: {s.Changed}  identical: {s.Identical}");
+        string sourceDb = Opt(a, "--source-db", ""), sourceRoot = Opt(a, "--source-root", "");
+        string targetDb = Opt(a, "--target-db", ""), targetRoot = Opt(a, "--target-root", "");
+        if (string.IsNullOrEmpty(sourceDb) || string.IsNullOrEmpty(sourceRoot)
+            || string.IsNullOrEmpty(targetDb) || string.IsNullOrEmpty(targetRoot))
+            return Fail("diff requires --source-db S.db --source-root R --target-db T.db --target-root R");
+        var s = Inventory.Diff(sourceDb, sourceRoot, targetDb, targetRoot);
+        Console.WriteLine($"source-only: {s.SourceOnly}  target-only: {s.TargetOnly}  changed: {s.Changed}  identical: {s.Identical}  unverified: {s.Unverified}");
+        Console.WriteLine($"scan status: source={s.SourceScanStatus ?? "never scanned"} target={s.TargetScanStatus ?? "never scanned"}");
         foreach (var l in s.Samples) Console.WriteLine("  " + l);
         return 0;
     }
@@ -404,7 +368,7 @@ public static class Cli
         try
         {
             using var d = new Database(tmp);
-            d.UpsertRoot(new StorageRootRow("t", "t", Path.GetTempPath(), "Temporary", true, "test", "unknown", Database.UtcNow()));
+            d.UpsertRoot(new StorageRootRow("t", "t", Path.GetTempPath(), true, "test", "unknown", Database.UtcNow()));
             long sid = d.BeginScan("t");
             d.UpsertFileEntry(new FileEntryRow(0, "t", "a.txt", "a.txt", 3, Database.UtcNow(), null, null, sid, "Ok", null));
             var got = d.ListFiles("t");
@@ -429,7 +393,7 @@ public static class Cli
         try
         {
             using var d = new Database(tmp);
-            d.UpsertRoot(new StorageRootRow("s", "s", Path.GetFullPath(p), "Unknown", false, Paths.GetFileSystemId(p), "unknown", Database.UtcNow()));
+            d.UpsertRoot(new StorageRootRow("s", "s", Path.GetFullPath(p), false, Paths.GetFileSystemId(p), "unknown", Database.UtcNow()));
             var sc = new Scanner(d);
             var (s, e) = sc.ScanRoot("s");
             Console.WriteLine($"scan-test: PASS ({s} files, {e} errors) on {p}");

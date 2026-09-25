@@ -5,126 +5,163 @@ namespace BackupNormalizer.Tests;
 public sealed class PlannerTests : IDisposable
 {
     private readonly string _dir = Path.Combine(Path.GetTempPath(), "bn-plan-" + Guid.NewGuid().ToString("N"));
-    private readonly string _db;
-    public PlannerTests() { Directory.CreateDirectory(_dir); _db = Path.Combine(_dir, "t.db"); }
+    public PlannerTests() => Directory.CreateDirectory(_dir);
     public void Dispose() { try { Directory.Delete(_dir, true); } catch { } }
 
-    private static void WriteFile(string root, string rel, string content)
+    private static void Write(string root, string relative, string contents)
     {
-        var abs = Path.Combine(root, rel.Replace('/', Path.DirectorySeparatorChar));
-        Directory.CreateDirectory(Path.GetDirectoryName(abs)!);
-        File.WriteAllText(abs, content);
+        var path = Paths.CombineRoot(root, relative);
+        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+        File.WriteAllText(path, contents);
     }
 
-    private void ScanAndHash(string dbPath, string rootId, string path)
+    private static Database CreateDatabase(string dbPath, string id, string root, bool hash = true)
     {
-        using var db = new Database(dbPath);
-        db.UpsertRoot(new StorageRootRow(rootId, rootId, path, rootId == "nas" ? "Canonical" : "Backup", true, "fs-" + rootId, "unknown", Database.UtcNow()));
-        var sc = new Scanner(db);
-        sc.ScanRoot(rootId);
-        sc.HashNeeded(rootId, true, 1);
-    }
-
-    [Fact]
-    public void Move_Detected_Zero_Copy_When_Same_Filesystem()
-    {
-        // Canonical wants Photos/a.jpg; disk has Old/a.jpg same bytes, same root FS
-        var nas = Path.Combine(_dir, "nas"); Directory.CreateDirectory(nas);
-        WriteFile(nas, "Old/a.jpg", "content-123");
-        // Desired layout lives in same root: create canonical snapshot by scanning, then move file to Old and rescan?
-        // Simpler: single-DB with canonical root containing desired path + another path duplicate.
-        WriteFile(nas, "Photos/a.jpg", "content-123");
-        // Remove desired to simulate "missing at desired, exists elsewhere"? Keep both then delete desired from FS but keep DB?
-        // Instead: build two-path scenario via DB manipulation is complex; test planner prefers MOVE over COPY:
-        using var db = new Database(_db);
-        db.UpsertRoot(new StorageRootRow("nas", "N", nas, "Canonical", true, "fs1", "unknown", Database.UtcNow()));
-        var sc = new Scanner(db);
-        sc.ScanRoot("nas");
-        sc.HashNeeded("nas", true, 1);
-        // Delete Photos/a.jpg from FS and rescan to leave only Old/a.jpg in DB? Then canonical provider = snapshot with Photos path.
-        File.Delete(Path.Combine(nas, "Photos", "a.jpg"));
-        // Build canonical DB snapshot containing desired layout
-        var canonDir = Path.Combine(_dir, "canon"); Directory.CreateDirectory(canonDir);
-        WriteFile(canonDir, "Photos/a.jpg", "content-123");
-        string cdb = Path.Combine(_dir, "c.db");
-        ScanAndHash(cdb, "nas", canonDir);
-        // Target DB currently has Old/a.jpg (plus stale Photos entry). Rescan target to drop stale? Our scanner doesn't prune; recreate target clean:
-        string tdb = Path.Combine(_dir, "t2.db");
-        var cleanTarget = Path.Combine(_dir, "target"); Directory.CreateDirectory(cleanTarget);
-        WriteFile(cleanTarget, "Old/a.jpg", "content-123");
-        ScanAndHash(tdb, "nas", cleanTarget);
-        using var td = new Database(tdb);
-        using var cd = new Database(cdb);
-        // Align FileSystemIds so MOVE is allowed
-        var res = new Planner(td).PlanFromSnapshot(cd, null, "nas", "p1");
-        Assert.Equal(1, res.Move);
-        Assert.Equal(0, res.Copy);
-        Assert.Equal(0, res.BytesToCopy);
-        Assert.True(res.BytesAvoided > 0);
+        var db = new Database(dbPath);
+        db.UpsertRoot(new StorageRootRow(id, id, root, true, "fs", "unknown", Database.UtcNow()));
+        var scanner = new Scanner(db);
+        Assert.Equal(0, scanner.ScanRoot(id).errors);
+        if (hash) scanner.HashNeeded(id, true, 1);
+        return db;
     }
 
     [Fact]
-    public void Copy_When_No_Same_Filesystem_Copy()
+    public void Duplicate_Desired_Content_Uses_One_Move_And_One_Copy()
     {
-        var cdir = Path.Combine(_dir, "c"); Directory.CreateDirectory(cdir);
-        WriteFile(cdir, "Movies/m.mkv", "movie-bytes");
-        string cdb = Path.Combine(_dir, "c2.db");
-        ScanAndHash(cdb, "disk1", cdir);
-        var tdir = Path.Combine(_dir, "t"); Directory.CreateDirectory(tdir);
-        string tdb = Path.Combine(_dir, "t3.db");
-        using (var tmp = new Database(tdb))
-            tmp.UpsertRoot(new StorageRootRow("nas", "N", tdir, "Canonical", true, "fs-other", "unknown", Database.UtcNow()));
-        using var td2 = new Database(tdb);
-        using var cd2 = new Database(cdb);
-        // target empty, canonical has file on different root id -> must COPY (source from canon snapshot unavailable at exec, but plan records COPY)
-        // Our planner tags canon sources as canon:disk1 so COPY is planned
-        var res = new Planner(td2).PlanFromSnapshot(cd2, null, "nas", "p-copy");
-        Assert.Equal(1, res.Copy);
+        var source = Path.Combine(_dir, "source"); Directory.CreateDirectory(source);
+        var target = Path.Combine(_dir, "target"); Directory.CreateDirectory(target);
+        Write(source, "new/a.txt", "same");
+        Write(source, "new/b.txt", "same");
+        Write(target, "old/a.txt", "same");
+        using var sd = CreateDatabase(Path.Combine(_dir, "s.db"), "disk", source);
+        using var td = CreateDatabase(Path.Combine(_dir, "t.db"), "disk", target);
+        var result = new Planner(td).PlanFromRoots(sd, "disk", "disk", "duplicates");
+        Assert.Equal(1, result.Move);
+        Assert.Equal(1, result.Copy);
+        Assert.Equal(0, result.Trash);
+        var ops = new Planner(td).ExportPlan("duplicates").Operations;
+        Assert.DoesNotContain(ops, op => op.Type == "TRASH" && op.SourcePath == "old/a.txt");
+        var execution = new Executor(td).Execute("duplicates");
+        Assert.Equal(0, execution.Failed + execution.Conflicts);
+        Assert.True(File.Exists(Path.Combine(target, "new", "a.txt")));
+        Assert.True(File.Exists(Path.Combine(target, "new", "b.txt")));
     }
 
     [Fact]
-    public void Duplicate_Requires_Full_Hash_Never_Size_Only()
+    public void Existing_Target_Copy_Supplies_Missing_Duplicate()
     {
-        var dir = Path.Combine(_dir, "dup"); Directory.CreateDirectory(dir);
-        WriteFile(dir, "keep/a.bin", "AAA");
-        WriteFile(dir, "extra/b.bin", "BBB"); // same size 3, different content
-        string dbp = Path.Combine(_dir, "dup.db");
-        ScanAndHash(dbp, "nas", dir);
-        using var db = new Database(dbp);
-        using var cd = new Database(Path.Combine(_dir, "canon-dup.db"));
-        // canonical snapshot: only keep/a.bin
-        var cdir = Path.Combine(_dir, "cdup"); Directory.CreateDirectory(cdir);
-        WriteFile(cdir, "keep/a.bin", "AAA");
-        ScanAndHash(cd.FilePath(dbp: Path.Combine(_dir, "canon-dup.db")), "nas", cdir);
-        using var cdd = new Database(Path.Combine(_dir, "canon-dup.db"));
-        var res = new Planner(db).PlanFromSnapshot(cdd, null, "nas", "p-dup");
-        var doc = new Planner(db).ExportPlan("p-dup");
-        // b.bin must NOT be trashed (different hash, no surviving identical copy)
-        Assert.DoesNotContain(doc.Operations, o => o.Type == "TRASH" && o.SourcePath == "extra/b.bin");
+        var source = Path.Combine(_dir, "source-duplicate"); Directory.CreateDirectory(source);
+        var target = Path.Combine(_dir, "target-duplicate"); Directory.CreateDirectory(target);
+        Write(source, "a.txt", "same");
+        Write(source, "z.txt", "same");
+        Write(target, "z.txt", "same");
+        using var sd = CreateDatabase(Path.Combine(_dir, "source-duplicate.db"), "r", source);
+        using var td = CreateDatabase(Path.Combine(_dir, "target-duplicate.db"), "r", target);
+        var result = new Planner(td).PlanFromRoots(sd, "r", "r", "local-copy");
+        Assert.Equal(1, result.Copy);
+        var copy = Assert.Single(new Planner(td).ExportPlan("local-copy").Operations, op => op.Type == "COPY");
+        Assert.Equal("Target", copy.SourceKind);
+        Assert.Equal("z.txt", copy.SourcePath);
+        Assert.Equal(0, new Executor(td).Execute("local-copy").Conflicts);
     }
 
     [Fact]
-    public void Stale_Plan_Fails_Safely_Source_Disappears()
+    public void Extra_Is_Trashed_Only_With_Verified_Target_Survivor()
     {
-        var dir = Path.Combine(_dir, "stale"); Directory.CreateDirectory(dir);
-        WriteFile(dir, "Old/a.txt", "data");
-        string tdb = Path.Combine(_dir, "stale-t.db");
-        ScanAndHash(tdb, "nas", dir);
-        var cdir = Path.Combine(_dir, "stale-c"); Directory.CreateDirectory(cdir);
-        WriteFile(cdir, "New/a.txt", "data");
-        string cdb = Path.Combine(_dir, "stale-c.db");
-        ScanAndHash(cdb, "nas", cdir);
-        using var td = new Database(tdb);
-        using var cd = new Database(cdb);
-        new Planner(td).PlanFromSnapshot(cd, null, "nas", "p-stale");
-        // Delete source before execute -> MOVE/COPY must Conflict/Failed, never silently succeed
-        File.Delete(Path.Combine(dir, "Old", "a.txt"));
-        var sum = new Executor(td).Execute("p-stale");
-        Assert.True(sum.Conflicts + sum.Failed > 0);
+        var source = Path.Combine(_dir, "source2"); Directory.CreateDirectory(source);
+        var target = Path.Combine(_dir, "target2"); Directory.CreateDirectory(target);
+        Write(source, "keep.txt", "same");
+        Write(target, "keep.txt", "same");
+        Write(target, "duplicate.txt", "same");
+        Write(target, "different.txt", "other");
+        using var sd = CreateDatabase(Path.Combine(_dir, "s2.db"), "disk", source);
+        using var td = CreateDatabase(Path.Combine(_dir, "t2.db"), "disk", target);
+        var result = new Planner(td).PlanFromRoots(sd, "disk", "disk", "trash");
+        Assert.Equal(1, result.Trash);
+        var execution = new Executor(td).Execute("trash");
+        Assert.Equal(0, execution.Failed + execution.Conflicts);
+        Assert.True(File.Exists(Path.Combine(target, "different.txt")));
+        Assert.False(File.Exists(Path.Combine(target, "duplicate.txt")));
+        Assert.True(File.Exists(Path.Combine(target, ".backup-normalizer-trash", "trash", "duplicate.txt")));
     }
-}
 
-file static class DbPathExt
-{
-    public static string FilePath(this Database _, string dbp) => dbp;
+    [Fact]
+    public void Planning_Requires_Hashes_And_Disjoint_Roots()
+    {
+        var source = Path.Combine(_dir, "source3"); Directory.CreateDirectory(source);
+        var target = Path.Combine(_dir, "target3"); Directory.CreateDirectory(target);
+        Write(source, "x.txt", "x");
+        using var sd = CreateDatabase(Path.Combine(_dir, "s3.db"), "s", source, hash: false);
+        using var td = CreateDatabase(Path.Combine(_dir, "t3.db"), "t", target);
+        Assert.Throws<InvalidOperationException>(() => new Planner(td).PlanFromRoots(sd, "s", "t", "unhashed"));
+        new Scanner(sd).HashNeeded("s", true, 1);
+        td.UpsertRoot(td.GetRoot("t")! with { Path = source });
+        Assert.Throws<InvalidOperationException>(() => new Planner(td).PlanFromRoots(sd, "s", "t", "overlap"));
+    }
+
+    [Fact]
+    public void Complete_Rescan_Marks_Removed_Files_Missing()
+    {
+        var root = Path.Combine(_dir, "rescan"); Directory.CreateDirectory(root);
+        Write(root, "gone.txt", "x");
+        using var db = CreateDatabase(Path.Combine(_dir, "rescan.db"), "r", root);
+        File.Delete(Path.Combine(root, "gone.txt"));
+        Assert.Equal(0, new Scanner(db).ScanRoot("r").errors);
+        Assert.Equal("Missing", db.GetFileEntry("r", "gone.txt")!.Status);
+        Assert.Empty(Matcher.LoadFromDb(db, "sha256", "r"));
+    }
+
+    [Fact]
+    public void Diff_Allows_Overlap_But_Plan_Rejects_It()
+    {
+        var root = Path.Combine(_dir, "shared"); Directory.CreateDirectory(root);
+        Write(root, "x.txt", "same");
+        using var left = CreateDatabase(Path.Combine(_dir, "left.db"), "r", root);
+        using var right = CreateDatabase(Path.Combine(_dir, "right.db"), "r", root);
+        Assert.Equal(1, Inventory.Diff(left.DbPath, "r", right.DbPath, "r").Identical);
+        Assert.Throws<InvalidOperationException>(() => new Planner(right).PlanFromRoots(left, "r", "r", "overlap"));
+    }
+
+    [Fact]
+    public void Diff_Marks_Same_Size_Without_Hash_Unverified()
+    {
+        var source = Path.Combine(_dir, "unverified-source"); Directory.CreateDirectory(source);
+        var target = Path.Combine(_dir, "unverified-target"); Directory.CreateDirectory(target);
+        Write(source, "x.txt", "aaa");
+        Write(target, "x.txt", "bbb");
+        using var left = CreateDatabase(Path.Combine(_dir, "unverified-left.db"), "r", source, hash: false);
+        using var right = CreateDatabase(Path.Combine(_dir, "unverified-right.db"), "r", target, hash: false);
+        var diff = Inventory.Diff(left.DbPath, "r", right.DbPath, "r");
+        Assert.Equal(1, diff.Unverified);
+        Assert.Equal(0, diff.Identical);
+    }
+
+    [Fact]
+    public void Failed_Scan_Cannot_Be_Used_For_Planning()
+    {
+        var source = Path.Combine(_dir, "scan-source"); Directory.CreateDirectory(source);
+        var target = Path.Combine(_dir, "scan-target"); Directory.CreateDirectory(target);
+        Write(source, "x.txt", "x");
+        using var left = CreateDatabase(Path.Combine(_dir, "scan-left.db"), "r", source);
+        using var right = CreateDatabase(Path.Combine(_dir, "scan-right.db"), "r", target);
+        Directory.Delete(source, true);
+        Assert.Throws<DirectoryNotFoundException>(() => new Scanner(left).ScanRoot("r"));
+        Assert.Equal("Failed", left.LatestScanStatus("r"));
+        Assert.Throws<InvalidOperationException>(() => new Planner(right).PlanFromRoots(left, "r", "r", "failed-scan"));
+    }
+
+    [Fact]
+    public void Changing_Root_Path_Invalidates_Scan_And_Hashes()
+    {
+        var original = Path.Combine(_dir, "original"); Directory.CreateDirectory(original);
+        var replacement = Path.Combine(_dir, "replacement"); Directory.CreateDirectory(replacement);
+        Write(original, "x.txt", "one");
+        Write(replacement, "x.txt", "two");
+        using var db = CreateDatabase(Path.Combine(_dir, "repath.db"), "r", original);
+        var entry = db.GetFileEntry("r", "x.txt")!;
+        Assert.Equal("Ok", db.GetHash(entry.Id, "sha256")!.State);
+        db.UpsertRoot(db.GetRoot("r")! with { Path = replacement });
+        Assert.Equal("Invalidated", db.LatestScanStatus("r"));
+        Assert.Equal("Stale", db.GetHash(entry.Id, "sha256")!.State);
+    }
 }

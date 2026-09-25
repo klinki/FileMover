@@ -5,128 +5,171 @@ namespace BackupNormalizer.Tests;
 public sealed class IntegrationTests : IDisposable
 {
     private readonly string _dir = Path.Combine(Path.GetTempPath(), "bn-it-" + Guid.NewGuid().ToString("N"));
-    public IntegrationTests() { Directory.CreateDirectory(_dir); }
+    public IntegrationTests() => Directory.CreateDirectory(_dir);
     public void Dispose() { try { Directory.Delete(_dir, true); } catch { } }
 
-    private static void W(string root, string rel, string content)
+    private static void Write(string root, string relative, string contents)
     {
-        var abs = Path.Combine(root, rel.Replace('/', Path.DirectorySeparatorChar));
-        Directory.CreateDirectory(Path.GetDirectoryName(abs)!);
-        File.WriteAllText(abs, content);
+        var path = Paths.CombineRoot(root, relative);
+        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+        File.WriteAllText(path, contents);
     }
 
-    private static void ScanHash(string db, string rootId, string path, string role = "Backup")
+    private static void Scan(string dbPath, string id, string root)
     {
-        using var d = new Database(db);
-        d.UpsertRoot(new StorageRootRow(rootId, rootId, path, role, true, "fs-" + path.GetHashCode(), "unknown", Database.UtcNow()));
-        var sc = new Scanner(d);
-        sc.ScanRoot(rootId);
-        sc.HashNeeded(rootId, true, 1);
-    }
-
-    [Fact]
-    public void Two_Db_Diff_And_Plan_With_Root_Remap()
-    {
-        // T0 snapshot on drive A, T1 current on drive B; plan migrated via --map-root equivalent
-        var a = Path.Combine(_dir, "A"); Directory.CreateDirectory(a);
-        W(a, "Photos/a.jpg", "bytes-1");
-        string t0 = Path.Combine(_dir, "t0.db");
-        ScanHash(t0, "disk", a);
-        var b = Path.Combine(_dir, "B"); Directory.CreateDirectory(b);
-        W(b, "Old/a.jpg", "bytes-1");
-        string t1 = Path.Combine(_dir, "t1.db");
-        // same FileSystemId to allow MOVE within target after remap? Use same fs marker by patching DB
-        ScanHash(t1, "disk", b);
-        var diff = Inventory.Diff(t0, t1);
-        Assert.True(diff.OnlyInOld + diff.OnlyInNew > 0 || diff.Changed > 0 || diff.Identical == 0);
-        // Plan: make B look like A (canonical=t0)
-        using var td = new Database(t1);
-        using var cd = new Database(t0);
-        // Force same FS id for move detection
-        td.UpsertRoot(td.GetRoot("disk")! with { FileSystemId = "shared" });
-        var res = new Planner(td).PlanFromSnapshot(cd, null, "disk", "mig-1");
-        Assert.Equal(1, res.Move);
-        // Execute with remap disk -> B (already), then verify file landed at Photos/a.jpg
-        var sum = new Executor(td).Execute("mig-1", new Dictionary<string, string> { ["disk"] = b });
-        Assert.Equal(0, sum.Failed);
-        Assert.True(File.Exists(Path.Combine(b, "Photos", "a.jpg")));
-        // Migrate same plan concept to drive C via remap: copy plan JSON isn't needed; re-plan and execute on C
-        var cdir = Path.Combine(_dir, "C"); Directory.CreateDirectory(cdir);
-        W(cdir, "Old/a.jpg", "bytes-1");
-        string t2 = Path.Combine(_dir, "t2.db");
-        ScanHash(t2, "disk", cdir);
-        using var td2 = new Database(t2);
-        td2.UpsertRoot(td2.GetRoot("disk")! with { FileSystemId = "shared" });
-        new Planner(td2).PlanFromSnapshot(cd, null, "disk", "mig-2");
-        var sum2 = new Executor(td2).Execute("mig-2", new Dictionary<string, string> { ["disk"] = cdir, ["canon:disk"] = a });
-        Assert.True(File.Exists(Path.Combine(cdir, "Photos", "a.jpg")));
+        using var db = new Database(dbPath);
+        db.UpsertRoot(new StorageRootRow(id, id, root, true, "fs", "unknown", Database.UtcNow()));
+        var scanner = new Scanner(db);
+        Assert.Equal(0, scanner.ScanRoot(id).errors);
+        scanner.HashNeeded(id, true, 1);
     }
 
     [Fact]
-    public void Trash_And_Resume()
+    public void Diff_Plan_Execute_And_Resume_Across_Two_Databases()
     {
-        var dir = Path.Combine(_dir, "R"); Directory.CreateDirectory(dir);
-        W(dir, "Photos/a.jpg", "same");
-        W(dir, "Dup/a.jpg", "same");
-        string dbp = Path.Combine(_dir, "r.db");
-        ScanHash(dbp, "nas", dir, "Canonical");
-        using var db = new Database(dbp);
-        new Planner(db).PlanSingleDb("nas", "ptrash");
-        var doc = new Planner(db).ExportPlan("ptrash");
-        // Photos/a.jpg KEEP + Dup trashed? Both paths exist but only one is... single-DB canonical includes both paths as desired,
-        // so no trash. Instead craft snapshot with only Photos:
-        var cdir = Path.Combine(_dir, "RC"); Directory.CreateDirectory(cdir);
-        W(cdir, "Photos/a.jpg", "same");
-        string cdb = Path.Combine(_dir, "rc.db");
-        ScanHash(cdb, "nas", cdir, "Canonical");
-        using var cd = new Database(cdb);
-        new Planner(db).PlanFromSnapshot(cd, null, "nas", "ptrash2");
-        var sum = new Executor(db).Execute("ptrash2");
-        Assert.Equal(0, sum.Failed);
-        Assert.True(File.Exists(Path.Combine(dir, "Photos", "a.jpg")));
-        Assert.False(File.Exists(Path.Combine(dir, "Dup", "a.jpg")));
-        Assert.True(Directory.Exists(Path.Combine(dir, ".backup-normalizer-trash", "ptrash2")));
-        // Resume is idempotent
-        var sum2 = new Executor(db).Execute("ptrash2", resume: true);
-        Assert.Equal(0, sum2.Failed);
+        var source = Path.Combine(_dir, "source"); Directory.CreateDirectory(source);
+        var target = Path.Combine(_dir, "target"); Directory.CreateDirectory(target);
+        Write(source, "Photos/a.jpg", "bytes");
+        Write(target, "Old/a.jpg", "bytes");
+        var sourceDbPath = Path.Combine(_dir, "source.db");
+        var targetDbPath = Path.Combine(_dir, "target.db");
+        Scan(sourceDbPath, "disk", source);
+        Scan(targetDbPath, "disk", target);
+
+        var diff = Inventory.Diff(sourceDbPath, "disk", targetDbPath, "disk");
+        Assert.Equal(1, diff.SourceOnly);
+        Assert.Equal(1, diff.TargetOnly);
+
+        using var sourceDb = Database.OpenReadOnly(sourceDbPath);
+        using var targetDb = new Database(targetDbPath);
+        var result = new Planner(targetDb).PlanFromRoots(sourceDb, "disk", "disk", "plan");
+        Assert.Equal(1, result.Move);
+        Assert.Equal(0, result.Copy);
+        Assert.Equal("Target", new Planner(targetDb).ExportPlan("plan").Operations.Single(o => o.Type == "MOVE").SourceKind);
+
+        var execution = new Executor(targetDb).Execute("plan");
+        Assert.Equal(0, execution.Conflicts + execution.Failed);
+        Assert.True(File.Exists(Path.Combine(target, "Photos", "a.jpg")));
+        Assert.False(File.Exists(Path.Combine(target, "Old", "a.jpg")));
+        Assert.Equal(0, new Executor(targetDb).Execute("plan", resume: true).Failed);
     }
 
     [Fact]
-    public void Safety_Destination_Exists_Different_Bytes_Refuses_Overwrite()
+    public void Same_Database_Can_Compare_Disjoint_Roots()
     {
-        var tdir = Path.Combine(_dir, "S"); Directory.CreateDirectory(tdir);
-        W(tdir, "Old/a.txt", "good");
-        string tdb = Path.Combine(_dir, "s-t.db");
-        ScanHash(tdb, "nas", tdir);
-        var cdir = Path.Combine(_dir, "SC"); Directory.CreateDirectory(cdir);
-        W(cdir, "New/a.txt", "good");
-        string cdb = Path.Combine(_dir, "s-c.db");
-        ScanHash(cdb, "nas", cdir);
-        // Poison destination with different bytes before execute
-        W(tdir, "New/a.txt", "evil-different**********");
-        using var td = new Database(tdb);
-        using var cd = new Database(cdb);
-        // Need to rescan target to include poisoned dest? Planner sees dest exists different -> VERIFY conflict path.
-        var sc = new Scanner(td); sc.ScanRoot("nas"); sc.HashNeeded("nas", true, 1);
-        new Planner(td).PlanFromSnapshot(cd, null, "nas", "p-safe");
-        var sum = new Executor(td).Execute("p-safe");
-        // Must not overwrite evil file with good content silently
-        Assert.Equal("evil-different**********", File.ReadAllText(Path.Combine(tdir, "New", "a.txt")));
+        var source = Path.Combine(_dir, "s"); Directory.CreateDirectory(source);
+        var target = Path.Combine(_dir, "t"); Directory.CreateDirectory(target);
+        Write(source, "a.txt", "payload");
+        var dbPath = Path.Combine(_dir, "both.db");
+        Scan(dbPath, "source", source);
+        Scan(dbPath, "target", target);
+        var diff = Inventory.Diff(dbPath, "source", dbPath, "target");
+        Assert.Equal(1, diff.SourceOnly);
+        using var db = new Database(dbPath);
+        var result = new Planner(db).PlanFromRoots(db, "source", "target", "same-db");
+        Assert.Equal(1, result.Copy);
+        Assert.Equal(0, new Executor(db).Execute("same-db").Failed);
+        Assert.Equal("payload", File.ReadAllText(Path.Combine(target, "a.txt")));
     }
 
     [Fact]
-    public void Inventory_Export_Import_Roundtrip()
+    public void Changed_Destination_Is_Preserved_As_Conflict()
     {
-        var d1 = Path.Combine(_dir, "D1"); Directory.CreateDirectory(d1);
-        W(d1, "f.txt", "x");
-        string db1 = Path.Combine(_dir, "d1.db");
-        ScanHash(db1, "d1", d1);
-        string exp = Path.Combine(_dir, "d1.inv.db");
-        Inventory.ExportRoot(db1, "d1", exp);
-        string central = Path.Combine(_dir, "central.db");
-        using (var _ = new Database(central)) { }
-        Inventory.ImportFile(central, exp);
-        using var c = new Database(central);
-        Assert.Single(c.ListFiles("d1"));
+        var source = Path.Combine(_dir, "s2"); Directory.CreateDirectory(source);
+        var target = Path.Combine(_dir, "t2"); Directory.CreateDirectory(target);
+        Write(source, "a.txt", "good");
+        Write(target, "a.txt", "evil");
+        var sourceDbPath = Path.Combine(_dir, "s2.db");
+        var targetDbPath = Path.Combine(_dir, "t2.db");
+        Scan(sourceDbPath, "s", source);
+        Scan(targetDbPath, "t", target);
+        using var sd = Database.OpenReadOnly(sourceDbPath);
+        using var td = new Database(targetDbPath);
+        new Planner(td).PlanFromRoots(sd, "s", "t", "conflict");
+        var result = new Executor(td).Execute("conflict");
+        Assert.Equal(1, result.Conflicts);
+        Assert.Equal("evil", File.ReadAllText(Path.Combine(target, "a.txt")));
+    }
+
+    [Fact]
+    public void Diff_Direction_And_Selected_Roots_Are_Independent()
+    {
+        var left = Path.Combine(_dir, "left"); Directory.CreateDirectory(left);
+        var right = Path.Combine(_dir, "right"); Directory.CreateDirectory(right);
+        var unrelated = Path.Combine(_dir, "unrelated"); Directory.CreateDirectory(unrelated);
+        Write(left, "left.txt", "one");
+        Write(right, "right.txt", "two");
+        Write(unrelated, "left.txt", "one");
+        var leftDbPath = Path.Combine(_dir, "left.db");
+        var rightDbPath = Path.Combine(_dir, "right.db");
+        Scan(leftDbPath, "selected", left);
+        Scan(leftDbPath, "other", unrelated);
+        Scan(rightDbPath, "selected", right);
+
+        var forward = Inventory.Diff(leftDbPath, "selected", rightDbPath, "selected");
+        var reverse = Inventory.Diff(rightDbPath, "selected", leftDbPath, "selected");
+        Assert.Contains("source-only: left.txt", forward.Samples);
+        Assert.Contains("source-only: right.txt", reverse.Samples);
+        Assert.Equal(1, forward.SourceOnly);
+        Assert.Equal(1, forward.TargetOnly);
+        Assert.Equal(1, reverse.SourceOnly);
+        Assert.Equal(1, reverse.TargetOnly);
+    }
+
+    [Fact]
+    public void Missing_Source_At_Execution_Produces_Conflict()
+    {
+        var source = Path.Combine(_dir, "missing-source"); Directory.CreateDirectory(source);
+        var target = Path.Combine(_dir, "missing-target"); Directory.CreateDirectory(target);
+        Write(source, "copy.txt", "payload");
+        var sourceDbPath = Path.Combine(_dir, "missing-source.db");
+        var targetDbPath = Path.Combine(_dir, "missing-target.db");
+        Scan(sourceDbPath, "disk", source);
+        Scan(targetDbPath, "disk", target);
+        using var sd = Database.OpenReadOnly(sourceDbPath);
+        using var td = new Database(targetDbPath);
+        Assert.Equal(1, new Planner(td).PlanFromRoots(sd, "disk", "disk", "missing").Copy);
+        File.Delete(Path.Combine(source, "copy.txt"));
+        var result = new Executor(td).Execute("missing");
+        Assert.Equal(1, result.Conflicts);
+        Assert.False(File.Exists(Path.Combine(target, "copy.txt")));
+    }
+
+    [Fact]
+    public void Keep_Verifies_Target_Again_At_Execution()
+    {
+        var source = Path.Combine(_dir, "keep-source"); Directory.CreateDirectory(source);
+        var target = Path.Combine(_dir, "keep-target"); Directory.CreateDirectory(target);
+        Write(source, "a.txt", "good");
+        Write(target, "a.txt", "good");
+        var sourceDbPath = Path.Combine(_dir, "keep-source.db");
+        var targetDbPath = Path.Combine(_dir, "keep-target.db");
+        Scan(sourceDbPath, "disk", source);
+        Scan(targetDbPath, "disk", target);
+        using var sd = Database.OpenReadOnly(sourceDbPath);
+        using var td = new Database(targetDbPath);
+        Assert.Equal(1, new Planner(td).PlanFromRoots(sd, "disk", "disk", "keep").Keep);
+        Write(target, "a.txt", "evil");
+        Assert.Equal(1, new Executor(td).Execute("keep").Conflicts);
+    }
+
+    [Fact]
+    public void Move_Resume_Accepts_Landed_File_After_Crash()
+    {
+        var source = Path.Combine(_dir, "resume-source"); Directory.CreateDirectory(source);
+        var target = Path.Combine(_dir, "resume-target"); Directory.CreateDirectory(target);
+        Write(source, "new.txt", "same");
+        Write(target, "old.txt", "same");
+        var sourceDbPath = Path.Combine(_dir, "resume-source.db");
+        var targetDbPath = Path.Combine(_dir, "resume-target.db");
+        Scan(sourceDbPath, "disk", source);
+        Scan(targetDbPath, "disk", target);
+        using var sd = Database.OpenReadOnly(sourceDbPath);
+        using var td = new Database(targetDbPath);
+        Assert.Equal(1, new Planner(td).PlanFromRoots(sd, "disk", "disk", "resume").Move);
+        File.Move(Path.Combine(target, "old.txt"), Path.Combine(target, "new.txt"));
+        var result = new Executor(td).Execute("resume", resume: true);
+        Assert.Equal(0, result.Failed + result.Conflicts);
+        Assert.Equal("same", File.ReadAllText(Path.Combine(target, "new.txt")));
     }
 }

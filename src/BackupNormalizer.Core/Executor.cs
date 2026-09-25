@@ -20,51 +20,58 @@ public sealed class Executor
 
     public sealed record ExecSummary(int Completed, int Failed, int Skipped, int Conflicts);
 
-    public ExecSummary Execute(string planId, Dictionary<string, string>? mapRoot = null, bool resume = false, bool stopOnError = false)
+    public ExecSummary Execute(string planId, string? sourcePathOverride = null, string? targetPathOverride = null,
+        bool resume = false, bool stopOnError = false)
     {
-        var roots = _db.ListRoots().ToDictionary(r => r.Id);
-        string ResolvePath(string rootId, string rel)
+        var plan = _db.Context.Plans.SingleOrDefault(item => item.Id == planId)
+            ?? throw new InvalidOperationException($"unknown plan '{planId}'");
+        string sourceBasePath = Path.GetFullPath(sourcePathOverride ?? plan.SourceRootPath);
+        string targetBasePath = Path.GetFullPath(targetPathOverride ?? plan.TargetRootPath);
+        string ResolvePath(string sourceKind, string rootId, string rel)
         {
-            string basePath;
-            if (mapRoot != null && mapRoot.TryGetValue(rootId, out var ov)) basePath = ov;
-            else if (roots.TryGetValue(rootId, out var r)) basePath = r.Path;
-            else throw new InvalidOperationException($"unknown root '{rootId}' (hint: use --map-root {rootId}=<path>)");
+            string basePath = sourceKind switch
+            {
+                "Source" when rootId == plan.SourceRootId => sourceBasePath,
+                "Target" when rootId == plan.TargetRootId => targetBasePath,
+                _ => throw new InvalidOperationException($"root '{rootId}' is not part of plan '{planId}' as {sourceKind}")
+            };
             return Paths.CombineRoot(basePath, rel);
         }
-        string TrashDirFor(string rootId)
-        {
-            string basePath;
-            if (mapRoot != null && mapRoot.TryGetValue(rootId, out var ov)) basePath = ov;
-            else basePath = roots[rootId].Path;
-            return Path.Combine(basePath, _trashName, planId);
-        }
+        string TrashDirFor(string rootId) => rootId == plan.TargetRootId
+            ? Path.Combine(targetBasePath, _trashName, planId)
+            : throw new InvalidOperationException($"trash root '{rootId}' is not the plan target");
 
         // Invariant 1 at execute time (not just plan time): a TRASH must leave
         // behind at least one other verified copy. The planner proves this for
-        // the planned disk, but a remapped replay (--map-root) needs re-proof.
+        // the planned disk, but a replay with a different target path needs re-proof.
         bool HasSurvivingCopy(OpRow op)
         {
-            if (op.ExpectedHash == null) return false;
-            // (a) Same-plan completed COPY/MOVE: hash-verified when marked Completed.
+            if (op.ExpectedHash == null || op.SourceKind != "Target") return false;
+            bool IsVerifiedCopy(string? root, string? rel, long size)
+            {
+                if (root != plan.TargetRootId || rel == null || (root == op.SourceRoot && rel == op.SourcePath)) return false;
+                string abs;
+                try { abs = ResolvePath("Target", root, rel); } catch { return false; }
+                if (!File.Exists(abs)) return false;
+                var file = new FileInfo(abs);
+                if (file.Length != size || (op.ExpectedSize != 0 && file.Length != op.ExpectedSize)) return false;
+                try { return string.Equals(_hasher.HashFile(abs, file.Length), op.ExpectedHash, StringComparison.OrdinalIgnoreCase); }
+                catch { return false; }
+            }
+
+            // Completed target operations are the most reliable candidates because
+            // they were created or checked by this plan.
             var completedCopies = _db.Context.PlanOperations
                 .Where(candidate => candidate.PlanId == planId
                     && candidate.Status == "Completed"
                     && candidate.ExpectedHash == op.ExpectedHash
-                    && (candidate.Type == "COPY" || candidate.Type == "MOVE"))
+                    && (candidate.Type == "KEEP" || candidate.Type == "COPY" || candidate.Type == "MOVE"))
                 .Select(candidate => new { candidate.DestinationRootId, candidate.DestinationPath, candidate.ExpectedSize })
                 .ToList();
             foreach (var candidate in completedCopies)
-            {
-                string? dr = candidate.DestinationRootId;
-                string? dp = candidate.DestinationPath;
-                if (dr == null || dp == null) continue;
-                if (dr == op.SourceRoot && dp == op.SourcePath) continue; // must be ANOTHER copy
-                string abs;
-                try { abs = ResolvePath(dr, dp); } catch { continue; } // offline snapshot root
-                if (File.Exists(abs) && new FileInfo(abs).Length == candidate.ExpectedSize) return true;
-            }
-            // (b) DB-known copies: existence + size + fresh hash verification.
-            // The SQL NOT expression returned no rows for a null source root/path.
+                if (IsVerifiedCopy(candidate.DestinationRootId, candidate.DestinationPath, candidate.ExpectedSize)) return true;
+
+            // A separately scanned target copy can also keep the content safe.
             if (op.SourceRoot == null || op.SourcePath == null) return false;
             var candidates = _db.Context.FileHashes
                 .Join(_db.Context.FileEntries, hash => hash.FileEntryId, entry => entry.Id,
@@ -72,26 +79,17 @@ public sealed class Executor
                 .Where(pair => pair.hash.Digest == op.ExpectedHash
                     && pair.hash.State == "Ok"
                     && pair.entry.Status == "Ok"
+                    && pair.entry.StorageRootId == plan.TargetRootId
                     && !(pair.entry.StorageRootId == op.SourceRoot && pair.entry.RelativePath == op.SourcePath))
                 .Select(pair => new { pair.entry.StorageRootId, pair.entry.RelativePath, pair.entry.Size })
                 .ToList();
             foreach (var candidate in candidates)
-            {
-                var cr = candidate.StorageRootId;
-                var cp = candidate.RelativePath;
-                var csz = candidate.Size;
-                string abs;
-                try { abs = ResolvePath(cr, cp); } catch { continue; }
-                if (!File.Exists(abs)) continue;
-                var fi = new FileInfo(abs);
-                if (fi.Length != csz || (op.ExpectedSize != 0 && fi.Length != op.ExpectedSize)) continue;
-                string digest;
-                try { digest = _hasher.HashFile(abs, fi.Length); } catch { continue; }
-                if (string.Equals(digest, op.ExpectedHash, StringComparison.OrdinalIgnoreCase)) return true;
-            }
+                if (IsVerifiedCopy(candidate.StorageRootId, candidate.RelativePath, candidate.Size)) return true;
             return false;
         }
         var ops = LoadOps(planId);
+        if (ops.Any(op => op.SourceKind == "Source") && Paths.RootsOverlap(sourceBasePath, targetBasePath))
+            throw new InvalidOperationException("source and target paths overlap; execution requires disjoint roots");
         int done = 0, failed = 0, skipped = 0, conflicts = 0;
         int pos = 0, total = ops.Count;
         foreach (var op in ops)
@@ -100,19 +98,12 @@ public sealed class Executor
             string tag = $"[{pos}/{total}]";
             if (resume && op.Status == "Completed") { done++; continue; }
             if (op.Status == "Completed" && !resume) { done++; continue; }
-            if (op.Type is "KEEP")
-            {
-                Mark(op.Id, "Completed");
-                Journal(op.Id, "INFO", $"{tag} KEEP {op.DestRoot}:{op.DestPath}");
-                done++;
-                continue;
-            }
             if (op.Type is "MKDIR")
             {
                 try
                 {
                     SetStarted(op.Id);
-                    var dir = ResolvePath(op.DestRoot!, op.DestPath!);
+                    var dir = ResolvePath("Target", op.DestRoot!, op.DestPath!);
                     Directory.CreateDirectory(dir);
                     Mark(op.Id, "Completed");
                     Journal(op.Id, "INFO", $"{tag} MKDIR {op.DestRoot}:{op.DestPath}");
@@ -126,6 +117,7 @@ public sealed class Executor
                 SetStarted(op.Id);
                 switch (op.Type)
                 {
+                    case "KEEP": DoVerify(op, ResolvePath); break;
                     case "MOVE": DoMove(op, ResolvePath); break;
                     case "COPY": DoCopy(op, ResolvePath); break;
                     case "TRASH": DoTrash(op, ResolvePath, TrashDirFor, HasSurvivingCopy); break;
@@ -163,7 +155,8 @@ public sealed class Executor
     }
 
     private sealed class ConflictException : Exception { public ConflictException(string m) : base(m) { } }
-    private sealed record OpRow(long Id, string Type, string? SourceRoot, string? SourcePath, string? DestRoot, string? DestPath, long ExpectedSize, string? ExpectedHash, string Status);
+    private sealed record OpRow(long Id, string Type, string? SourceKind, string? SourceRoot, string? SourcePath,
+        string? DestRoot, string? DestPath, long ExpectedSize, string? ExpectedHash, string Status);
 
     private List<OpRow> LoadOps(string planId)
     {
@@ -171,7 +164,7 @@ public sealed class Executor
             .Where(operation => operation.PlanId == planId)
             .OrderBy(operation => operation.Sequence)
             .Select(operation => new OpRow(operation.Id, operation.Type,
-                operation.SourceRootId, operation.SourcePath,
+                operation.SourceKind, operation.SourceRootId, operation.SourcePath,
                 operation.DestinationRootId, operation.DestinationPath,
                 operation.ExpectedSize, operation.ExpectedHash, operation.Status))
             .ToList();
@@ -215,10 +208,10 @@ public sealed class Executor
         Log.Info(msg, new { opId, level });
     }
 
-    private void DoVerify(OpRow op, Func<string, string, string> resolve)
+    private void DoVerify(OpRow op, Func<string, string, string, string> resolve)
     {
         if (op.DestRoot == null || op.DestPath == null) throw new ConflictException("VERIFY missing destination");
-        var dst = resolve(op.DestRoot, op.DestPath);
+        var dst = resolve("Target", op.DestRoot, op.DestPath);
         if (!File.Exists(dst)) throw new ConflictException($"destination missing: {dst}");
         var fi = new FileInfo(dst);
         if (op.ExpectedSize != 0 && fi.Length != op.ExpectedSize)
@@ -231,25 +224,28 @@ public sealed class Executor
         }
     }
 
-    private void DoMove(OpRow op, Func<string, string, string> resolve)
+    private void DoMove(OpRow op, Func<string, string, string, string> resolve)
     {
-        var src = resolve(op.SourceRoot!, op.SourcePath!);
-        var dst = resolve(op.DestRoot!, op.DestPath!);
-        if (!File.Exists(src)) throw new ConflictException($"source disappeared: {src}");
+        if (op.SourceKind != "Target") throw new ConflictException("MOVE source must be inside the target root");
+        var src = resolve("Target", op.SourceRoot!, op.SourcePath!);
+        var dst = resolve("Target", op.DestRoot!, op.DestPath!);
+        if (!File.Exists(src))
+        {
+            // A crash can occur after File.Move but before the operation is journaled.
+            if (File.Exists(dst) && op.ExpectedHash != null)
+            {
+                var landed = new FileInfo(dst);
+                if (landed.Length == op.ExpectedSize && string.Equals(
+                    _hasher.HashFile(dst, landed.Length), op.ExpectedHash, StringComparison.OrdinalIgnoreCase))
+                    return;
+            }
+            throw new ConflictException($"source disappeared: {src}");
+        }
         var sfi = new FileInfo(src);
         if (op.ExpectedSize != 0 && sfi.Length != op.ExpectedSize)
             throw new ConflictException($"source changed size: {src}");
         if (File.Exists(dst))
-        {
-            var dfi = new FileInfo(dst);
-            if (dfi.Length == sfi.Length)
-            {
-                string dh = _hasher.HashFile(dst, dfi.Length);
-                if (op.ExpectedHash != null && string.Equals(dh, op.ExpectedHash, StringComparison.OrdinalIgnoreCase))
-                    return; // identical -> treat as KEEP (§20)
-            }
-            throw new ConflictException($"destination exists with different content: {dst}");
-        }
+            throw new ConflictException($"destination already exists while move source remains: {dst}");
         Directory.CreateDirectory(Path.GetDirectoryName(dst)!);
         // Optional hash check on source before destructive move
         if (op.ExpectedHash != null)
@@ -271,13 +267,13 @@ public sealed class Executor
         }
     }
 
-    private void DoCopy(OpRow op, Func<string, string, string> resolve)
+    private void DoCopy(OpRow op, Func<string, string, string, string> resolve)
     {
-        // Source may live in canonical DB snapshot (offline) -> fail safely as conflict, not data loss
+        if (op.SourceKind is not ("Source" or "Target")) throw new ConflictException("COPY has no valid source scope");
         string src;
-        try { src = resolve(op.SourceRoot!, op.SourcePath!); }
-        catch { throw new ConflictException($"copy source root '{op.SourceRoot}' not mapped (use --map-root). Need {op.SourceRoot}:{op.SourcePath}"); }
-        var dst = resolve(op.DestRoot!, op.DestPath!);
+        try { src = resolve(op.SourceKind, op.SourceRoot!, op.SourcePath!); }
+        catch { throw new ConflictException($"copy source '{op.SourceKind}:{op.SourceRoot}:{op.SourcePath}' is not available"); }
+        var dst = resolve("Target", op.DestRoot!, op.DestPath!);
         if (!File.Exists(src)) throw new ConflictException($"copy source missing: {src} (stale plan fails safely, §32.8)");
         var sfi = new FileInfo(src);
         if (op.ExpectedSize != 0 && sfi.Length != op.ExpectedSize)
@@ -321,9 +317,11 @@ public sealed class Executor
         File.Move(tmp, dst);
     }
 
-    private void DoTrash(OpRow op, Func<string, string, string> resolve, Func<string, string> trashDirFor, Func<OpRow, bool> hasSurvivor)
+    private void DoTrash(OpRow op, Func<string, string, string, string> resolve,
+        Func<string, string> trashDirFor, Func<OpRow, bool> hasSurvivor)
     {
-        var src = resolve(op.SourceRoot!, op.SourcePath!);
+        if (op.SourceKind != "Target") throw new ConflictException("TRASH source must be inside the target root");
+        var src = resolve("Target", op.SourceRoot!, op.SourcePath!);
         if (!File.Exists(src)) throw new ConflictException($"trash source missing (already gone?): {src}");
         var sfi = new FileInfo(src);
         if (op.ExpectedSize != 0 && sfi.Length != op.ExpectedSize)
@@ -333,7 +331,7 @@ public sealed class Executor
         string sh = _hasher.HashFile(src, sfi.Length);
         if (!string.Equals(sh, op.ExpectedHash, StringComparison.OrdinalIgnoreCase))
             throw new ConflictException($"refusing trash: source changed: {src}");
-        // Invariant 1 re-proven here (planner proof doesn't transfer across --map-root replay).
+        // Invariant 1 re-proven here (planner proof doesn't transfer across remapped paths).
         if (!hasSurvivor(op))
             throw new ConflictException($"refusing trash: no surviving verified copy of content: {src}");
         string trashDir = trashDirFor(op.SourceRoot!);

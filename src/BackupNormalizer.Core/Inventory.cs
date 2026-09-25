@@ -1,102 +1,72 @@
-using Microsoft.EntityFrameworkCore;
-
 namespace BackupNormalizer;
 
-/// <summary>Inventory §27: per-drive DBs, export/import merge, 2-DB diff.</summary>
+/// <summary>Root-scoped source-to-target inventory comparison.</summary>
 public static class Inventory
 {
-    public static void ExportRoot(string dbPath, string rootId, string outputPath)
-    {
-        var sourcePath = Path.GetFullPath(dbPath);
-        var destinationPath = Path.GetFullPath(outputPath);
-        if (PathEquals(sourcePath, destinationPath))
-            throw new InvalidOperationException("The inventory output must be a different file from its source database.");
+    public sealed record DiffSummary(
+        int SourceOnly,
+        int TargetOnly,
+        int Changed,
+        int Identical,
+        int Unverified,
+        string? SourceScanStatus,
+        string? TargetScanStatus,
+        List<string> Samples);
 
-        using var src = new Database(sourcePath, readOnly: true);
-        var root = src.GetRoot(rootId) ?? throw new InvalidOperationException($"unknown root '{rootId}'");
-        var files = src.ListFiles(rootId);
-        var hashes = (from hash in src.Context.FileHashes.AsNoTracking()
-                      join file in src.Context.FileEntries.AsNoTracking() on hash.FileEntryId equals file.Id
-                      where file.StorageRootId == rootId
-                      select hash).ToList();
-        var hashesByFileId = hashes.GroupBy(h => h.FileEntryId).ToDictionary(g => g.Key, g => g.ToList());
-
-        if (File.Exists(destinationPath)) File.Delete(destinationPath);
-        using var dst = new Database(destinationPath);
-        using var transaction = dst.Context.Database.BeginTransaction();
-        dst.UpsertRoot(root);
-        foreach (var file in files)
-        {
-            // Inventory files are standalone cache rows; their scan id is not a foreign key.
-            var newId = dst.UpsertFileEntry(file with { Id = 0, LastSeenScanId = 1 });
-            if (!hashesByFileId.TryGetValue(file.Id, out var fileHashes)) continue;
-            foreach (var hash in fileHashes)
-                dst.UpsertHash(new FileHashRow(newId, hash.Algorithm, hash.Digest, hash.SizeAtHash,
-                    hash.ModifiedUtcAtHash, hash.CalculatedUtc, hash.State));
-        }
-        transaction.Commit();
-        Log.Info($"exported root '{rootId}' ({files.Count} files) to {destinationPath}");
-    }
-
-    public static void ImportFile(string dbPath, string inputPath)
-    {
-        var destinationPath = Path.GetFullPath(dbPath);
-        var sourcePath = Path.GetFullPath(inputPath);
-        if (PathEquals(destinationPath, sourcePath))
-            throw new InvalidOperationException("The inventory source must be a different file from the target database.");
-
-        using var src = new Database(sourcePath, readOnly: true);
-        using var dst = new Database(destinationPath);
-        using var transaction = dst.Context.Database.BeginTransaction();
-        foreach (var root in src.ListRoots())
-        {
-            if (dst.GetRoot(root.Id) == null)
-                dst.UpsertRoot(root);
-            else
-                Log.Warn($"root '{root.Id}' already exists in target; merging file entries");
-
-            var files = src.ListFiles(root.Id);
-            var hashes = (from hash in src.Context.FileHashes.AsNoTracking()
-                          join file in src.Context.FileEntries.AsNoTracking() on hash.FileEntryId equals file.Id
-                          where file.StorageRootId == root.Id
-                          select hash).ToList();
-            var hashesByFileId = hashes.GroupBy(h => h.FileEntryId).ToDictionary(g => g.Key, g => g.ToList());
-
-            foreach (var file in files)
-            {
-                var newId = dst.UpsertFileEntry(file with { Id = 0 });
-                if (!hashesByFileId.TryGetValue(file.Id, out var fileHashes)) continue;
-                foreach (var hash in fileHashes)
-                    dst.UpsertHash(new FileHashRow(newId, hash.Algorithm, hash.Digest, hash.SizeAtHash,
-                        hash.ModifiedUtcAtHash, hash.CalculatedUtc, hash.State));
-            }
-        }
-        transaction.Commit();
-        Log.Info($"imported {sourcePath} into {destinationPath}");
-    }
-
-    public sealed record DiffSummary(int OnlyInOld, int OnlyInNew, int Changed, int Identical, List<string> Samples);
-
-    public static DiffSummary Diff(string oldDbPath, string newDbPath, string algo = "sha256", int samples = 20)
+    public static DiffSummary Diff(string sourceDbPath, string sourceRootId,
+        string targetDbPath, string targetRootId, string algo = "sha256", int samples = 20)
     {
         algo = HasherFactory.NormalizeAlgorithm(algo);
-        using var a = new Database(oldDbPath, readOnly: true);
-        using var b = new Database(newDbPath, readOnly: true);
-        var fa = Matcher.LoadFromDb(a, algo).GroupBy(f => f.RelativePath).ToDictionary(g => g.Key, g => g.First());
-        var fb = Matcher.LoadFromDb(b, algo).GroupBy(f => f.RelativePath).ToDictionary(g => g.Key, g => g.First());
-        int onlyOld = 0, onlyNew = 0, changed = 0, same = 0;
-        var sampleLines = new List<string>();
-        foreach (var kv in fa)
-        {
-            if (!fb.TryGetValue(kv.Key, out var n)) { onlyOld++; if (sampleLines.Count < samples) sampleLines.Add($"- {kv.Key}"); }
-            else if (kv.Value.Size == n.Size && kv.Value.Hash != null && n.Hash != null && kv.Value.Hash == n.Hash) same++;
-            else { changed++; if (sampleLines.Count < samples) sampleLines.Add($"~ {kv.Key} ({kv.Value.Size}->{n.Size})"); }
-        }
-        foreach (var kv in fb)
-            if (!fa.ContainsKey(kv.Key)) { onlyNew++; if (sampleLines.Count < samples) sampleLines.Add($"+ {kv.Key}"); }
-        return new DiffSummary(onlyOld, onlyNew, changed, same, sampleLines);
-    }
+        using var sourceDb = new Database(sourceDbPath, readOnly: true);
+        using var targetDb = Paths.PathEquals(sourceDb.DbPath, targetDbPath)
+            ? null
+            : new Database(targetDbPath, readOnly: true);
+        var target = targetDb ?? sourceDb;
+        if (sourceDb.GetRoot(sourceRootId) == null) throw new InvalidOperationException($"unknown source root '{sourceRootId}'");
+        if (target.GetRoot(targetRootId) == null) throw new InvalidOperationException($"unknown target root '{targetRootId}'");
 
-    private static bool PathEquals(string left, string right) =>
-        string.Equals(left, right, OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal);
+        var sourceFiles = Matcher.LoadFromDb(sourceDb, algo, sourceRootId).ToDictionary(file => file.RelativePath);
+        var targetFiles = Matcher.LoadFromDb(target, algo, targetRootId).ToDictionary(file => file.RelativePath);
+        int sourceOnly = 0, targetOnly = 0, changed = 0, identical = 0, unverified = 0;
+        var sampleLines = new List<string>();
+        void Sample(string line) { if (sampleLines.Count < samples) sampleLines.Add(line); }
+
+        foreach (var (path, source) in sourceFiles)
+        {
+            if (!targetFiles.TryGetValue(path, out var dest))
+            {
+                sourceOnly++;
+                Sample($"source-only: {path}");
+                continue;
+            }
+
+            if (source.Size == dest.Size && source.Hash != null && dest.Hash != null &&
+                string.Equals(source.Hash, dest.Hash, StringComparison.OrdinalIgnoreCase))
+            {
+                identical++;
+            }
+            else if (source.Size == dest.Size && (source.Hash == null || dest.Hash == null))
+            {
+                unverified++;
+                Sample($"unverified: {path}");
+            }
+            else
+            {
+                changed++;
+                Sample($"changed: {path} ({source.Size}->{dest.Size})");
+            }
+        }
+
+        foreach (var (path, _) in targetFiles)
+        {
+            if (!sourceFiles.ContainsKey(path))
+            {
+                targetOnly++;
+                Sample($"target-only: {path}");
+            }
+        }
+
+        return new DiffSummary(sourceOnly, targetOnly, changed, identical, unverified,
+            sourceDb.LatestScanStatus(sourceRootId), target.LatestScanStatus(targetRootId), sampleLines);
+    }
 }

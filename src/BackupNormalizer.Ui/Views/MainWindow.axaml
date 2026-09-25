@@ -66,7 +66,7 @@
       <WrapPanel Orientation="Horizontal" ItemSpacing="6">
         <StackPanel Orientation="Horizontal" Spacing="4">
           <TextBlock Text="Root:" VerticalAlignment="Center" />
-          <TextBox Text="{Binding RootId}" Width="80" ToolTip.Tip="Logical root id stored in plan (remap later via --map-root)" />
+          <TextBox Text="{Binding RootId}" Width="80" ToolTip.Tip="Logical root id stored in plan (remap later via --target-path)" />
         </StackPanel>
         <StackPanel Orientation="Horizontal" Spacing="4">
           <TextBlock Text="Base (drive-local):" VerticalAlignment="Center" />
@@ -99,7 +99,7 @@
           <Button Content="Save JSON" Command="{Binding SaveJsonCommand}" />
           <Button Content="Write to DB" Command="{Binding WriteToDbCommand}" />
         </WrapPanel>
-        <TextBlock Text="Plan-only: F5/F6/F7/F8 stage operations with size+hash preconditions. Nothing is executed here. Run executor later; remap drives with --map-root. Shortcuts: Ctrl/Cmd+A mark all, Space toggle, Shift+arrows extend, Esc clear marks, Tab switch panel." FontStyle="Italic" TextWrapping="Wrap" />
+        <TextBlock Text="Plan-only: F5/F6/F7/F8 stage operations with size+hash preconditions. Nothing is executed here. Run executor later; remap drives with --target-path. Shortcuts: Ctrl/Cmd+A mark all, Space toggle, Shift+arrows extend, Esc clear marks, Tab switch panel." FontStyle="Italic" TextWrapping="Wrap" />
       </StackPanel>
     </Border>
 

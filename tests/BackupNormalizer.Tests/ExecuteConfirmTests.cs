@@ -19,7 +19,7 @@ public sealed class ExecuteConfirmTests : IDisposable
     private static void ScanHash(string dbPath, string rootId, string path)
     {
         using var db = new Database(dbPath);
-        db.UpsertRoot(new StorageRootRow(rootId, rootId, path, "Backup", true, "fs", "unknown", Database.UtcNow()));
+        db.UpsertRoot(new StorageRootRow(rootId, rootId, path, true, "fs", "unknown", Database.UtcNow()));
         var sc = new Scanner(db);
         sc.ScanRoot(rootId);
         sc.HashNeeded(rootId, true, 1);
@@ -37,7 +37,7 @@ public sealed class ExecuteConfirmTests : IDisposable
         ScanHash(tdb, "disk", target);
         using var td = new Database(tdb);
         using var cd = new Database(cdb);
-        new Planner(td).PlanFromSnapshot(cd, null, "disk", tag);
+        new Planner(td).PlanFromRoots(cd, "disk", "disk", tag);
         return tdb;
     }
 
@@ -87,7 +87,7 @@ public sealed class ExecuteConfirmTests : IDisposable
     public void Execute_Yes_Flag_Skips_Prompt()
     {
         string tdb = SetupPlan("flag");
-        int rc = RunExecute(tdb, "flag", "", out _, "--yes", "--map-root", "disk=" + Path.Combine(_dir, "flag-t"));
+        int rc = RunExecute(tdb, "flag", "", out _, "--yes", "--target-path", Path.Combine(_dir, "flag-t"));
         Assert.Equal(0, rc);
         Assert.True(File.Exists(Path.Combine(_dir, "flag-t", "a.txt")));
     }

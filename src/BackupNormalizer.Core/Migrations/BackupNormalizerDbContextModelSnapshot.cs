@@ -16,35 +16,6 @@ namespace BackupNormalizer.Core.Migrations
 #pragma warning disable 612, 618
             modelBuilder.HasAnnotation("ProductVersion", "10.0.12");
 
-            modelBuilder.Entity("BackupNormalizer.CanonicalEntryEntity", b =>
-                {
-                    b.Property<long>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("INTEGER")
-                        .HasColumnName("Id");
-
-                    b.Property<string>("ExpectedHash")
-                        .HasColumnType("TEXT")
-                        .HasColumnName("ExpectedHash");
-
-                    b.Property<string>("RelativePath")
-                        .IsRequired()
-                        .HasColumnType("TEXT")
-                        .HasColumnName("RelativePath");
-
-                    b.Property<long>("Size")
-                        .HasColumnType("INTEGER")
-                        .HasColumnName("Size");
-
-                    b.Property<long?>("SourceFileEntryId")
-                        .HasColumnType("INTEGER")
-                        .HasColumnName("SourceFileEntryId");
-
-                    b.HasKey("Id");
-
-                    b.ToTable("CanonicalEntry", (string)null);
-                });
-
             modelBuilder.Entity("BackupNormalizer.ExecutionLogEntity", b =>
                 {
                     b.Property<long>("Id")
@@ -193,11 +164,6 @@ namespace BackupNormalizer.Core.Migrations
                         .HasColumnType("TEXT")
                         .HasColumnName("Id");
 
-                    b.Property<string>("CanonicalRootId")
-                        .IsRequired()
-                        .HasColumnType("TEXT")
-                        .HasColumnName("CanonicalRootId");
-
                     b.Property<string>("CreatedUtc")
                         .IsRequired()
                         .HasColumnType("TEXT")
@@ -209,12 +175,37 @@ namespace BackupNormalizer.Core.Migrations
                         .HasDefaultValue(0L)
                         .HasColumnName("EstimatedBytesCopied");
 
+                    b.Property<string>("SourceDatabasePath")
+                        .IsRequired()
+                        .HasColumnType("TEXT")
+                        .HasColumnName("SourceDatabasePath");
+
+                    b.Property<string>("SourceRootId")
+                        .IsRequired()
+                        .HasColumnType("TEXT")
+                        .HasColumnName("SourceRootId");
+
+                    b.Property<string>("SourceRootPath")
+                        .IsRequired()
+                        .HasColumnType("TEXT")
+                        .HasColumnName("SourceRootPath");
+
                     b.Property<string>("Status")
                         .IsRequired()
                         .ValueGeneratedOnAdd()
                         .HasColumnType("TEXT")
                         .HasDefaultValue("Planned")
                         .HasColumnName("Status");
+
+                    b.Property<string>("TargetRootId")
+                        .IsRequired()
+                        .HasColumnType("TEXT")
+                        .HasColumnName("TargetRootId");
+
+                    b.Property<string>("TargetRootPath")
+                        .IsRequired()
+                        .HasColumnType("TEXT")
+                        .HasColumnName("TargetRootPath");
 
                     b.HasKey("Id");
 
@@ -262,6 +253,10 @@ namespace BackupNormalizer.Core.Migrations
                     b.Property<int>("Sequence")
                         .HasColumnType("INTEGER")
                         .HasColumnName("Sequence");
+
+                    b.Property<string>("SourceKind")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("SourceKind");
 
                     b.Property<string>("SourcePath")
                         .HasColumnType("TEXT")
@@ -364,13 +359,6 @@ namespace BackupNormalizer.Core.Migrations
                         .IsRequired()
                         .HasColumnType("TEXT")
                         .HasColumnName("Path");
-
-                    b.Property<string>("Role")
-                        .IsRequired()
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("TEXT")
-                        .HasDefaultValue("Unknown")
-                        .HasColumnName("Role");
 
                     b.Property<bool>("Writable")
                         .ValueGeneratedOnAdd()
