@@ -210,8 +210,7 @@ public sealed class Database : IDisposable
         return entry.Id;
     }
 
-    public List<FileEntryRow> ListFiles(string? rootId = null)
-    {
+    public List<FileEntryRow> ListFiles(string? rootId = null)    {
         var query = Context.FileEntries.AsNoTracking();
         if (rootId != null) query = query.Where(x => x.StorageRootId == rootId);
         return query
@@ -220,6 +219,12 @@ public sealed class Database : IDisposable
             .Select(ToFileEntryRow())
             .ToList();
     }
+
+    /// <summary>Row count for progress baselines (previous scan size).</summary>
+    public int CountFiles(string rootId) => Context.FileEntries
+        .AsNoTracking()
+        .Where(x => x.StorageRootId == rootId)
+        .Count();
 
     public sealed record FileWithHashRow(long Id, string StorageRootId, string RelativePath, string Name,
         long Size, string ModifiedUtc, string? CreatedUtc, string? FileIdentity, long LastSeenScanId,

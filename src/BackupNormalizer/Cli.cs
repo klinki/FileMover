@@ -42,7 +42,7 @@ public static class Cli
               init [--db PATH] [--config PATH]
               root add <id> <path> [--name N] [--writable true|false] [--db PATH]
               root list [--db PATH]
-              scan <rootId|--all> [--db PATH] [--mft off|auto|require]
+              scan <rootId|--all> [--db PATH] [--mft off|auto|require] [--no-progress]
               hash --needed [--db PATH] [--parallelism N] | hash <rootId> --all [--db PATH]
               plan --source-db S.db --source-root R --target-db T.db --target-root R [--plan ID]
               plan show <plan-id> [--db PATH] | plan export <plan-id> [--format json] [--output F] [--db PATH]
@@ -115,20 +115,62 @@ public static class Cli
         string mft = Opt(a, "--mft", AppConfig.Load(Opt(a, "--config", AppConfig.DefaultPath)).MftMode);
         using var d = new Database(db);
         var sc = new Scanner(d, algo, mft);
+        bool showProgress = !Has(a, "--no-progress") && !Console.IsOutputRedirected;
         int totalErrors = 0;
+        int RunRootErrors(string rootId, string label, out int scanned)
+        {
+            int estimate = 0;
+            try { estimate = d.CountFiles(rootId); } catch { }
+            ScanProgressRenderer? renderer = showProgress ? new ScanProgressRenderer(label, estimate) : null;
+            try
+            {
+                var progress = renderer == null ? null : new Progress<ScanProgress>(p => renderer.Report(p));
+                var (s, e) = sc.ScanRoot(rootId, progress);
+                scanned = s;
+                return e;
+            }
+            finally { renderer?.Finish(); }
+        }
         if (a[0] == "--all")
         {
             foreach (var r in d.ListRoots())
             {
-                var (s, e) = sc.ScanRoot(r.Id);
-                Console.WriteLine($"scan {r.Id}: {s} files, {e} errors ({(e == 0 ? "complete" : "incomplete")})");
-                totalErrors += e;
+                int rootErrors = RunRootErrors(r.Id, r.Id, out int rootScanned);
+                totalErrors += rootErrors;
+                Console.WriteLine($"scan {r.Id}: {rootScanned} files, {rootErrors} errors ({(rootErrors == 0 ? "complete" : "incomplete")})");
             }
             return totalErrors == 0 ? 0 : 3;
         }
-        var (scanned, errors) = sc.ScanRoot(a[0]);
+        int errors = RunRootErrors(a[0], a[0], out int scanned);
         Console.WriteLine($"scan {a[0]}: {scanned} files, {errors} errors ({(errors == 0 ? "complete" : "incomplete")})");
         return errors == 0 ? 0 : 3;
+    }
+
+    /// <summary>Single-line TTY progress; silent when output is redirected.</summary>
+    private sealed class ScanProgressRenderer
+    {
+        private readonly string _label;
+        private readonly int _estimate;
+
+        public ScanProgressRenderer(string label, int estimate)
+        {
+            _label = label;
+            _estimate = estimate;
+        }
+
+        public void Report(ScanProgress p)
+        {
+            string pct = _estimate > 0 ? $" ({Math.Min(99, p.Scanned * 100 / _estimate)}% of ~{_estimate:N0})" : "";
+            double rate = p.Elapsed.TotalSeconds > 0 ? p.Scanned / p.Elapsed.TotalSeconds : 0;
+            string dir = p.CurrentPath.Length > 40 ? "…" + p.CurrentPath[^39..] : p.CurrentPath;
+            string line = $"scan {_label}: {p.Scanned:N0} files{pct} | {rate:N0}/s | {p.Elapsed:mm\\:ss} | {dir}";
+            try { Console.Write("\r" + line.PadRight(110)); } catch { }
+        }
+
+        public void Finish()
+        {
+            try { Console.WriteLine(); } catch { }
+        }
     }
 
     private static int Hash(string[] a)

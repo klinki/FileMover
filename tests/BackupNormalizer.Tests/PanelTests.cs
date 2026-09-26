@@ -598,3 +598,52 @@ public sealed class DriveComboTests : IDisposable
         Assert.Equal(!OperatingSystem.IsWindows(), vm.ShowDriveCombo);
     }
 }
+
+public sealed class ScanProgressTests : IDisposable
+{
+    private readonly string _dir = Path.Combine(Path.GetTempPath(), "bn-scanprog-" + Guid.NewGuid().ToString("N"));
+    public ScanProgressTests()
+    {
+        Directory.CreateDirectory(_dir);
+        for (int i = 0; i < 10; i++)
+            File.WriteAllText(Path.Combine(_dir, $"f{i}.txt"), "x");
+    }
+    public void Dispose() { try { Directory.Delete(_dir, true); } catch { } }
+
+    [Fact]
+    public void Progress_Reports_Increasing_Counts_And_Final_Total()
+    {
+        string dbp = Path.Combine(Path.GetTempPath(), "bn-scanprog-" + Guid.NewGuid().ToString("N") + ".db");
+        try
+        {
+            using var db = new Database(dbp);
+            db.UpsertRoot(new StorageRootRow("r", "r", _dir, true, "fs", "unknown", Database.UtcNow()));
+            Assert.Equal(0, db.CountFiles("r"));
+            var seen = new List<ScanProgress>();
+            var sc = new Scanner(db);
+            var (scanned, errors) = sc.ScanRoot("r", new Progress<ScanProgress>(p => { lock (seen) seen.Add(p); }));
+            Assert.Equal(10, scanned);
+            Assert.Equal(0, errors);
+            Assert.NotEmpty(seen);
+            Assert.Equal(10, seen.Max(p => p.Scanned));
+            for (int i = 1; i < seen.Count; i++)
+                Assert.True(seen[i].Scanned >= seen[i - 1].Scanned);
+            Assert.Equal(10, db.CountFiles("r"));
+        }
+        finally { try { File.Delete(dbp); } catch { } }
+    }
+
+    [Fact]
+    public void No_Progress_Callback_Changes_Nothing()
+    {
+        string dbp = Path.Combine(Path.GetTempPath(), "bn-scanprog2-" + Guid.NewGuid().ToString("N") + ".db");
+        try
+        {
+            using var db = new Database(dbp);
+            db.UpsertRoot(new StorageRootRow("r", "r", _dir, true, "fs", "unknown", Database.UtcNow()));
+            var (scanned, errors) = new Scanner(db).ScanRoot("r");
+            Assert.Equal((10, 0), (scanned, errors));
+        }
+        finally { try { File.Delete(dbp); } catch { } }
+    }
+}

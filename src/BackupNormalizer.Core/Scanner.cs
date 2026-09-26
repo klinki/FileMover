@@ -5,6 +5,10 @@ namespace BackupNormalizer;
 public sealed record FsEntry(string Path, bool IsDirectory, long Size, DateTime ModifiedUtc,
     DateTime CreatedUtc, bool HasMetadata, bool IsReparse, string? Error);
 
+/// <summary>Live scan progress snapshot. Totals are unknown upfront (recursive
+/// walk), so consumers estimate against a baseline (e.g. previous scan count).</summary>
+public sealed record ScanProgress(string RootId, int Scanned, int Errors, string CurrentPath, TimeSpan Elapsed);
+
 /// <summary>Scanner §7-8: cheap metadata first, no symlink follow, incremental reuse.</summary>
 public sealed class Scanner
 {
@@ -21,11 +25,18 @@ public sealed class Scanner
         _mftMode = mftMode ?? "off";
     }
 
-    public (int scanned, int errors) ScanRoot(string rootId)
+    public (int scanned, int errors) ScanRoot(string rootId, IProgress<ScanProgress>? progress = null)
     {
         var root = _db.GetRoot(rootId) ?? throw new InvalidOperationException($"unknown root '{rootId}'");
         long scanId = _db.BeginScan(rootId);
         int scanned = 0, errors = 0;
+        var startedAt = DateTime.UtcNow;
+        string currentDir = root.Path;
+        void Report()
+        {
+            try { progress?.Report(new ScanProgress(rootId, scanned, errors, currentDir, DateTime.UtcNow - startedAt)); }
+            catch { }
+        }
         NtfsMftEnumerator.NtfsVolume? mft = null;
         try
         {
@@ -56,6 +67,7 @@ public sealed class Scanner
                 var file = scanEntry.Path!;
                 try
                 {
+                    currentDir = Path.GetDirectoryName(file) ?? root.Path;
                     string rel;
                     rel = Paths.GetRelative(root.Path, file);
                     rel = Paths.NormalizeRelative(rel);
@@ -102,6 +114,7 @@ public sealed class Scanner
                             _db.MarkHashStale(id, _algo);
                     }
                     scanned++;
+                    if (scanned % 64 == 0) Report();
                 }
                 catch (Exception ex) when (ex is UnauthorizedAccessException or IOException or ArgumentException)
                 {
@@ -109,6 +122,7 @@ public sealed class Scanner
                     TryRecordError(rootId, file, root.Path, scanId, FileStatus.ScanError, ex.Message);
                 }
             }
+            Report();
             if (errors == 0)
             {
                 _db.MarkUnseenFilesMissing(rootId, scanId);
