@@ -23,8 +23,8 @@ public sealed class Executor
     {
         var plan = _db.GetPlan(planId)
             ?? throw new InvalidOperationException($"unknown plan '{planId}'");
-        string sourceBasePath = Path.GetFullPath(sourcePathOverride ?? plan.SourceRootPath);
-        string targetBasePath = Path.GetFullPath(targetPathOverride ?? plan.TargetRootPath);
+        string sourceBasePath = Path.GetFullPath(sourcePathOverride ?? plan.ExecutionSourceRootPath ?? plan.SourceRootPath);
+        string targetBasePath = Path.GetFullPath(targetPathOverride ?? plan.ExecutionTargetRootPath ?? plan.TargetRootPath);
         string ResolvePath(string sourceKind, string rootId, string rel)
         {
             string basePath = sourceKind switch
@@ -50,6 +50,8 @@ public sealed class Executor
                 if (root != plan.TargetRootId || rel == null || (root == op.SourceRoot && rel == op.SourcePath)) return false;
                 string abs;
                 try { abs = ResolvePath(SourceScope.Target, root, rel); } catch { return false; }
+                if (op.SourceRoot != null && op.SourcePath != null
+                    && Paths.PathEquals(abs, ResolvePath(SourceScope.Target, op.SourceRoot, op.SourcePath))) return false;
                 if (!File.Exists(abs)) return false;
                 var file = new FileInfo(abs);
                 if (file.Length != size || (op.ExpectedSize != 0 && file.Length != op.ExpectedSize)) return false;
@@ -72,14 +74,14 @@ public sealed class Executor
         if (ops.Count == 0) throw new InvalidOperationException($"unknown or empty plan '{planId}'");
         if (ops.Any(op => op.SourceKind == SourceScope.Source) && Paths.RootsOverlap(sourceBasePath, targetBasePath))
             throw new InvalidOperationException("source and target paths overlap; execution requires disjoint roots");
+        _db.BindPlanExecution(planId, ops.Any(op => op.SourceKind == SourceScope.Source) ? sourceBasePath : null, targetBasePath);
         int done = 0, failed = 0, skipped = 0, conflicts = 0;
         int pos = 0, total = ops.Count;
         foreach (var op in ops)
         {
             pos++;
             string tag = $"[{pos}/{total}]";
-            if (resume && op.Status == OpStatus.Completed) { done++; continue; }
-            if (op.Status == OpStatus.Completed && !resume) { done++; continue; }
+            if (op.Status == OpStatus.Completed) { done++; continue; }
             if (op.Type is OpType.Mkdir)
             {
                 try

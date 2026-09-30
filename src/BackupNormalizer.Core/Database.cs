@@ -355,13 +355,54 @@ public sealed class Database : IDisposable
 
     public sealed record PlanInfo(string Id, string CreatedUtc, string SourceDatabasePath,
         string SourceRootId, string SourceRootPath, string TargetRootId, string TargetRootPath,
-        string Status, long EstimatedBytesCopied);
+        string Status, long EstimatedBytesCopied, string? ExecutionSourceRootPath, string? ExecutionTargetRootPath);
 
     public PlanInfo? GetPlan(string planId) => Context.Plans.AsNoTracking()
         .Where(x => x.Id == planId)
         .Select(x => new PlanInfo(x.Id, x.CreatedUtc, x.SourceDatabasePath, x.SourceRootId,
-            x.SourceRootPath, x.TargetRootId, x.TargetRootPath, x.Status, x.EstimatedBytesCopied))
+            x.SourceRootPath, x.TargetRootId, x.TargetRootPath, x.Status, x.EstimatedBytesCopied,
+            x.ExecutionSourceRootPath, x.ExecutionTargetRootPath))
         .FirstOrDefault();
+
+    public void BindPlanExecution(string planId, string? sourcePath, string targetPath)
+    {
+        EnsureWritable();
+        sourcePath = sourcePath == null ? null : Path.GetFullPath(sourcePath);
+        targetPath = Path.GetFullPath(targetPath);
+        using var transaction = Context.Database.BeginTransaction();
+        var plan = GetPlan(planId) ?? throw new InvalidOperationException($"unknown plan '{planId}'");
+        const string replayAdvice = "Import the original plan JSON into a fresh database to execute on another root.";
+        if (plan.ExecutionTargetRootPath != null)
+        {
+            if (!Paths.PathEquals(plan.ExecutionTargetRootPath, targetPath)
+                || (sourcePath != null && (plan.ExecutionSourceRootPath == null
+                    || !Paths.PathEquals(plan.ExecutionSourceRootPath, sourcePath))))
+                throw new InvalidOperationException($"Plan '{planId}' is bound to different execution roots. {replayAdvice}");
+        }
+        else
+        {
+            if (Context.PlanOperations.Any(x => x.PlanId == planId && x.Status != OpStatus.Planned))
+                throw new InvalidOperationException($"Plan '{planId}' has historical execution without recorded roots. {replayAdvice}");
+            Context.Plans.Where(x => x.Id == planId).ExecuteUpdate(setters => setters
+                .SetProperty(x => x.ExecutionSourceRootPath, sourcePath)
+                .SetProperty(x => x.ExecutionTargetRootPath, targetPath));
+        }
+        transaction.Commit();
+    }
+
+    public void MarkFilesMissing(long[] fileIds)
+    {
+        if (fileIds.Length == 0) return;
+        EnsureWritable();
+        using var transaction = Context.Database.BeginTransaction();
+        Context.FileHashes.Where(x => fileIds.Contains(x.FileEntryId))
+            .ExecuteUpdate(setters => setters.SetProperty(x => x.State, HashState.Stale));
+        Context.FileEntries.Where(x => fileIds.Contains(x.Id))
+            .ExecuteUpdate(setters => setters
+                .SetProperty(x => x.Status, FileStatus.Missing)
+                .SetProperty(x => x.Error, (string?)null));
+        transaction.Commit();
+    }
 
     public void UpdatePlanStatus(string planId, string status)
     {
@@ -416,7 +457,7 @@ public sealed class Database : IDisposable
     public List<CopyCandidate> ListCompletedCopies(string planId, string hash) => Context.PlanOperations
         .AsNoTracking()
         .Where(x => x.PlanId == planId && x.Status == OpStatus.Completed && x.ExpectedHash == hash
-            && (x.Type == OpType.Copy || x.Type == OpType.Move)
+            && (x.Type == OpType.Copy || x.Type == OpType.Move || x.Type == OpType.Keep)
             && x.DestinationRootId != null && x.DestinationPath != null)
         .Select(x => new CopyCandidate(x.DestinationRootId!, x.DestinationPath!, x.ExpectedSize))
         .ToList();

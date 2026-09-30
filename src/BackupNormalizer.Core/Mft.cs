@@ -34,6 +34,16 @@ public static class NtfsMftEnumerator
     private const ulong MftReservedCount = 16;
     private const ulong VolumeRootRecord = 5;
 
+    [StructLayout(LayoutKind.Sequential)]
+    private struct NativeRecordOutput
+    {
+        public long FileReferenceNumber;
+        public uint FileRecordLength;
+        public byte FileRecordBuffer;
+    }
+
+    private enum ParseResult { Invalid, Metadata, Entry }
+
     [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
     private static extern SafeFileHandle CreateFileW(string name, uint access, uint share,
         IntPtr security, uint disposition, uint flags, IntPtr template);
@@ -56,7 +66,7 @@ public static class NtfsMftEnumerator
         catch { return false; }
     }
 
-    /// <summary>Decides whether MFT mode applies. Never throws.</summary>
+    /// <summary>Decides whether MFT mode applies. Required mode throws when unavailable.</summary>
     public static bool TryCreate(string rootPath, string mode,
         out NtfsVolume? volume, out string? message)
     {
@@ -167,6 +177,7 @@ public static class NtfsMftEnumerator
             foreach (var (frn, parsed) in ReadRecords())
             {
                 if (parsed == null) { skipped++; continue; }
+                if (frn < MftReservedCount) continue;
                 if (parsed.IsDirectory)
                 {
                     // INVARIANT: the lookup map holds directory records only.
@@ -177,8 +188,7 @@ public static class NtfsMftEnumerator
                 }
                 if (!TryResolvePath(dirs, parsed.Name, parsed.ParentRecord, volumeRoot, out string? full) || full == null)
                 {
-                    skipped++;
-                    continue;
+                    throw new IOException($"Cannot resolve the path of MFT record {frn} ('{parsed.Name}').");
                 }
                 if (!full.StartsWith(prefix, OperatingSystem.IsWindows()
                     ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal))
@@ -191,25 +201,26 @@ public static class NtfsMftEnumerator
 
         private IEnumerable<(ulong Frn, ParsedFileRecord? Parsed)> ReadRecords()
         {
-            byte[] record = new byte[Math.Max(BytesPerFileRecord, 1024)];
+            // The native API returns a header followed by the FILE record.
+            int outputSize = checked(Marshal.SizeOf<NativeRecordOutput>() + BytesPerFileRecord - 1);
+            byte[] output = new byte[outputSize];
             IntPtr inBuf = Marshal.AllocHGlobal(8);
-            IntPtr outBuf = Marshal.AllocHGlobal(record.Length);
+            IntPtr outBuf = Marshal.AllocHGlobal(outputSize);
             try
             {
-                for (ulong frn = MftReservedCount; frn < RecordCount; frn++)
+                (byte[] Buffer, int Length) ReadRecord(ulong requested)
                 {
-                    Marshal.WriteInt64(inBuf, (long)frn);
+                    Marshal.WriteInt64(inBuf, (long)requested);
                     if (!DeviceIoControl(_handle, FsctlGetNtfsFileRecord,
-                        inBuf, 8, outBuf, record.Length, out int returned, IntPtr.Zero) || returned <= 0)
-                    {
-                        yield return (frn, null);
-                        continue;
-                    }
-                    Marshal.Copy(outBuf, record, 0, returned);
-                    yield return TryParseFileRecord(record, returned, BytesPerSector, out var parsed)
-                        ? (frn, parsed)
-                        : (frn, null);
+                        inBuf, 8, outBuf, outputSize, out int returned, IntPtr.Zero))
+                        throw new IOException($"Cannot read MFT record {requested}: Win32 error {Marshal.GetLastWin32Error()}.");
+                    if (returned < 12 || returned > outputSize)
+                        throw new IOException($"Invalid MFT output length {returned} for record {requested}.");
+                    Marshal.Copy(outBuf, output, 0, returned);
+                    return (output, returned);
                 }
+                foreach (var record in EnumerateRecords(RecordCount, BytesPerSector, ReadRecord))
+                    yield return record;
             }
             finally
             {
@@ -223,6 +234,38 @@ public static class NtfsMftEnumerator
         public void Dispose()
         {
             if (!_disposed) { _disposed = true; _handle.Dispose(); }
+        }
+    }
+
+    internal static (ulong Frn, ParsedFileRecord? Parsed) DecodeOutput(byte[] output, int length, int bytesPerSector)
+    {
+        const int payloadOffset = 12;
+        if (length < payloadOffset || length > output.Length)
+            throw new IOException("Invalid NTFS file record output header.");
+        uint recordLength = ReadU32(output, 8);
+        if (recordLength < 48 || recordLength > length - payloadOffset)
+            throw new IOException("Invalid NTFS file record payload length.");
+        ulong frn = ReadU64(output, 0) & 0xFFFFFFFFFFFFUL;
+        var result = ParseFileRecord(output.AsSpan(payloadOffset, (int)recordLength), (int)recordLength, bytesPerSector, out var parsed);
+        if (result == ParseResult.Invalid)
+            throw new IOException($"Malformed MFT record {frn}.");
+        return (frn, parsed);
+    }
+
+    internal static IEnumerable<(ulong Frn, ParsedFileRecord? Parsed)> EnumerateRecords(
+        ulong recordCount, int bytesPerSector, Func<ulong, (byte[] Buffer, int Length)> readRecord)
+    {
+        if (recordCount == 0) yield break;
+        ulong requested = recordCount - 1;
+        while (true)
+        {
+            var output = readRecord(requested);
+            var record = DecodeOutput(output.Buffer, output.Length, bytesPerSector);
+            if (record.Frn > requested)
+                throw new IOException($"MFT returned record {record.Frn} above requested record {requested}.");
+            yield return record;
+            if (record.Frn == 0) yield break;
+            requested = record.Frn - 1;
         }
     }
 
@@ -257,20 +300,23 @@ public static class NtfsMftEnumerator
     }
 
     public static bool TryParseFileRecord(byte[] buffer, int length, int bytesPerSector, out ParsedFileRecord? parsed)
+        => ParseFileRecord(buffer, length, bytesPerSector, out parsed) == ParseResult.Entry;
+
+    private static ParseResult ParseFileRecord(Span<byte> buffer, int length, int bytesPerSector, out ParsedFileRecord? parsed)
     {
         parsed = null;
         try
         {
-            if (buffer == null || length < 48 || length > buffer.Length) return false;
-            if (!BitConverter.IsLittleEndian) return false;
-            if (ReadU32(buffer, 0) != 0x454C4946) return false; // "FILE"
+            if (length < 48 || length > buffer.Length) return ParseResult.Invalid;
+            if (!BitConverter.IsLittleEndian) return ParseResult.Invalid;
+            if (ReadU32(buffer, 0) != 0x454C4946) return ParseResult.Invalid; // "FILE"
             int usaOffset = ReadU16(buffer, 4);
             int usaCount = ReadU16(buffer, 6);
             ushort flags = ReadU16(buffer, 0x16);
             int firstAttr = ReadU16(buffer, 0x14);
-            if ((flags & RecordInUse) == 0) return false;
-            if (firstAttr < 42 || firstAttr >= length) return false;
-            if (!FixupSectors(buffer, length, usaOffset, usaCount, bytesPerSector)) return false;
+            if ((flags & RecordInUse) == 0) return ParseResult.Invalid;
+            if (firstAttr < 42 || firstAttr >= length) return ParseResult.Invalid;
+            if (!FixupSectors(buffer, length, usaOffset, usaCount, bytesPerSector)) return ParseResult.Invalid;
             bool isDir = (flags & RecordIsDirectory) != 0;
 
             string? bestName = null;
@@ -282,17 +328,19 @@ public static class NtfsMftEnumerator
             int bestRank = int.MaxValue;
 
             int offset = firstAttr;
-            while (offset + 8 <= length)
+            bool sawEnd = false;
+            while (offset + 4 <= length)
             {
                 uint type = ReadU32(buffer, offset);
-                if (type == AttributeEnd) break;
+                if (type == AttributeEnd) { sawEnd = true; break; }
+                if (offset + 8 > length) return ParseResult.Invalid;
                 int attrLen = (int)ReadU32(buffer, offset + 4);
-                if (attrLen < 8 || offset + attrLen > length) return false;
+                if (attrLen < 24 || attrLen > length - offset) return ParseResult.Invalid;
                 if (type == FileFileName && buffer[offset + 8] == 0) // resident only
                 {
                     int valueLen = (int)ReadU32(buffer, offset + 16);
                     int valueOff = ReadU16(buffer, offset + 20);
-                    if (valueOff >= 0 && valueLen >= 66 && offset + valueOff + valueLen <= length)
+                    if (valueOff >= 24 && valueLen >= 66 && valueOff <= attrLen && valueLen <= attrLen - valueOff)
                     {
                         int v = offset + valueOff;
                         ulong parentRef = ReadU64(buffer, v);
@@ -303,12 +351,12 @@ public static class NtfsMftEnumerator
                         uint nameFlags = ReadU32(buffer, v + 56);
                         int nameLen = buffer[v + 64];
                         int nameSpace = buffer[v + 65];
-                        if (nameLen > 0 && v + 66 + nameLen * 2 <= length)
+                        if (nameLen > 0 && 66 + nameLen * 2 <= valueLen)
                         {
                             int rank = nameSpace switch { 3 => 0, 1 => 1, 0 => 2, _ => 3 };
                             if (rank < bestRank)
                             {
-                                string name = Encoding.Unicode.GetString(buffer, v + 66, nameLen * 2);
+                                string name = Encoding.Unicode.GetString(buffer.Slice(v + 66, nameLen * 2));
                                 if (!string.IsNullOrEmpty(name))
                                 {
                                     bestRank = rank;
@@ -321,19 +369,24 @@ public static class NtfsMftEnumerator
                                 }
                             }
                         }
+                        else return ParseResult.Invalid;
                     }
+                    else return ParseResult.Invalid;
                 }
                 offset += attrLen;
             }
-            if (bestName == null) return false;
+            if (!sawEnd) return ParseResult.Invalid;
+            // Extension records refer to their base record and need not contain a name.
+            if (ReadU64(buffer, 0x20) != 0) return ParseResult.Metadata;
+            if (bestName == null) return ParseResult.Invalid;
             parsed = new ParsedFileRecord(bestName, bestParent, bestSize,
                 bestModified, bestCreated, isDir, bestReparse);
-            return true;
+            return ParseResult.Entry;
         }
-        catch { return false; }
+        catch { return ParseResult.Invalid; }
     }
 
-    private static bool FixupSectors(byte[] buffer, int length, int usaOffset, int usaCount, int bytesPerSector)
+    private static bool FixupSectors(Span<byte> buffer, int length, int usaOffset, int usaCount, int bytesPerSector)
     {
         if (usaOffset == 0 || usaCount == 0) return true;
         if (bytesPerSector <= 0) return false;
@@ -354,9 +407,9 @@ public static class NtfsMftEnumerator
         return true;
     }
 
-    private static uint ReadU32(byte[] b, int o) =>
+    private static uint ReadU32(ReadOnlySpan<byte> b, int o) =>
         (uint)(b[o] | (b[o + 1] << 8) | (b[o + 2] << 16) | (b[o + 3] << 24));
-    private static ushort ReadU16(byte[] b, int o) => (ushort)(b[o] | (b[o + 1] << 8));
-    private static ulong ReadU64(byte[] b, int o) => BitConverter.ToUInt64(b, o);
-    private static long ReadI64(byte[] b, int o) => BitConverter.ToInt64(b, o);
+    private static ushort ReadU16(ReadOnlySpan<byte> b, int o) => (ushort)(b[o] | (b[o + 1] << 8));
+    private static ulong ReadU64(ReadOnlySpan<byte> b, int o) => BitConverter.ToUInt64(b.Slice(o, 8));
+    private static long ReadI64(ReadOnlySpan<byte> b, int o) => BitConverter.ToInt64(b.Slice(o, 8));
 }

@@ -119,8 +119,8 @@ public static class PlanStaging
         var ops = new List<PlanOpDoc>();
         int seq = 1;
         long bytesToCopy = 0;
-        // Deterministic order: MKDIR, MOVE, COPY, TRASH, then rest.
-        foreach (var s in staged.OrderBy(o => o.Type == OpType.Mkdir ? 0 : o.Type == OpType.Move ? 1 : o.Type == OpType.Copy ? 2 : o.Type == OpType.Trash ? 3 : 4))
+        // Manual operations must execute in the order the user staged them.
+        foreach (var s in staged)
         {
             string? srcRoot = s.Type == OpType.Mkdir ? null : rootId;
             string? srcPath = s.Type == OpType.Mkdir ? null : s.SourceRel;

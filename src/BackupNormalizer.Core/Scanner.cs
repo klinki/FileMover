@@ -16,6 +16,8 @@ public sealed class Scanner
     private readonly IContentHasher _hasher;
     private readonly string _algo;
     private readonly string _mftMode;
+    private readonly HashSet<string> _databaseFiles;
+    private readonly Func<string, IEnumerable<FsEntry>>? _enumerate;
 
     public Scanner(Database db, string? algo = null, string? mftMode = null)
     {
@@ -23,6 +25,21 @@ public sealed class Scanner
         _algo = HasherFactory.NormalizeAlgorithm(algo ?? "sha256");
         _hasher = HasherFactory.Create(_algo);
         _mftMode = mftMode ?? "off";
+        _databaseFiles = new HashSet<string>(OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal)
+        {
+            db.DbPath, db.DbPath + "-wal", db.DbPath + "-shm", db.DbPath + "-journal"
+        };
+    }
+
+    internal Scanner(Database db, Func<string, IEnumerable<FsEntry>> enumerate) : this(db)
+        => _enumerate = enumerate;
+
+    private void RetireDatabaseEntries(StorageRootRow root)
+    {
+        var ids = _db.ListFiles(root.Id)
+            .Where(f => _databaseFiles.Contains(Paths.CombineRoot(root.Path, f.RelativePath)))
+            .Select(f => f.Id).ToArray();
+        _db.MarkFilesMissing(ids);
     }
 
     public (int scanned, int errors) ScanRoot(string rootId, IProgress<ScanProgress>? progress = null)
@@ -42,8 +59,13 @@ public sealed class Scanner
         {
             if (!Directory.Exists(root.Path))
                 throw new DirectoryNotFoundException($"root path not found: {root.Path}");
+            RetireDatabaseEntries(root);
             IEnumerable<FsEntry> entries;
-            if (NtfsMftEnumerator.TryCreate(root.Path, _mftMode, out var volume, out string? note))
+            if (_enumerate != null)
+            {
+                entries = _enumerate(root.Path);
+            }
+            else if (NtfsMftEnumerator.TryCreate(root.Path, _mftMode, out var volume, out string? note))
             {
                 if (note != null) Log.Info(note);
                 mft = volume;
@@ -59,14 +81,15 @@ public sealed class Scanner
             }
             foreach (var scanEntry in entries)
             {
-                if (scanEntry.Error != null)
-                {
-                    errors++;
-                    continue;
-                }
                 var file = scanEntry.Path!;
                 try
                 {
+                    if (_databaseFiles.Contains(Path.GetFullPath(file))) continue;
+                    if (scanEntry.Error != null)
+                    {
+                        errors++;
+                        continue;
+                    }
                     currentDir = Path.GetDirectoryName(file) ?? root.Path;
                     string rel;
                     rel = Paths.GetRelative(root.Path, file);
@@ -134,9 +157,11 @@ public sealed class Scanner
             }
             return (scanned, errors);
         }
-        catch
+        catch (Exception ex)
         {
             try { _db.FinishScan(scanId, ScanStatus.Failed); } catch { }
+            if (mft != null)
+                throw new IOException($"MFT scan failed: {ex.Message} Retry with --mft off.", ex);
             throw;
         }
         finally
@@ -231,6 +256,8 @@ public sealed class Scanner
     /// <summary>Demand-driven hashing (§9): hash only needed/ambiguous or all.</summary>
     public (int hashed, int skipped, int unstable) HashNeeded(string? rootId = null, bool all = false, int parallelism = 2)
     {
+        foreach (var root in _db.ListRoots().Where(r => rootId == null || r.Id == rootId))
+            RetireDatabaseEntries(root);
         var files = _db.ListFiles(rootId);
         var roots = _db.ListRoots().ToDictionary(r => r.Id);
         int hashed = 0, skipped = 0, unstable = 0;

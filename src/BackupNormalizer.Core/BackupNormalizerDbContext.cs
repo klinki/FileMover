@@ -89,6 +89,8 @@ public sealed class BackupNormalizerDbContext(DbContextOptions<BackupNormalizerD
             entity.Property(x => x.SourceRootPath).HasColumnName("SourceRootPath").IsRequired();
             entity.Property(x => x.TargetRootId).HasColumnName("TargetRootId").IsRequired();
             entity.Property(x => x.TargetRootPath).HasColumnName("TargetRootPath").IsRequired();
+            entity.Property(x => x.ExecutionSourceRootPath).HasColumnName("ExecutionSourceRootPath");
+            entity.Property(x => x.ExecutionTargetRootPath).HasColumnName("ExecutionTargetRootPath");
             entity.Property(x => x.Status).HasColumnName("Status").HasDefaultValue(PlanStatus.Planned);
             entity.Property(x => x.EstimatedBytesCopied).HasColumnName("EstimatedBytesCopied").HasDefaultValue(0L);
         });

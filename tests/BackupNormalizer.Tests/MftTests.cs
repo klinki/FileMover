@@ -71,6 +71,79 @@ public sealed class MftParserTests
         Assert.False(parsed.IsReparse);
     }
 
+    private static byte[] WrapRecord(ulong reference, byte[] record)
+    {
+        var output = new byte[12 + record.Length];
+        BitConverter.GetBytes(reference).CopyTo(output, 0);
+        BitConverter.GetBytes((uint)record.Length).CopyTo(output, 8);
+        record.CopyTo(output, 12);
+        return output;
+    }
+
+    [Fact]
+    public void Decodes_Native_Header_And_Returned_Record_Number()
+    {
+        var output = WrapRecord((7UL << 48) | 123UL, BuildRecord("a.txt", 1, 5, 7));
+        var result = NtfsMftEnumerator.DecodeOutput(output, output.Length, 512);
+        Assert.Equal(123UL, result.Frn);
+        Assert.Equal("a.txt", result.Parsed!.Name);
+        Assert.Equal(7, result.Parsed.Size);
+    }
+
+    [Theory]
+    [InlineData(0, 1024)]
+    [InlineData(11, 1024)]
+    [InlineData(1036, 0)]
+    [InlineData(1036, 1025)]
+    [InlineData(1037, 1024)]
+    public void Rejects_Invalid_Native_Output_Lengths(int returned, int recordLength)
+    {
+        var output = WrapRecord(123, BuildRecord("a.txt", 1, 5, 7));
+        BitConverter.GetBytes(recordLength).CopyTo(output, 8);
+        Assert.Throws<IOException>(() => NtfsMftEnumerator.DecodeOutput(output, returned, 512));
+    }
+
+    [Fact]
+    public void Native_Walk_Uses_Returned_Record_Number_And_Skips_Gaps()
+    {
+        var requested = new List<ulong>();
+        var returned = new Queue<ulong>([9, 5, 0]);
+        var records = NtfsMftEnumerator.EnumerateRecords(16, 512, number =>
+        {
+            requested.Add(number);
+            var output = WrapRecord(returned.Dequeue(), BuildRecord("a.txt", 1, 5, 7));
+            return (output, output.Length);
+        }).ToList();
+        Assert.Equal(new ulong[] { 15, 8, 4 }, requested);
+        Assert.Equal(new ulong[] { 9, 5, 0 }, records.Select(r => r.Frn));
+    }
+
+    [Fact]
+    public void Native_Walk_Propagates_Read_Failures_And_Rejects_Forward_Results()
+    {
+        Assert.Throws<IOException>(() => NtfsMftEnumerator.EnumerateRecords(16, 512,
+            _ => throw new IOException("read failed")).ToList());
+        Assert.Throws<IOException>(() => NtfsMftEnumerator.EnumerateRecords(16, 512, _ =>
+        {
+            var output = WrapRecord(16, BuildRecord("a.txt", 1, 5, 7));
+            return (output, output.Length);
+        }).ToList());
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Valid_Extension_Record_Is_An_Intentional_Skip_And_Malformed_Record_Fails(bool containsName)
+    {
+        var extension = BuildRecord("unused", 1, 5, 7);
+        BitConverter.GetBytes(42UL).CopyTo(extension, 0x20);
+        if (!containsName) BitConverter.GetBytes(0xFFFFFFFFU).CopyTo(extension, 48);
+        var output = WrapRecord(100, extension);
+        Assert.Null(NtfsMftEnumerator.DecodeOutput(output, output.Length, 512).Parsed);
+        var malformed = WrapRecord(101, new byte[1024]);
+        Assert.Throws<IOException>(() => NtfsMftEnumerator.DecodeOutput(malformed, malformed.Length, 512));
+    }
+
     [Fact]
     public void Parses_Directory_Record()
     {

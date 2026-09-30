@@ -55,6 +55,8 @@ public sealed class PlanEntity
     public string SourceRootPath { get; set; } = string.Empty;
     public string TargetRootId { get; set; } = string.Empty;
     public string TargetRootPath { get; set; } = string.Empty;
+    public string? ExecutionSourceRootPath { get; set; }
+    public string? ExecutionTargetRootPath { get; set; }
     public string Status { get; set; } = string.Empty;
     public long EstimatedBytesCopied { get; set; }
 }

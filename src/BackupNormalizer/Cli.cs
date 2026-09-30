@@ -307,8 +307,8 @@ public static class Cli
         using var d = new Database(db);
         var plan = d.GetPlan(a[0]);
         if (plan == null) return Fail($"unknown plan '{a[0]}'");
-        string sourcePath = Path.GetFullPath(sourcePathOverride ?? plan.SourceRootPath);
-        string targetPath = Path.GetFullPath(targetPathOverride ?? plan.TargetRootPath);
+        string sourcePath = Path.GetFullPath(sourcePathOverride ?? plan.ExecutionSourceRootPath ?? plan.SourceRootPath);
+        string targetPath = Path.GetFullPath(targetPathOverride ?? plan.ExecutionTargetRootPath ?? plan.TargetRootPath);
         int ok = 0, bad = 0;
         var hasher = HasherFactory.Create(null);
         var operations = d.ListPlanOperations(a[0]);

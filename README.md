@@ -40,6 +40,8 @@ bn plan export photos-001 --db ./target.db --output ./photos-001.json
 
 The source root defines the desired paths for that run. To reverse the direction, swap the source and target arguments and scan both roots again first. Diff reports source-only, target-only, changed, identical, and unverified files. It can compare historical snapshots of the same directory. Automatic planning requires two disjoint directories and a complete scan of each root.
 
+The inventory database may live inside its scanned root. Scanning and hashing exclude that database and its SQLite companions. Other database files are ordinary inventory content. Rescanning also retires entries for the active database left by older scans.
+
 ### Fast NTFS scanning (Windows only, opt-in)
 
 On large NTFS drives, `scan` can read the Master File Table directly instead
@@ -56,7 +58,9 @@ bn --elevate scan photos --db ./source.db --mft auto  # restart elevated via UAC
 `--mft` can also be set persistently with `"mftMode": "auto"` in
 `backup-normalizer.json`. Hashing still reads every file, so this only
 accelerates the metadata pass. Validate once per drive by scanning both ways
-and diffing — the result must be empty.
+and comparing the inventories. Unexpected read or parsing failures after an
+MFT scan starts fail that scan without marking unseen files missing. Retry
+with `--mft off`; `auto` falls back only when MFT initialization is unavailable.
 
 `plan` only writes operations to the target database. It keeps identical target files, moves matching target files to desired paths, and copies bytes from the source when needed. It moves an extra target file to recoverable trash only when the target has another verified copy of its content. A file at a desired path with different content becomes a conflict; the planner does not overwrite it. Empty directories are outside the inventory.
 
@@ -70,12 +74,25 @@ bn verify photos-001 --db ./target.db
 bn plan conflicts photos-001 --db ./target.db
 ```
 
-If a drive is mounted elsewhere, supply its current path. The source database file is not needed to execute a saved plan, but the source files must be available for operations that copy from it.
+Before the first execution, supply the current paths if the drives are mounted elsewhere. The source database file is not needed to execute a saved plan, but the source files must be available for operations that copy from it.
 
 ```bash
-bn execute photos-001 --db ./target.db --source-path /new/source/photos --target-path /new/target/photos --resume
-bn verify photos-001 --db ./target.db --target-path /new/target/photos
+bn execute photos-001 --db ./target.db --source-path /new/source/photos --target-path /new/target/photos
+bn execute photos-001 --db ./target.db --resume
+bn verify photos-001 --db ./target.db
 ```
+
+The first execution records its effective roots. Retries, resume, and verification default to those paths. Execution rejects changing roots in a database that already has an execution binding, so completed operations cannot be silently skipped on a different drive. Verification still accepts explicit path overrides.
+
+To organize files on a PC under `G:\Photos` and replay the exported relative operations on an identical external drive under `E:\Photos`, import the original JSON into a fresh execution database:
+
+```powershell
+bn plan import .\ui-plan.json --db .\external-plan.db --target-path "E:\Photos"
+bn execute <plan-id> --db .\external-plan.db
+bn verify <plan-id> --db .\external-plan.db
+```
+
+Use a separate execution database for each replay. Imported plans start with fresh operation statuses; content drift still causes conflicts. Plans attempted before execution-root recording was introduced must also be imported into a fresh database for further execution. Their existing history is preserved.
 
 The executor checks sizes and full hashes before moving or trashing files. Copies go through a temporary file, flush, hash check, and rename. Target files with unexpected content are left in place. Trash is stored under `.backup-normalizer-trash/<plan-id>/` inside the target root. Permanent deletion requires a separate `purge --yes` command.
 

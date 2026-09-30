@@ -601,6 +601,11 @@ public sealed class DriveComboTests : IDisposable
 
 public sealed class ScanProgressTests : IDisposable
 {
+    private sealed class InlineProgress(Action<ScanProgress> report) : IProgress<ScanProgress>
+    {
+        public void Report(ScanProgress value) => report(value);
+    }
+
     private readonly string _dir = Path.Combine(Path.GetTempPath(), "bn-scanprog-" + Guid.NewGuid().ToString("N"));
     public ScanProgressTests()
     {
@@ -621,7 +626,7 @@ public sealed class ScanProgressTests : IDisposable
             Assert.Equal(0, db.CountFiles("r"));
             var seen = new List<ScanProgress>();
             var sc = new Scanner(db);
-            var (scanned, errors) = sc.ScanRoot("r", new Progress<ScanProgress>(p => { lock (seen) seen.Add(p); }));
+            var (scanned, errors) = sc.ScanRoot("r", new InlineProgress(seen.Add));
             Assert.Equal(10, scanned);
             Assert.Equal(0, errors);
             Assert.NotEmpty(seen);

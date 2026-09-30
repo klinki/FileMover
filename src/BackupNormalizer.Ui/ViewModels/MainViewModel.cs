@@ -68,8 +68,12 @@ public sealed partial class MainViewModel : ViewModelBase
 
     private readonly List<BackupNormalizer.PlanStaging.StagedOp> _stagedCore = new();
 
+    public string AppliedBasePath { get; private set; }
+    public bool CanChangeBase => _stagedCore.Count == 0;
+
     public MainViewModel()
     {
+        AppliedBasePath = Path.GetFullPath(BasePath);
         Left.VirtualDirs = VirtualDirs;
         Right.VirtualDirs = VirtualDirs;
         Left.CurrentPath = BasePath;
@@ -87,9 +91,14 @@ public sealed partial class MainViewModel : ViewModelBase
     public bool ShowDriveButtons => OperatingSystem.IsWindows();
     public bool ShowDriveCombo => !ShowDriveButtons;
 
-    [RelayCommand]
+    [RelayCommand(CanExecute = nameof(CanChangeBase))]
     public void ApplyBase()
     {
+        if (!CanChangeBase)
+        {
+            StatusMessage = "Clear staged operations before changing the base.";
+            return;
+        }
         try
         {
             string full = Path.GetFullPath(BasePath);
@@ -99,6 +108,7 @@ public sealed partial class MainViewModel : ViewModelBase
                 return;
             }
             BasePath = full;
+            AppliedBasePath = full;
             VirtualDirs.Clear(); // virtuals belong to the previous base
             Left.CurrentPath = full;
             Right.CurrentPath = full;
@@ -180,6 +190,16 @@ public sealed partial class MainViewModel : ViewModelBase
 
     private void UpdateSummary()
     {
+        OnPropertyChanged(nameof(CanChangeBase));
+        ApplyBaseCommand.NotifyCanExecuteChanged();
+        if (_stagedCore.Count == 0)
+        {
+            VirtualDirs.Clear();
+            if (!Directory.Exists(Left.CurrentPath)) Left.CurrentPath = AppliedBasePath;
+            if (!Directory.Exists(Right.CurrentPath)) Right.CurrentPath = AppliedBasePath;
+            Left.Refresh();
+            Right.Refresh();
+        }
         int mkdir = _stagedCore.Count(o => o.Type == OpType.Mkdir);
         int move = _stagedCore.Count(o => o.Type == OpType.Move);
         int copy = _stagedCore.Count(o => o.Type == OpType.Copy);
@@ -200,7 +220,7 @@ public sealed partial class MainViewModel : ViewModelBase
             int files = 0;
             foreach (var sel in sources)
             {
-                AppendStaged(BackupNormalizer.PlanStaging.StageCopy(BasePath, sel.FullPath, Inactive.CurrentPath));
+                AppendStaged(BackupNormalizer.PlanStaging.StageCopy(AppliedBasePath, sel.FullPath, Inactive.CurrentPath));
                 files++;
             }
             StatusMessage = $"Staged COPY for {files} item(s). Total ops: {_stagedCore.Count}. Nothing executed.";
@@ -216,7 +236,7 @@ public sealed partial class MainViewModel : ViewModelBase
             var sources = Active.StagingSet();
             if (sources.Count == 0) { StatusMessage = "Mark files (right-click/Space) or select one in the active panel first."; return; }
             foreach (var sel in sources)
-                AppendStaged(BackupNormalizer.PlanStaging.StageMove(BasePath, sel.FullPath, Inactive.CurrentPath));
+                AppendStaged(BackupNormalizer.PlanStaging.StageMove(AppliedBasePath, sel.FullPath, Inactive.CurrentPath));
             StatusMessage = $"Staged MOVE for {sources.Count} item(s). Total ops: {_stagedCore.Count}. Nothing executed.";
         }
         catch (Exception ex) { StatusMessage = "stage move failed: " + ex.Message; }
@@ -231,7 +251,7 @@ public sealed partial class MainViewModel : ViewModelBase
             foreach (var abs in sourceAbsPaths)
             {
                 if (string.IsNullOrWhiteSpace(abs)) continue;
-                AppendStaged(BackupNormalizer.PlanStaging.StageMove(BasePath, abs.Trim(), destDirAbs));
+                AppendStaged(BackupNormalizer.PlanStaging.StageMove(AppliedBasePath, abs.Trim(), destDirAbs));
                 files++;
             }
             if (files == 0) StatusMessage = "Drop ignored: no valid paths.";
@@ -255,7 +275,7 @@ public sealed partial class MainViewModel : ViewModelBase
             string abs = Path.GetFullPath(Path.Combine(Active.CurrentPath, trimmed));
             if (Directory.Exists(abs) || VirtualDirs.Contains(abs))
             { StatusMessage = $"Already exists: '{trimmed}'."; return; }
-            AppendStaged(BackupNormalizer.PlanStaging.StageMkdir(BasePath, abs));
+            AppendStaged(BackupNormalizer.PlanStaging.StageMkdir(AppliedBasePath, abs));
             VirtualDirs.Add(abs);
             Left.Refresh();
             Right.Refresh();
@@ -272,7 +292,7 @@ public sealed partial class MainViewModel : ViewModelBase
             var sources = Active.StagingSet();
             if (sources.Count == 0) { StatusMessage = "Mark files (right-click/Space) or select one in the active panel first."; return; }
             foreach (var sel in sources)
-                AppendStaged(BackupNormalizer.PlanStaging.StageTrash(BasePath, sel.FullPath));
+                AppendStaged(BackupNormalizer.PlanStaging.StageTrash(AppliedBasePath, sel.FullPath));
             StatusMessage = $"Staged TRASH for {sources.Count} item(s). Total ops: {_stagedCore.Count}. Nothing executed.";
         }
         catch (Exception ex) { StatusMessage = "stage delete failed: " + ex.Message; }
@@ -308,7 +328,7 @@ public sealed partial class MainViewModel : ViewModelBase
         {
             if (_stagedCore.Count == 0) { StatusMessage = "Nothing to save: stage operations first (F5/F6/F7/F8)."; return; }
             if (string.IsNullOrWhiteSpace(PlanId)) { StatusMessage = "Plan ID is required."; return; }
-            var doc = BackupNormalizer.PlanStaging.BuildPlanDoc(PlanId.Trim(), RootId.Trim(), BasePath, _stagedCore);
+            var doc = BackupNormalizer.PlanStaging.BuildPlanDoc(PlanId.Trim(), RootId.Trim(), AppliedBasePath, _stagedCore);
             File.WriteAllText(JsonPath, BackupNormalizer.PlanStaging.ToJson(doc));
             StatusMessage = $"Saved plan {doc.PlanId} ({doc.Operations.Count} ops) to {JsonPath}. Execute later with: plan import + execute.";
         }
@@ -321,9 +341,9 @@ public sealed partial class MainViewModel : ViewModelBase
         try
         {
             if (_stagedCore.Count == 0) { StatusMessage = "Nothing to write: stage operations first."; return; }
-            var doc = BackupNormalizer.PlanStaging.BuildPlanDoc(PlanId.Trim(), RootId.Trim(), BasePath, _stagedCore);
+            var doc = BackupNormalizer.PlanStaging.BuildPlanDoc(PlanId.Trim(), RootId.Trim(), AppliedBasePath, _stagedCore);
             using var db = new BackupNormalizer.Database(DbPath);
-            BackupNormalizer.PlanStaging.WriteToDatabase(db, doc, RootId.Trim(), BasePath);
+            BackupNormalizer.PlanStaging.WriteToDatabase(db, doc, RootId.Trim(), AppliedBasePath);
             StatusMessage = $"Wrote plan {doc.PlanId} ({doc.Operations.Count} ops) into {DbPath}. Run: execute {doc.PlanId} --db {DbPath}.";
         }
         catch (Exception ex) { StatusMessage = "write to DB failed: " + ex.Message; }

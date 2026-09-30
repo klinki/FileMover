@@ -70,7 +70,7 @@
         </StackPanel>
         <StackPanel Orientation="Horizontal" Spacing="4">
           <TextBlock Text="Base (drive-local):" VerticalAlignment="Center" />
-          <TextBox Text="{Binding BasePath}" Width="320" />
+          <TextBox Text="{Binding BasePath}" IsEnabled="{Binding CanChangeBase}" Width="320" />
           <Button Content="Apply" Command="{Binding ApplyBaseCommand}" />
         </StackPanel>
         <StackPanel Orientation="Horizontal" Spacing="4">
