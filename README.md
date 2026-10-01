@@ -42,6 +42,12 @@ The source root defines the desired paths for that run. To reverse the direction
 
 The inventory database may live inside its scanned root. Scanning and hashing exclude that database and its SQLite companions. Other database files are ordinary inventory content. Rescanning also retires entries for the active database left by older scans.
 
+### Hashing progress
+
+In a terminal, `hash` shows completed files and percentage, bytes read, reading speed, elapsed time, and the current path. Byte counts update while a large file is being read. The percentage counts inventory entries processed, including reused and skipped entries; it is not a byte percentage or time estimate.
+
+`hash <root-id> --all` recomputes every available file's hash. `hash --needed` reuses valid cached hashes across the database. Both accept `--parallelism N` (default `2`) and `--no-progress`. Redirected output contains only the final summary.
+
 ### Fast NTFS scanning (Windows only, opt-in)
 
 On large NTFS drives, `scan` can read the Master File Table directly instead

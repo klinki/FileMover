@@ -5,8 +5,9 @@ namespace BackupNormalizer;
 public interface IContentHasher
 {
     string AlgorithmName { get; }
-    string HashFile(string absPath, long expectedSize);
-    string HashStream(Stream s);
+    string HashFile(string absPath, long expectedSize, Action<long>? onBytesRead = null);
+    /// <summary>Reports the bytes read in each chunk, rather than a cumulative count.</summary>
+    string HashStream(Stream s, Action<long>? onBytesRead = null);
 }
 
 public sealed class Sha256Hasher : IContentHasher
@@ -14,19 +15,22 @@ public sealed class Sha256Hasher : IContentHasher
     public string AlgorithmName => "sha256";
     private const int BufSize = 4 * 1024 * 1024; // §30: 1-8 MiB
 
-    public string HashFile(string absPath, long expectedSize)
+    public string HashFile(string absPath, long expectedSize, Action<long>? onBytesRead = null)
     {
         using var fs = new FileStream(absPath, FileMode.Open, FileAccess.Read, FileShare.Read, BufSize, FileOptions.SequentialScan);
-        return HashStream(fs);
+        return HashStream(fs, onBytesRead);
     }
 
-    public string HashStream(Stream s)
+    public string HashStream(Stream s, Action<long>? onBytesRead = null)
     {
         using var sha = SHA256.Create();
         var buf = new byte[BufSize];
         int n;
         while ((n = s.Read(buf, 0, buf.Length)) > 0)
+        {
             sha.TransformBlock(buf, 0, n, null, 0);
+            onBytesRead?.Invoke(n);
+        }
         sha.TransformFinalBlock(Array.Empty<byte>(), 0, 0);
         return Convert.ToHexString(sha.Hash!).ToLowerInvariant();
     }

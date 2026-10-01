@@ -43,7 +43,7 @@ public static class Cli
               root add <id> <path> [--name N] [--writable true|false] [--db PATH]
               root list [--db PATH]
               scan <rootId|--all> [--db PATH] [--mft off|auto|require] [--no-progress]
-              hash --needed [--db PATH] [--parallelism N] | hash <rootId> --all [--db PATH]
+              hash <rootId> --all | hash --needed [--db PATH] [--parallelism N] [--no-progress]
               plan --source-db S.db --source-root R --target-db T.db --target-root R [--plan ID]
               plan show <plan-id> [--db PATH] | plan export <plan-id> [--format json] [--output F] [--db PATH]
               plan import <plan.json> [--db PATH] [--target-path ABS]
@@ -175,17 +175,55 @@ public static class Cli
 
     private static int Hash(string[] a)
     {
+        bool needed = Has(a, "--needed");
+        string? rootId = a.Length > 0 && !a[0].StartsWith("--") ? a[0] : null;
+        if (!needed && rootId == null) return Fail("hash --needed | hash <rootId> --all");
         string db = Opt(a, "--db", AppConfig.Load(Opt(a, "--config", AppConfig.DefaultPath)).Database);
         int par = int.TryParse(Opt(a, "--parallelism", "2"), out var p) ? p : 2;
         using var d = new Database(db);
         var sc = new Scanner(d);
-        if (Has(a, "--needed")) { var r = sc.HashNeeded(null, false, par); Console.WriteLine($"hash --needed: {r.hashed} hashed, {r.skipped} reused, {r.unstable} unstable"); return 0; }
-        if (a.Length >= 1 && !a[0].StartsWith("--"))
+        var renderer = !Has(a, "--no-progress") && !Console.IsOutputRedirected
+            ? new HashProgressRenderer(needed ? "--needed" : rootId!) : null;
+        (int hashed, int skipped, int unstable) result;
+        try { result = sc.HashNeeded(needed ? null : rootId, !needed && Has(a, "--all"), par, renderer); }
+        finally { renderer?.Finish(); }
+        Console.WriteLine($"hash {(needed ? "--needed" : rootId)}: {result.hashed} hashed, {result.skipped} {(needed ? "reused" : "skipped")}, {result.unstable} unstable");
+        return 0;
+    }
+
+    /// <summary>Synchronous callbacks avoid progress writes after the completion summary.</summary>
+    private sealed class HashProgressRenderer(string label) : IProgress<HashProgress>
+    {
+        private TimeSpan? _lastUpdate;
+        private int _lineLength;
+
+        public void Report(HashProgress p)
         {
-            bool all = Has(a, "--all");
-            var r = sc.HashNeeded(a[0], all, par); Console.WriteLine($"hash {a[0]}: {r.hashed} hashed, {r.skipped} skipped, {r.unstable} unstable"); return 0;
+            // The scanner serializes callbacks; only terminal writes need throttling.
+            if (_lastUpdate.HasValue && p.Processed < p.TotalFiles
+                && p.Elapsed - _lastUpdate.Value < TimeSpan.FromMilliseconds(200)) return;
+            _lastUpdate = p.Elapsed;
+            long percent = p.TotalFiles > 0 ? 100L * p.Processed / p.TotalFiles : 100;
+            double mib = p.BytesRead / (1024.0 * 1024);
+            double speed = p.Elapsed.TotalSeconds > 0 ? mib / p.Elapsed.TotalSeconds : 0;
+            string line = $"hash {label}: {p.Processed:N0}/{p.TotalFiles:N0} files ({percent}%) | {mib:N1} MiB, {speed:N0} MiB/s | {p.Elapsed:hh\\:mm\\:ss}";
+            try
+            {
+                int width = Math.Max(1, Console.WindowWidth - 1);
+                int pathWidth = width - line.Length - 3;
+                if (p.CurrentPath.Length > 0 && pathWidth > 1)
+                {
+                    string path = p.CurrentPath.Length <= pathWidth ? p.CurrentPath : "…" + p.CurrentPath[^(pathWidth - 1)..];
+                    line += " | " + path;
+                }
+                if (line.Length > width) line = line[..width];
+                Console.Write("\r" + line.PadRight(Math.Min(_lineLength, width)));
+                _lineLength = line.Length;
+            }
+            catch { }
         }
-        return Fail("hash --needed | hash <rootId> --all");
+
+        public void Finish() { try { Console.WriteLine(); } catch { } }
     }
 
     private static int Plan(string[] a)

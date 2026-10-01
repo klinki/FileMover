@@ -9,6 +9,13 @@ public sealed record FsEntry(string Path, bool IsDirectory, long Size, DateTime 
 /// walk), so consumers estimate against a baseline (e.g. previous scan count).</summary>
 public sealed record ScanProgress(string RootId, int Scanned, int Errors, string CurrentPath, TimeSpan Elapsed);
 
+/// <summary>Hashing progress, including read chunks before a file completes.</summary>
+public sealed record HashProgress(int TotalFiles, int Hashed, int Skipped, int Unstable,
+    long BytesRead, string CurrentPath, TimeSpan Elapsed)
+{
+    public int Processed => Hashed + Skipped + Unstable;
+}
+
 /// <summary>Scanner §7-8: cheap metadata first, no symlink follow, incremental reuse.</summary>
 public sealed class Scanner
 {
@@ -254,21 +261,41 @@ public sealed class Scanner
     }
 
     /// <summary>Demand-driven hashing (§9): hash only needed/ambiguous or all.</summary>
-    public (int hashed, int skipped, int unstable) HashNeeded(string? rootId = null, bool all = false, int parallelism = 2)
+    public (int hashed, int skipped, int unstable) HashNeeded(string? rootId = null, bool all = false,
+        int parallelism = 2, IProgress<HashProgress>? progress = null)
     {
         foreach (var root in _db.ListRoots().Where(r => rootId == null || r.Id == rootId))
             RetireDatabaseEntries(root);
         var files = _db.ListFiles(rootId);
         var roots = _db.ListRoots().ToDictionary(r => r.Id);
         int hashed = 0, skipped = 0, unstable = 0;
+        long bytesRead = 0;
+        var timer = System.Diagnostics.Stopwatch.StartNew();
         var opts = new ParallelOptions { MaxDegreeOfParallelism = Math.Max(1, parallelism) };
         // HDD/NAS: default conservative (§29). Parallel file reads only; DB writes serialized via lock.
         var lockObj = new object();
+        // Call under the same lock as counters so parallel workers deliver ordered snapshots.
+        void Report(string path)
+        {
+            try { progress?.Report(new HashProgress(files.Count, hashed, skipped, unstable, bytesRead, path, timer.Elapsed)); }
+            catch { } // A progress observer must not turn a successful hash into a skipped file.
+        }
+        void Complete(string path, string? state = null)
+        {
+            lock (lockObj)
+            {
+                if (state == HashState.Ok) hashed++;
+                else if (state == HashState.Unstable) unstable++;
+                else skipped++;
+                Report(path);
+            }
+        }
+        Report("");
         Parallel.ForEach(files, opts, f =>
         {
             if (f.Status != FileStatus.Ok)
             {
-                Interlocked.Increment(ref skipped);
+                Complete(f.RelativePath);
                 return;
             }
             lock (lockObj)
@@ -278,12 +305,12 @@ public sealed class Scanner
                     var existing = _db.GetHash(f.Id, _algo);
                     if (existing != null && existing.State == HashState.Ok && existing.SizeAtHash == f.Size && existing.ModifiedUtcAtHash == f.ModifiedUtc)
                     {
-                        Interlocked.Increment(ref skipped);
+                        Complete(f.RelativePath);
                         return;
                     }
                 }
             }
-            if (!roots.TryGetValue(f.StorageRootId, out var root)) { Interlocked.Increment(ref skipped); return; }
+            if (!roots.TryGetValue(f.StorageRootId, out var root)) { Complete(f.RelativePath); return; }
             var abs = Paths.CombineRoot(root.Path, f.RelativePath);
             string mBefore;
             long lenBefore;
@@ -292,10 +319,18 @@ public sealed class Scanner
                 var fi = new FileInfo(abs);
                 lenBefore = fi.Length; mBefore = fi.LastWriteTimeUtc.ToString("o");
             }
-            catch { Interlocked.Increment(ref skipped); return; }
+            catch { Complete(abs); return; }
             string digest;
-            try { digest = _hasher.HashFile(abs, lenBefore); }
-            catch { Interlocked.Increment(ref skipped); return; }
+            Action<long>? onBytesRead = progress == null ? null : count =>
+            {
+                lock (lockObj)
+                {
+                    bytesRead += count;
+                    Report(abs);
+                }
+            };
+            try { digest = _hasher.HashFile(abs, lenBefore, onBytesRead); }
+            catch { Complete(abs); return; }
             try
             {
                 var fi2 = new FileInfo(abs);
@@ -307,16 +342,16 @@ public sealed class Scanner
                     {
                         // §7.4 unstable
                         _db.UpsertHash(new FileHashRow(f.Id, _algo, digest, lenBefore, mBefore, Database.UtcNow(), HashState.Unstable));
-                        Interlocked.Increment(ref unstable);
+                        Complete(abs, HashState.Unstable);
                     }
                     else
                     {
                         _db.UpsertHash(new FileHashRow(f.Id, _algo, digest, lenBefore, mBefore, Database.UtcNow(), HashState.Ok));
-                        Interlocked.Increment(ref hashed);
+                        Complete(abs, HashState.Ok);
                     }
                 }
             }
-            catch { Interlocked.Increment(ref skipped); }
+            catch { Complete(abs); }
         });
         return (hashed, skipped, unstable);
     }
