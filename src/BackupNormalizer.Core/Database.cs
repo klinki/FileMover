@@ -22,9 +22,9 @@ public sealed class Database : IDisposable
 
     public Database(string dbPath) : this(dbPath, readOnly: false) { }
 
-    public static Database OpenReadOnly(string dbPath) => new(dbPath, readOnly: true);
+    public static Database OpenReadOnly(string dbPath, bool pooling = true) => new(dbPath, readOnly: true, pooling: pooling);
 
-    internal Database(string dbPath, bool readOnly)
+    internal Database(string dbPath, bool readOnly, bool pooling = true)
     {
         DbPath = Path.GetFullPath(dbPath);
         _readOnly = readOnly;
@@ -39,12 +39,14 @@ public sealed class Database : IDisposable
             if (!string.IsNullOrEmpty(dir)) Directory.CreateDirectory(dir);
         }
 
-        var connectionString = new SqliteConnectionStringBuilder
+        var connectionStringBuilder = new SqliteConnectionStringBuilder
         {
             DataSource = DbPath,
             Mode = readOnly ? SqliteOpenMode.ReadOnly : SqliteOpenMode.ReadWriteCreate,
             ForeignKeys = true
-        }.ToString();
+        };
+        if (!pooling) connectionStringBuilder.Pooling = false;
+        string connectionString = connectionStringBuilder.ToString();
         var options = new DbContextOptionsBuilder<BackupNormalizerDbContext>()
             .UseSqlite(connectionString)
             .Options;

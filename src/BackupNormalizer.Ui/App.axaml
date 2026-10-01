@@ -22,6 +22,11 @@
                     <SolidColorBrush x:Key="MarkedTextBrush" Color="#C62828" />
                     <SolidColorBrush x:Key="SelectedRowBrush" Color="#D6E9F8" />
                     <SolidColorBrush x:Key="SelectedRowHoverBrush" Color="#C2DDF5" />
+                    <SolidColorBrush x:Key="OnlyLeftBrush" Color="#16854D" />
+                    <SolidColorBrush x:Key="OnlyRightBrush" Color="#287DCC" />
+                    <SolidColorBrush x:Key="DifferentBrush" Color="#C96318" />
+                    <SolidColorBrush x:Key="UnverifiedBrush" Color="#9A779E" />
+                    <SolidColorBrush x:Key="EqualBrush" Color="#7B858D" />
                 </ResourceDictionary>
                 <ResourceDictionary x:Key="Dark">
                     <SolidColorBrush x:Key="AppSurfaceBrush" Color="#1E2730" />
@@ -33,6 +38,11 @@
                     <SolidColorBrush x:Key="MarkedTextBrush" Color="#FF9E98" />
                     <SolidColorBrush x:Key="SelectedRowBrush" Color="#365A79" />
                     <SolidColorBrush x:Key="SelectedRowHoverBrush" Color="#416A8E" />
+                    <SolidColorBrush x:Key="OnlyLeftBrush" Color="#60D695" />
+                    <SolidColorBrush x:Key="OnlyRightBrush" Color="#79B9FC" />
+                    <SolidColorBrush x:Key="DifferentBrush" Color="#FFB166" />
+                    <SolidColorBrush x:Key="UnverifiedBrush" Color="#CEAED3" />
+                    <SolidColorBrush x:Key="EqualBrush" Color="#929DA6" />
                 </ResourceDictionary>
             </ResourceDictionary.ThemeDictionaries>
             <!-- No per-cell focus frame; full-row selection in both themes. -->

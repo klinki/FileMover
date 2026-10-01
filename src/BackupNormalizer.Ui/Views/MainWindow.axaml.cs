@@ -1,11 +1,13 @@
 using System;
 using System.Collections.Generic;
+using System.ComponentModel;
 using System.Linq;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.LogicalTree;
+using Avalonia.Platform.Storage;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
 using BackupNormalizer.Ui.ViewModels;
@@ -38,10 +40,17 @@ public partial class MainWindow : Window
     private Point _dragStart;
     private PointerPressedEventArgs? _dragPress;
     private bool _dragging;
+    private MainViewModel? _observedViewModel;
 
     public MainWindow()
     {
         InitializeComponent();
+        DataContextChanged += OnDataContextChanged;
+        Closed += (_, _) =>
+        {
+            if (_observedViewModel != null) _observedViewModel.PropertyChanged -= OnViewModelChanged;
+            StopAutoScroll();
+        };
         AddHandler(InputElement.PointerPressedEvent, OnPreviewPointerPressed, RoutingStrategies.Tunnel);
         AddHandler(InputElement.KeyDownEvent, OnPreviewKeyDown, RoutingStrategies.Tunnel);
         // handledEventsToo: DataGrid marks presses handled for its own selection;
@@ -54,11 +63,35 @@ public partial class MainWindow : Window
         foreach (var grid in this.GetLogicalDescendants().OfType<DataGrid>())
         {
             grid.Sorting += OnGridSorting;
+            grid.SizeChanged += (_, _) => UpdatePanelColumns(grid);
             grid.SetValue(DragDrop.AllowDropProperty, true);
         }
     }
 
     private MainViewModel? Vm => DataContext as MainViewModel;
+
+    private void OnDataContextChanged(object? sender, EventArgs e)
+    {
+        if (_observedViewModel != null) _observedViewModel.PropertyChanged -= OnViewModelChanged;
+        _observedViewModel = Vm;
+        if (_observedViewModel != null) _observedViewModel.PropertyChanged += OnViewModelChanged;
+    }
+
+    private void OnViewModelChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName != nameof(MainViewModel.IsComparisonEnabled)) return;
+        foreach (var grid in this.GetLogicalDescendants().OfType<DataGrid>()) UpdatePanelColumns(grid);
+    }
+
+    private void UpdatePanelColumns(DataGrid grid)
+    {
+        bool comparing = Vm?.IsComparisonEnabled == true;
+        foreach (var column in grid.Columns)
+        {
+            if (column.Tag as string == "Modified") column.IsVisible = grid.Bounds.Width >= (comparing ? 600 : 450);
+            if (column.Tag as string == "Ext") column.IsVisible = grid.Bounds.Width >= (comparing ? 450 : 340);
+        }
+    }
 
     private static DataGrid? GridOf(object? source)
         => (source as Control)?.GetLogicalAncestors().OfType<DataGrid>().FirstOrDefault()
@@ -209,7 +242,7 @@ public partial class MainWindow : Window
             UpdateAutoScroll(grid, pos);
             return;
         }
-        if (_dragPanel != null && !_dragging && point.Properties.IsLeftButtonPressed)
+        if (_dragPanel != null && !_dragging && point.Properties.IsLeftButtonPressed && Vm.CanStage)
         {
             var grid = GridOf(e.Source) ?? FindGrid(_dragSide);
             if (grid == null) return;
@@ -338,13 +371,14 @@ public partial class MainWindow : Window
 
     private void OnGridDragOver(object? sender, DragEventArgs e)
     {
-        if (e.DataTransfer.Contains(DropFormat))
+        if (Vm?.CanStage == true && e.DataTransfer.Contains(DropFormat))
             e.DragEffects = DragDropEffects.Move;
+        else e.DragEffects = DragDropEffects.None;
     }
 
     private void OnGridDrop(object? sender, DragEventArgs e)
     {
-        if (Vm == null) return;
+        if (Vm == null || !Vm.CanStage) return;
         var grid = GridOf(e.Source);
         if (grid == null) return;
         if (!e.DataTransfer.Contains(DropFormat)) return;
@@ -400,7 +434,7 @@ public partial class MainWindow : Window
 
     private async void OnMkdir(object? sender, RoutedEventArgs e)
     {
-        if (Vm == null) return;
+        if (Vm == null || !Vm.CanStage) return;
         var dialog = new MkdirDialog();
         string? name = await dialog.ShowDialog<string?>(this);
         if (!string.IsNullOrWhiteSpace(name))
@@ -414,6 +448,46 @@ public partial class MainWindow : Window
         var panel = (button.Tag as string) == "Right" ? Vm.Right : Vm.Left;
         Vm.IsLeftActive = (button.Tag as string) != "Right";
         panel.GoToDrive(drive);
+    }
+
+    private async void OnLoadDatabase(object? sender, RoutedEventArgs e)
+    {
+        if (sender is Button button) await OpenDatabase(button.Tag as string ?? "Left");
+    }
+
+    private async void OnLoadDatabaseMenu(object? sender, RoutedEventArgs e)
+    {
+        if (sender is MenuItem item) await OpenDatabase(item.Tag as string ?? "Left");
+    }
+
+    private async System.Threading.Tasks.Task OpenDatabase(string side)
+    {
+        if (Vm == null || !Vm.CanChangePanelSource) return;
+        var vm = Vm;
+        try
+        {
+            var files = await StorageProvider.OpenFilePickerAsync(new FilePickerOpenOptions
+            {
+                Title = "Load inventory database",
+                AllowMultiple = false,
+                FileTypeFilter = new[]
+                {
+                    new FilePickerFileType("SQLite database") { Patterns = new[] { "*.db", "*.sqlite", "*.sqlite3" } },
+                    FilePickerFileTypes.All,
+                },
+            });
+            if (files.Count == 0) return;
+            string? path = files[0].TryGetLocalPath();
+            if (path == null) { vm.StatusMessage = "Choose a local database file."; return; }
+            await vm.LoadDatabaseAsync(side, path);
+        }
+        catch (Exception ex) { vm.StatusMessage = "Open database failed: " + ex.Message; }
+    }
+
+    private void OnUseLive(object? sender, RoutedEventArgs e)
+    {
+        if (Vm != null && sender is Button button)
+            Vm.UseLivePanel(button.Tag as string ?? "Left");
     }
 
     // --- Double-click navigates (Left=activate left, etc.) ---

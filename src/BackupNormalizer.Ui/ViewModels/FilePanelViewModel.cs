@@ -5,6 +5,7 @@ using System.IO;
 using System.Linq;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using BackupNormalizer.Ui.Models;
 
 namespace BackupNormalizer.Ui.ViewModels;
 
@@ -41,7 +42,7 @@ public sealed partial class FileEntryItem : ObservableObject
     public string BaseName => IsDirectory ? Name : Path.GetFileNameWithoutExtension(Name);
     public string Extension => IsDirectory ? "" : Path.GetExtension(Name).TrimStart('.');
     public string SizeText => IsParentEntry ? "" : IsDirectory ? "<DIR>" : Size.ToString("N0");
-    public string ModifiedText => IsParentEntry ? "" : Modified.ToString("yyyy-MM-dd HH:mm");
+    public string ModifiedText => IsParentEntry || Modified == DateTime.MinValue ? "" : Modified.ToString("yyyy-MM-dd HH:mm");
     public string KindText => IsDirectory ? "dir" : "file";
 
     private static readonly HashSet<string> ArchiveExts = new(StringComparer.OrdinalIgnoreCase)
@@ -66,6 +67,27 @@ public sealed partial class FileEntryItem : ObservableObject
     /// <summary>TC-style mark (persistent, shown red). Independent from the grid cursor (SelectedEntry).</summary>
     [ObservableProperty]
     public partial bool IsMarked { get; set; }
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(ComparisonText), nameof(IsOnlyLeft), nameof(IsOnlyRight), nameof(IsDifferent), nameof(IsUnverified), nameof(IsEqual))]
+    public partial ComparisonState Comparison { get; set; }
+
+    public bool IsOnlyLeft => Comparison == ComparisonState.OnlyLeft;
+    public bool IsOnlyRight => Comparison == ComparisonState.OnlyRight;
+    public bool IsDifferent => Comparison is ComparisonState.Different or ComparisonState.TypeConflict or ComparisonState.ScanError;
+    public bool IsUnverified => Comparison == ComparisonState.Unverified;
+    public bool IsEqual => Comparison == ComparisonState.Equal;
+    public string ComparisonText => Comparison switch
+    {
+        ComparisonState.Equal => "Equal",
+        ComparisonState.Different => "Different",
+        ComparisonState.OnlyLeft => "Only left",
+        ComparisonState.OnlyRight => "Only right",
+        ComparisonState.Unverified => "Unverified",
+        ComparisonState.TypeConflict => "File / folder conflict",
+        ComparisonState.ScanError => "Scan error",
+        _ => "",
+    };
 
     public FileEntryItem(string name, string fullPath, bool isDir, long size, DateTime modified, bool isParent = false, bool isVirtual = false)
     {
@@ -124,6 +146,7 @@ public sealed partial class FilePanelViewModel : ObservableObject
     /// <summary>Rebuilds the drive bar; only ready drives get a button.</summary>
     public void RefreshDrives()
     {
+        if (IsDatabase) return;
         Drives.Clear();
         try
         {
@@ -165,6 +188,7 @@ public sealed partial class FilePanelViewModel : ObservableObject
     [RelayCommand]
     public void GoToDrive(DriveView? drive)
     {
+        if (IsDatabase) return;
         if (drive == null || !Directory.Exists(drive.Root)) return;
         CurrentPath = drive.Root;
         Refresh();
@@ -192,8 +216,10 @@ public sealed partial class FilePanelViewModel : ObservableObject
 
     public void Refresh()
     {
+        if (IsDatabase) { RefreshInventory(); return; }
         Entries.Clear();
         SelectedEntry = null;
+        MarkAnchor = null;
         try
         {
             bool onDisk = Directory.Exists(CurrentPath);
@@ -299,6 +325,7 @@ public sealed partial class FilePanelViewModel : ObservableObject
     {
         if (entry.IsParentEntry) { GoUp(); return true; }
         if (!entry.IsDirectory) return false;
+        if (IsDatabase) { NavigateInventory(entry.FullPath); return true; }
         CurrentPath = entry.FullPath;
         Refresh();
         return true;
@@ -306,6 +333,11 @@ public sealed partial class FilePanelViewModel : ObservableObject
 
     public void GoUp()
     {
+        if (IsDatabase)
+        {
+            if (InventoryPath.Length > 0) NavigateInventory(InventoryParent(InventoryPath));
+            return;
+        }
         if (ParentOf(CurrentPath) is { } parent)
         {
             CurrentPath = parent.FullName;

@@ -1,9 +1,9 @@
-# BackupNormalizer.Ui — Total Commander style planner (plan-only)
+# BackupNormalizer.Ui - Inventory comparison and planner
 
-A cross-platform (Windows / macOS / Linux) Avalonia UI for staging
-BackupNormalizer plans. It never touches your files: every gesture only
-records an operation with size+hash preconditions. The existing CLI
-executor applies the plan later, with full verification.
+A cross-platform Avalonia UI for browsing inventory databases, comparing
+folders, and staging BackupNormalizer plans. Database browsing and comparison
+are read-only. Live-folder operations create plans with size and hash
+preconditions; the CLI executor applies them later.
 
 ## Run
 
@@ -14,9 +14,43 @@ dotnet run --project src/BackupNormalizer.Ui
 Requires the .NET 10 SDK. No Docker needed (Docker is only for the QNAP
 scanner, see the repo README).
 
+## Compare inventory databases
+
+1. Select **Load database...** above either panel and choose an existing SQLite
+   inventory. Each panel can load a different database, or both can load the same
+   database with different roots. Choose the inventory root in each panel's list.
+2. Browse to the folders to compare, then select **Compare folders**. Comparison
+   includes descendants and matches paths relative to the selected folders.
+3. The comparison column labels entries **Only left**, **Only right**,
+   **Different**, **Equal**, **Unverified**, or **File / folder conflict**. Colored
+   markers beside names show the same status. Parent folders reflect differences
+   below them. **Differences only** hides equal files and equal folder trees.
+4. **Linked browsing** opens corresponding folders in both panels. A folder
+   missing from the other inventory displays an empty listing there; the parent
+   entry returns to the containing folder. Disable linked browsing to navigate
+   independently. Comparing again uses the folders currently displayed.
+5. Refresh reloads the database snapshot. Refreshing, selecting another root,
+   swapping sources, or leaving the compared folder clears comparison results.
+   Select **Compare folders** again after choosing the new folders.
+6. Select **Live folders** to return a panel to the filesystem. Both panels must
+   show live folders before staging operations. Clear staged operations before
+   loading a database.
+
+Recorded root paths are labels, so inventories from offline drives and other
+operating systems remain browsable. Equal content requires matching size and
+fresh SHA-256 hashes. Missing or stale hashes leave same-size files unverified,
+even when their timestamps match. Path comparison ignores case only when both
+roots record case-insensitive filesystems.
+
+An incomplete or unavailable scan produces a warning because an unindexed file
+may still exist on the drive. Scan-error entries remain visible. Files marked
+missing by a rescan are excluded. The inventory schema stores files, so empty
+folders cannot appear in this view. This mode compares recorded snapshots and
+does not copy, delete, or synchronize files.
+
 ## Basic usage
 
-1. **Set the base.** `Base (drive-local)` is the logical root everything is
+1. **Set the base.** `Base` is the logical root everything is
    staged against (e.g. `/Volumes/D1`). Press **Apply**. All staged paths
    are stored relative to the `Root` id (default `disk`), so the same plan
    can later run on another drive via the CLI's `--target-path`.

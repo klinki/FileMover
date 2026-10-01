@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.IO;
 using System.Linq;
+using System.Threading.Tasks;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 
@@ -59,8 +60,8 @@ public sealed partial class MainViewModel : ViewModelBase
     [ObservableProperty]
     public partial string PlanSummary { get; set; } = "No staged operations.";
 
-    public FilePanelViewModel Left { get; } = new();
-    public FilePanelViewModel Right { get; } = new();
+    public FilePanelViewModel Left { get; } = new() { Side = "Left" };
+    public FilePanelViewModel Right { get; } = new() { Side = "Right" };
     public ObservableCollection<StagedOpItem> Staged { get; } = new();
 
     /// <summary>Staged virtual directories (absolute paths), visible in both panels.</summary>
@@ -69,7 +70,7 @@ public sealed partial class MainViewModel : ViewModelBase
     private readonly List<BackupNormalizer.PlanStaging.StagedOp> _stagedCore = new();
 
     public string AppliedBasePath { get; private set; }
-    public bool CanChangeBase => _stagedCore.Count == 0;
+    public bool CanChangeBase => _stagedCore.Count == 0 && CanStage;
 
     public MainViewModel()
     {
@@ -82,6 +83,8 @@ public sealed partial class MainViewModel : ViewModelBase
         Right.RefreshDrives();
         Left.Refresh();
         Right.Refresh();
+        Left.SourceChanged += OnPanelSourceChanged;
+        Right.SourceChanged += OnPanelSourceChanged;
     }
 
     public FilePanelViewModel Active => IsLeftActive ? Left : Right;
@@ -123,8 +126,10 @@ public sealed partial class MainViewModel : ViewModelBase
     }
 
     [RelayCommand]
-    public void RefreshAll()
+    public async Task RefreshAll()
     {
+        if (IsBusy) return;
+        if (Left.IsDatabase || Right.IsDatabase) { await ReloadSnapshots(false); return; }
         Left.RefreshDrives();
         Right.RefreshDrives();
         Left.Refresh();
@@ -133,8 +138,10 @@ public sealed partial class MainViewModel : ViewModelBase
     }
 
     [RelayCommand]
-    public void RefreshActive()
+    public async Task RefreshActive()
     {
+        if (IsBusy) return;
+        if (Active.IsDatabase) { await ReloadSnapshots(true); return; }
         Active.Refresh();
         StatusMessage = "Active panel refreshed.";
     }
@@ -142,6 +149,12 @@ public sealed partial class MainViewModel : ViewModelBase
     [RelayCommand]
     public void SwapPanels()
     {
+        if (IsBusy) return;
+        if (Left.IsDatabase || Right.IsDatabase)
+        {
+            SwapSources();
+            return;
+        }
         (Left.CurrentPath, Right.CurrentPath) = (Right.CurrentPath, Left.CurrentPath);
         Left.Refresh();
         Right.Refresh();
@@ -155,20 +168,25 @@ public sealed partial class MainViewModel : ViewModelBase
     }
 
     [RelayCommand]
-    public void GoUpActive() => Active.GoUp();
+    public void GoUpActive() => GoUpPanel(Active);
 
     [RelayCommand]
-    public void GoUpLeft() => Left.GoUp();
+    public void GoUpLeft() => GoUpPanel(Left);
 
     [RelayCommand]
-    public void GoUpRight() => Right.GoUp();
+    public void GoUpRight() => GoUpPanel(Right);
 
     [RelayCommand]
     public void EnterSelected()
     {
+        if (IsBusy) return;
         var sel = Active.SelectedEntry;
         if (sel != null && sel.IsDirectory)
+        {
+            if (sel.IsParentEntry) { GoUpPanel(Active); return; }
             Active.NavigateTo(sel);
+            FollowInventoryNavigation(Active);
+        }
     }
 
     private void AppendStaged(IEnumerable<BackupNormalizer.PlanStaging.StagedOp> ops)
@@ -190,13 +208,12 @@ public sealed partial class MainViewModel : ViewModelBase
 
     private void UpdateSummary()
     {
-        OnPropertyChanged(nameof(CanChangeBase));
-        ApplyBaseCommand.NotifyCanExecuteChanged();
+        UpdateSourceCommands();
         if (_stagedCore.Count == 0)
         {
             VirtualDirs.Clear();
-            if (!Directory.Exists(Left.CurrentPath)) Left.CurrentPath = AppliedBasePath;
-            if (!Directory.Exists(Right.CurrentPath)) Right.CurrentPath = AppliedBasePath;
+            if (Left.IsLive && !Directory.Exists(Left.CurrentPath)) Left.CurrentPath = AppliedBasePath;
+            if (Right.IsLive && !Directory.Exists(Right.CurrentPath)) Right.CurrentPath = AppliedBasePath;
             Left.Refresh();
             Right.Refresh();
         }
@@ -210,9 +227,10 @@ public sealed partial class MainViewModel : ViewModelBase
             : $"Staged: MKDIR {mkdir}  MOVE {move}  COPY {copy}  TRASH {trash}  | bytes to copy: {bytes:N0}";
     }
 
-    [RelayCommand]
+    [RelayCommand(CanExecute = nameof(CanStage))]
     public void StageCopy()
     {
+        if (!EnsureLiveStaging()) return;
         try
         {
             var sources = Active.StagingSet();
@@ -228,9 +246,10 @@ public sealed partial class MainViewModel : ViewModelBase
         catch (Exception ex) { StatusMessage = "stage copy failed: " + ex.Message; }
     }
 
-    [RelayCommand]
+    [RelayCommand(CanExecute = nameof(CanStage))]
     public void StageMove()
     {
+        if (!EnsureLiveStaging()) return;
         try
         {
             var sources = Active.StagingSet();
@@ -245,6 +264,7 @@ public sealed partial class MainViewModel : ViewModelBase
     /// <summary>Drop target: schedule MOVE of absolute source paths into a panel directory.</summary>
     public void StageMovePaths(IEnumerable<string> sourceAbsPaths, string destDirAbs)
     {
+        if (!EnsureLiveStaging()) return;
         try
         {
             int files = 0;
@@ -266,6 +286,7 @@ public sealed partial class MainViewModel : ViewModelBase
     /// </summary>
     public void StageMkdirFromDialog(string name)
     {
+        if (!EnsureLiveStaging()) return;
         try
         {
             string trimmed = (name ?? "").Trim();
@@ -284,9 +305,10 @@ public sealed partial class MainViewModel : ViewModelBase
         catch (Exception ex) { StatusMessage = "stage mkdir failed: " + ex.Message; }
     }
 
-    [RelayCommand]
+    [RelayCommand(CanExecute = nameof(CanStage))]
     public void StageTrash()
     {
+        if (!EnsureLiveStaging()) return;
         try
         {
             var sources = Active.StagingSet();

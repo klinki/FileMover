@@ -1,13 +1,37 @@
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:vm="using:BackupNormalizer.Ui.ViewModels"
-        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
-        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
-        mc:Ignorable="d" d:DesignWidth="1100" d:DesignHeight="700"
+        xmlns:models="using:BackupNormalizer.Ui.Models"
         x:Class="BackupNormalizer.Ui.Views.MainWindow"
         x:DataType="vm:MainViewModel"
         Icon="/Assets/avalonia-logo.ico"
-        Title="BackupNormalizer Planner — Total Commander style (plan-only)">
+        Width="1280" Height="800" MinWidth="860" MinHeight="560"
+        Title="BackupNormalizer - Inventory comparison and planner">
+  <Window.Styles>
+    <Style Selector="Border.panel">
+      <Setter Property="BorderBrush" Value="Gray" />
+      <Setter Property="BorderThickness" Value="2" />
+    </Style>
+    <Style Selector="Border.panel.active">
+      <Setter Property="BorderBrush" Value="DodgerBlue" />
+      <Setter Property="BorderThickness" Value="2" />
+    </Style>
+    <Style Selector="Border.diff.onlyLeft">
+      <Setter Property="Background" Value="{DynamicResource OnlyLeftBrush}" />
+    </Style>
+    <Style Selector="Border.diff.onlyRight">
+      <Setter Property="Background" Value="{DynamicResource OnlyRightBrush}" />
+    </Style>
+    <Style Selector="Border.diff.different">
+      <Setter Property="Background" Value="{DynamicResource DifferentBrush}" />
+    </Style>
+    <Style Selector="Border.diff.unverified">
+      <Setter Property="Background" Value="{DynamicResource UnverifiedBrush}" />
+    </Style>
+    <Style Selector="Border.diff.equal">
+      <Setter Property="Background" Value="{DynamicResource EqualBrush}" />
+    </Style>
+  </Window.Styles>
   <Window.Resources>
     <DataTemplate x:Key="FileIconTemplate" x:DataType="vm:FileEntryItem">
       <Panel Width="16" Height="16" VerticalAlignment="Center" HorizontalAlignment="Center">
@@ -27,50 +51,120 @@
               Fill="#9AA0A6" Stretch="Uniform" IsVisible="{Binding IsGenericFile}" />
       </Panel>
     </DataTemplate>
+    <DataTemplate x:Key="PanelHeader" x:DataType="vm:FilePanelViewModel">
+      <StackPanel Spacing="4" Margin="6">
+        <Grid ColumnDefinitions="*,Auto,Auto">
+          <TextBlock Text="{Binding Side}" FontWeight="Bold" VerticalAlignment="Center" />
+          <Button Grid.Column="1" Content="Load database..." Tag="{Binding Side}" Click="OnLoadDatabase"
+                  IsEnabled="{Binding CanChangeSource}" Padding="8,4" Margin="0,0,4,0" />
+          <Button Grid.Column="2" Content="Live folders" Tag="{Binding Side}" Click="OnUseLive"
+                  IsEnabled="{Binding CanChangeSource}" IsVisible="{Binding IsDatabase}" Padding="8,4" />
+        </Grid>
+        <TextBlock Text="{Binding SourceLabel}" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding SourceLabel}" />
+        <ComboBox ItemsSource="{Binding InventoryRoots}" SelectedItem="{Binding SelectedInventoryRoot}"
+                  IsVisible="{Binding IsDatabase}" IsEnabled="{Binding CanChangeSource}"
+                  HorizontalAlignment="Stretch" ToolTip.Tip="Inventory root">
+          <ComboBox.ItemTemplate>
+            <DataTemplate x:DataType="models:InventoryRoot">
+              <TextBlock Text="{Binding Display}" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Root.Path}" />
+            </DataTemplate>
+          </ComboBox.ItemTemplate>
+        </ComboBox>
+        <ComboBox ItemsSource="{Binding Drives}" SelectedItem="{Binding SelectedDrive}"
+                  IsVisible="{Binding ShowDriveCombo}" HorizontalAlignment="Stretch" ToolTip.Tip="Select drive">
+          <ComboBox.ItemTemplate>
+            <DataTemplate x:DataType="vm:DriveView">
+              <TextBlock Text="{Binding Display}" ToolTip.Tip="{Binding Tooltip}" />
+            </DataTemplate>
+          </ComboBox.ItemTemplate>
+        </ComboBox>
+        <ItemsControl IsVisible="{Binding ShowDriveButtons}" ItemsSource="{Binding Drives}">
+          <ItemsControl.ItemsPanel>
+            <ItemsPanelTemplate><WrapPanel Orientation="Horizontal" /></ItemsPanelTemplate>
+          </ItemsControl.ItemsPanel>
+          <ItemsControl.ItemTemplate>
+            <DataTemplate x:DataType="vm:DriveView">
+              <Button Content="{Binding Display}" CommandParameter="{Binding}" Click="OnDriveClick"
+                      Tag="{Binding $parent[ItemsControl].DataContext.Side}" Margin="0,0,3,2" Padding="6,2" ToolTip.Tip="{Binding Tooltip}" />
+            </DataTemplate>
+          </ItemsControl.ItemTemplate>
+        </ItemsControl>
+        <TextBox Text="{Binding CurrentPath}" IsReadOnly="True" ToolTip.Tip="{Binding CurrentPath}" />
+        <TextBlock Text="{Binding Status}" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Status}" />
+      </StackPanel>
+    </DataTemplate>
+    <DataTemplate x:Key="NameCell" x:DataType="vm:FileEntryItem">
+      <Grid ColumnDefinitions="3,*">
+        <Border Classes="diff" Classes.onlyLeft="{Binding IsOnlyLeft}" Classes.onlyRight="{Binding IsOnlyRight}"
+                Classes.different="{Binding IsDifferent}" Classes.unverified="{Binding IsUnverified}"
+                Classes.equal="{Binding IsEqual}" Margin="0,3,0,3" />
+        <TextBlock Grid.Column="1" Text="{Binding BaseName}" Classes.marked="{Binding IsMarked}"
+                   Margin="5,0,0,0" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Name}" VerticalAlignment="Center" />
+      </Grid>
+    </DataTemplate>
+    <DataTemplate x:Key="ExtCell" x:DataType="vm:FileEntryItem">
+      <TextBlock Text="{Binding Extension}" Classes.marked="{Binding IsMarked}" VerticalAlignment="Center"
+                 Margin="4,0" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Extension}" />
+    </DataTemplate>
+    <DataTemplate x:Key="SizeCell" x:DataType="vm:FileEntryItem">
+      <TextBlock Text="{Binding SizeText}" Classes.marked="{Binding IsMarked}" HorizontalAlignment="Right" VerticalAlignment="Center"
+                 Margin="4,0" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding SizeText}" />
+    </DataTemplate>
+    <DataTemplate x:Key="ModifiedCell" x:DataType="vm:FileEntryItem">
+      <TextBlock Text="{Binding ModifiedText}" Classes.marked="{Binding IsMarked}" VerticalAlignment="Center"
+                 Margin="4,0" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding ModifiedText}" />
+    </DataTemplate>
+    <DataTemplate x:Key="ComparisonCell" x:DataType="vm:FileEntryItem">
+      <TextBlock Text="{Binding ComparisonText}" Classes.marked="{Binding IsMarked}" TextTrimming="CharacterEllipsis"
+                 Margin="4,0" ToolTip.Tip="{Binding ComparisonText}" VerticalAlignment="Center" />
+    </DataTemplate>
   </Window.Resources>
-
   <DockPanel>
     <Menu DockPanel.Dock="Top">
       <MenuItem Header="_File">
+        <MenuItem Header="Load database in left panel..." Tag="Left" Click="OnLoadDatabaseMenu" IsEnabled="{Binding CanChangePanelSource}" />
+        <MenuItem Header="Load database in right panel..." Tag="Right" Click="OnLoadDatabaseMenu" IsEnabled="{Binding CanChangePanelSource}" />
+        <Separator />
         <MenuItem Header="Save plan JSON" Command="{Binding SaveJsonCommand}" />
         <MenuItem Header="Write plan to DB" Command="{Binding WriteToDbCommand}" />
         <MenuItem Header="Clear staged" Command="{Binding ClearStagedCommand}" />
       </MenuItem>
       <MenuItem Header="_Panels">
         <MenuItem Header="Refresh both" Command="{Binding RefreshAllCommand}" />
+        <MenuItem Header="Compare folders" Command="{Binding CompareFoldersCommand}" />
         <MenuItem Header="Activate left" Command="{Binding SetActiveCommand}" CommandParameter="Left" />
         <MenuItem Header="Activate right" Command="{Binding SetActiveCommand}" CommandParameter="Right" />
       </MenuItem>
     </Menu>
-
-    <!-- TC-style icon toolbar -->
-    <Border DockPanel.Dock="Top" Padding="4,2" BorderBrush="Gray" BorderThickness="0,0,0,1">
-      <StackPanel Orientation="Horizontal" Spacing="2">
-        <Button Command="{Binding RefreshActiveCommand}" ToolTip.Tip="Refresh active panel" Width="30" Height="30" Padding="5">
+    <Border DockPanel.Dock="Top" Padding="6,4" BorderBrush="Gray" BorderThickness="0,0,0,1">
+      <WrapPanel Orientation="Horizontal" ItemSpacing="6">
+        <Button Command="{Binding RefreshActiveCommand}" ToolTip.Tip="Refresh active panel" Width="30" Height="30" Padding="5" IsEnabled="{Binding !IsBusy}">
           <Path Data="M17.65,6.35C16.2,4.9 14.21,4 12,4A8,8 0 0,0 4,12A8,8 0 0,0 12,20C15.73,20 18.84,17.45 19.73,14H17.65C16.89,16.33 14.62,18 12,18A6,6 0 0,1 6,12A6,6 0 0,1 12,6C13.66,6 15.14,6.69 16.22,7.78L13,11H20V4L17.65,6.35Z"
-                Fill="{DynamicResource SystemBaseHighColor}" Stretch="Uniform" />
+                Fill="{DynamicResource AppTextBrush}" Stretch="Uniform" />
         </Button>
-        <Button Command="{Binding SwapPanelsCommand}" ToolTip.Tip="Swap panels" Width="30" Height="30" Padding="5">
+        <Button Command="{Binding SwapPanelsCommand}" ToolTip.Tip="Swap panels" Width="30" Height="30" Padding="5" IsEnabled="{Binding !IsBusy}">
           <Path Data="M7,7H17V10L21,6L17,2V5H5V11H7V7M17,17H7V14L3,18L7,22V19H19V13H17V17Z"
-                Fill="{DynamicResource SystemBaseHighColor}" Stretch="Uniform" />
+                Fill="{DynamicResource AppTextBrush}" Stretch="Uniform" />
         </Button>
         <Button Click="OnShowStaged" ToolTip.Tip="Staged operations" Width="30" Height="30" Padding="5">
           <Path Data="M9,5H7A2,2 0 0,0 5,7V19A2,2 0 0,0 7,21H17A2,2 0 0,0 19,19V7A2,2 0 0,0 17,5H15V4A2,2 0 0,0 13,2H11A2,2 0 0,0 9,4V5M9,7H15V5H9V7M7,9H17V11H7V9M7,13H15V15H7V13M7,17H13V19H7V17Z"
-                Fill="{DynamicResource SystemBaseHighColor}" Stretch="Uniform" />
+                Fill="{DynamicResource AppTextBrush}" Stretch="Uniform" />
         </Button>
-      </StackPanel>
+        <Button Content="Compare folders" Command="{Binding CompareFoldersCommand}" />
+        <Button Content="Clear comparison" Command="{Binding ClearComparisonCommand}" IsEnabled="{Binding IsComparisonEnabled}" />
+        <CheckBox Content="Differences only" IsChecked="{Binding DifferencesOnly}" IsEnabled="{Binding IsComparisonEnabled}" />
+        <CheckBox Content="Linked browsing" IsChecked="{Binding LinkedBrowsing}" IsEnabled="{Binding IsComparisonEnabled}" />
+      </WrapPanel>
     </Border>
-
-    <!-- Toolbar: logical root + base + plan identity -->
-    <Border DockPanel.Dock="Top" Padding="6" BorderBrush="Gray" BorderThickness="0,0,0,1">
+    <Border DockPanel.Dock="Top" Padding="6" BorderBrush="Gray" BorderThickness="0,0,0,1" IsVisible="{Binding !HasDatabasePanels}">
       <WrapPanel Orientation="Horizontal" ItemSpacing="6">
         <StackPanel Orientation="Horizontal" Spacing="4">
           <TextBlock Text="Root:" VerticalAlignment="Center" />
-          <TextBox Text="{Binding RootId}" Width="80" ToolTip.Tip="Logical root id stored in plan (remap later via --target-path)" />
+          <TextBox Text="{Binding RootId}" Width="80" />
         </StackPanel>
         <StackPanel Orientation="Horizontal" Spacing="4">
-          <TextBlock Text="Base (drive-local):" VerticalAlignment="Center" />
-          <TextBox Text="{Binding BasePath}" IsEnabled="{Binding CanChangeBase}" Width="320" />
+          <TextBlock Text="Base:" VerticalAlignment="Center" />
+          <TextBox Text="{Binding BasePath}" IsEnabled="{Binding CanChangeBase}" Width="280" />
           <Button Content="Apply" Command="{Binding ApplyBaseCommand}" />
         </StackPanel>
         <StackPanel Orientation="Horizontal" Spacing="4">
@@ -78,321 +172,71 @@
           <TextBox Text="{Binding PlanId}" Width="150" />
         </StackPanel>
         <StackPanel Orientation="Horizontal" Spacing="4">
-          <TextBlock Text="DB:" VerticalAlignment="Center" />
+          <TextBlock Text="Output DB:" VerticalAlignment="Center" />
           <TextBox Text="{Binding DbPath}" Width="160" />
+        </StackPanel>
+        <StackPanel Orientation="Horizontal" Spacing="4">
           <TextBlock Text="JSON:" VerticalAlignment="Center" />
           <TextBox Text="{Binding JsonPath}" Width="160" />
         </StackPanel>
       </WrapPanel>
     </Border>
-
-    <!-- Status -->
+    <Border DockPanel.Dock="Top" Padding="8,6" IsVisible="{Binding IsComparisonEnabled}">
+      <TextBlock Text="{Binding ComparisonSummary}" TextWrapping="Wrap" />
+    </Border>
     <Border DockPanel.Dock="Bottom" Padding="6" BorderBrush="Gray" BorderThickness="0,1,0,0">
-      <StackPanel Spacing="2">
-        <TextBlock Text="{Binding PlanSummary}" FontWeight="Bold" />
+      <StackPanel Spacing="4">
+        <TextBlock Text="{Binding PlanSummary}" FontWeight="Bold" IsVisible="{Binding !HasDatabasePanels}" />
         <TextBlock Text="{Binding StatusMessage}" TextWrapping="Wrap" />
-        <WrapPanel Orientation="Horizontal" ItemSpacing="6">
+        <WrapPanel Orientation="Horizontal" ItemSpacing="6" IsVisible="{Binding !HasDatabasePanels}">
           <Button Content="F5 Copy (stage)" Command="{Binding StageCopyCommand}" />
           <Button Content="F6 Move (stage)" Command="{Binding StageMoveCommand}" />
-          <Button Content="F7 Mkdir (stage)" Click="OnMkdir" />
+          <Button Content="F7 Mkdir (stage)" Click="OnMkdir" IsEnabled="{Binding CanStage}" />
           <Button Content="F8 Delete (stage trash)" Command="{Binding StageTrashCommand}" />
           <Button Content="Save JSON" Command="{Binding SaveJsonCommand}" />
           <Button Content="Write to DB" Command="{Binding WriteToDbCommand}" />
         </WrapPanel>
-        <TextBlock Text="Plan-only: F5/F6/F7/F8 stage operations with size+hash preconditions. Nothing is executed here. Run executor later; remap drives with --target-path. Shortcuts: Ctrl/Cmd+A mark all, Space toggle, Shift+arrows extend, Esc clear marks, Tab switch panel." FontStyle="Italic" TextWrapping="Wrap" />
       </StackPanel>
     </Border>
-
-    <!-- Main area: two panels + staged list -->
     <Grid x:Name="SplitGrid" ColumnDefinitions="*,Auto,*">
-      <!-- Left panel -->
-      <Border Grid.Column="0" Margin="0,6,0,6" BorderBrush="DodgerBlue" BorderThickness="2" CornerRadius="4"
-              IsVisible="{Binding IsLeftActive}">
+      <Border Grid.Column="0" Classes="panel" Classes.active="{Binding IsLeftActive}"
+              Margin="0,4,0,4" CornerRadius="4">
         <DockPanel>
-          <StackPanel DockPanel.Dock="Top" Orientation="Vertical" Spacing="2" Margin="4">
-            <TextBlock Text="◀ LEFT (active source/dest — click to activate)" FontWeight="Bold" />
-            <ComboBox ItemsSource="{Binding Left.Drives}" SelectedItem="{Binding Left.SelectedDrive}"
-                      IsVisible="{Binding ShowDriveCombo}" MinWidth="200" Margin="0,0,0,2"
-                      ToolTip.Tip="Select drive">
-              <ComboBox.ItemTemplate>
-                <DataTemplate x:DataType="vm:DriveView">
-                  <TextBlock Text="{Binding Display}" ToolTip.Tip="{Binding Tooltip}" />
-                </DataTemplate>
-              </ComboBox.ItemTemplate>
-            </ComboBox>
-            <ItemsControl IsVisible="{Binding ShowDriveButtons}" ItemsSource="{Binding Left.Drives}">
-              <ItemsControl.ItemsPanel>
-                <ItemsPanelTemplate>
-                  <WrapPanel Orientation="Horizontal" />
-                </ItemsPanelTemplate>
-              </ItemsControl.ItemsPanel>
-              <ItemsControl.ItemTemplate>
-                <DataTemplate x:DataType="vm:DriveView">
-                  <Button Content="{Binding Display}" Tag="Left" CommandParameter="{Binding}" Click="OnDriveClick" Margin="0,0,2,2" Padding="6,2" ToolTip.Tip="{Binding Tooltip}" />
-                </DataTemplate>
-              </ItemsControl.ItemTemplate>
-            </ItemsControl>
-            <TextBox Text="{Binding Left.CurrentPath}" IsReadOnly="True" />
-            <StackPanel Orientation="Horizontal" Spacing="4">
-              <TextBlock Text="{Binding Left.Status}" VerticalAlignment="Center" />
-            </StackPanel>
-          </StackPanel>
-          <DataGrid x:Name="LeftList" Tag="Left"
-                    ItemsSource="{Binding Left.Entries}" SelectedItem="{Binding Left.SelectedEntry}"
+          <ContentControl DockPanel.Dock="Top" Content="{Binding Left}" ContentTemplate="{StaticResource PanelHeader}" />
+          <DataGrid x:Name="LeftList" Tag="Left" ItemsSource="{Binding Left.Entries}" SelectedItem="{Binding Left.SelectedEntry}"
                     AutoGenerateColumns="False" IsReadOnly="True" SelectionMode="Single"
-                    CanUserResizeColumns="True" CanUserSortColumns="True" GridLinesVisibility="Horizontal"
-                    DoubleTapped="OnLeftDoubleTapped">
+                    CanUserResizeColumns="True" CanUserSortColumns="True" GridLinesVisibility="Horizontal" DoubleTapped="OnLeftDoubleTapped">
             <DataGrid.Columns>
               <DataGridTemplateColumn Width="30" CanUserResize="False" CanUserSort="False" CellTemplate="{StaticResource FileIconTemplate}" />
-              <DataGridTemplateColumn Header="Name" Tag="Name" Width="*" CanUserSort="True">
-                <DataGridTemplateColumn.CellTemplate>
-                  <DataTemplate x:DataType="vm:FileEntryItem">
-                    <TextBlock Text="{Binding BaseName}" Classes.marked="{Binding IsMarked}" VerticalAlignment="Center" />
-                  </DataTemplate>
-                </DataGridTemplateColumn.CellTemplate>
-              </DataGridTemplateColumn>
-              <DataGridTemplateColumn Header="Ext" Tag="Ext" Width="70" CanUserSort="True">
-                <DataGridTemplateColumn.CellTemplate>
-                  <DataTemplate x:DataType="vm:FileEntryItem">
-                    <TextBlock Text="{Binding Extension}" Classes.marked="{Binding IsMarked}" VerticalAlignment="Center" />
-                  </DataTemplate>
-                </DataGridTemplateColumn.CellTemplate>
-              </DataGridTemplateColumn>
-              <DataGridTemplateColumn Header="Size" Tag="Size" Width="100" CanUserSort="True">
-                <DataGridTemplateColumn.CellTemplate>
-                  <DataTemplate x:DataType="vm:FileEntryItem">
-                    <TextBlock Text="{Binding SizeText}" Classes.marked="{Binding IsMarked}" HorizontalAlignment="Right" VerticalAlignment="Center" />
-                  </DataTemplate>
-                </DataGridTemplateColumn.CellTemplate>
-              </DataGridTemplateColumn>
-              <DataGridTemplateColumn Header="Modified" Tag="Modified" Width="140" CanUserSort="True">
-                <DataGridTemplateColumn.CellTemplate>
-                  <DataTemplate x:DataType="vm:FileEntryItem">
-                    <TextBlock Text="{Binding ModifiedText}" Classes.marked="{Binding IsMarked}" VerticalAlignment="Center" />
-                  </DataTemplate>
-                </DataGridTemplateColumn.CellTemplate>
-              </DataGridTemplateColumn>
+              <DataGridTemplateColumn Header="Name" Tag="Name" CanUserSort="True" Width="*" MinWidth="100" CellTemplate="{StaticResource NameCell}" />
+              <DataGridTemplateColumn Header="Ext" Tag="Ext" CanUserSort="True" Width="70" CellTemplate="{StaticResource ExtCell}" />
+              <DataGridTemplateColumn Header="Size" Tag="Size" CanUserSort="True" Width="100" CellTemplate="{StaticResource SizeCell}" />
+              <DataGridTemplateColumn Header="Modified" Tag="Modified" CanUserSort="True" Width="150" CellTemplate="{StaticResource ModifiedCell}" />
+              <DataGridTemplateColumn Header="Comparison" CanUserSort="False" IsVisible="{Binding IsComparisonEnabled}" Width="125" CellTemplate="{StaticResource ComparisonCell}" />
             </DataGrid.Columns>
           </DataGrid>
         </DockPanel>
       </Border>
-      <Border Grid.Column="0" Margin="0,6,0,6" BorderBrush="Gray" BorderThickness="1" CornerRadius="4"
-              IsVisible="{Binding !IsLeftActive}">
+      <GridSplitter Grid.Column="1" Width="6" ResizeBehavior="PreviousAndNext" Background="Gray"
+                    DoubleTapped="OnSplitterDoubleTapped" ToolTip.Tip="Double-click to restore 50/50" />
+      <Border Grid.Column="2" Classes="panel" Classes.active="{Binding !IsLeftActive}"
+              Margin="0,4,0,4" CornerRadius="4">
         <DockPanel>
-          <StackPanel DockPanel.Dock="Top" Orientation="Vertical" Spacing="2" Margin="4">
-            <TextBlock Text="LEFT (click to activate)" />
-            <ComboBox ItemsSource="{Binding Left.Drives}" SelectedItem="{Binding Left.SelectedDrive}"
-                      IsVisible="{Binding ShowDriveCombo}" MinWidth="200" Margin="0,0,0,2"
-                      ToolTip.Tip="Select drive">
-              <ComboBox.ItemTemplate>
-                <DataTemplate x:DataType="vm:DriveView">
-                  <TextBlock Text="{Binding Display}" ToolTip.Tip="{Binding Tooltip}" />
-                </DataTemplate>
-              </ComboBox.ItemTemplate>
-            </ComboBox>
-            <ItemsControl IsVisible="{Binding ShowDriveButtons}" ItemsSource="{Binding Left.Drives}">
-              <ItemsControl.ItemsPanel>
-                <ItemsPanelTemplate>
-                  <WrapPanel Orientation="Horizontal" />
-                </ItemsPanelTemplate>
-              </ItemsControl.ItemsPanel>
-              <ItemsControl.ItemTemplate>
-                <DataTemplate x:DataType="vm:DriveView">
-                  <Button Content="{Binding Display}" Tag="Left" CommandParameter="{Binding}" Click="OnDriveClick" Margin="0,0,2,2" Padding="6,2" ToolTip.Tip="{Binding Tooltip}" />
-                </DataTemplate>
-              </ItemsControl.ItemTemplate>
-            </ItemsControl>
-            <TextBox Text="{Binding Left.CurrentPath}" IsReadOnly="True" />
-            <StackPanel Orientation="Horizontal" Spacing="4">
-              <TextBlock Text="{Binding Left.Status}" VerticalAlignment="Center" />
-            </StackPanel>
-          </StackPanel>
-          <DataGrid Tag="Left"
-                    ItemsSource="{Binding Left.Entries}" SelectedItem="{Binding Left.SelectedEntry}"
+          <ContentControl DockPanel.Dock="Top" Content="{Binding Right}" ContentTemplate="{StaticResource PanelHeader}" />
+          <DataGrid x:Name="RightList" Tag="Right" ItemsSource="{Binding Right.Entries}" SelectedItem="{Binding Right.SelectedEntry}"
                     AutoGenerateColumns="False" IsReadOnly="True" SelectionMode="Single"
-                    CanUserResizeColumns="True" CanUserSortColumns="True" GridLinesVisibility="Horizontal"
-                    DoubleTapped="OnLeftDoubleTapped">
+                    CanUserResizeColumns="True" CanUserSortColumns="True" GridLinesVisibility="Horizontal" DoubleTapped="OnRightDoubleTapped">
             <DataGrid.Columns>
               <DataGridTemplateColumn Width="30" CanUserResize="False" CanUserSort="False" CellTemplate="{StaticResource FileIconTemplate}" />
-              <DataGridTemplateColumn Header="Name" Tag="Name" Width="*" CanUserSort="True">
-                <DataGridTemplateColumn.CellTemplate>
-                  <DataTemplate x:DataType="vm:FileEntryItem">
-                    <TextBlock Text="{Binding BaseName}" Classes.marked="{Binding IsMarked}" VerticalAlignment="Center" />
-                  </DataTemplate>
-                </DataGridTemplateColumn.CellTemplate>
-              </DataGridTemplateColumn>
-              <DataGridTemplateColumn Header="Ext" Tag="Ext" Width="70" CanUserSort="True">
-                <DataGridTemplateColumn.CellTemplate>
-                  <DataTemplate x:DataType="vm:FileEntryItem">
-                    <TextBlock Text="{Binding Extension}" Classes.marked="{Binding IsMarked}" VerticalAlignment="Center" />
-                  </DataTemplate>
-                </DataGridTemplateColumn.CellTemplate>
-              </DataGridTemplateColumn>
-              <DataGridTemplateColumn Header="Size" Tag="Size" Width="100" CanUserSort="True">
-                <DataGridTemplateColumn.CellTemplate>
-                  <DataTemplate x:DataType="vm:FileEntryItem">
-                    <TextBlock Text="{Binding SizeText}" Classes.marked="{Binding IsMarked}" HorizontalAlignment="Right" VerticalAlignment="Center" />
-                  </DataTemplate>
-                </DataGridTemplateColumn.CellTemplate>
-              </DataGridTemplateColumn>
-              <DataGridTemplateColumn Header="Modified" Tag="Modified" Width="140" CanUserSort="True">
-                <DataGridTemplateColumn.CellTemplate>
-                  <DataTemplate x:DataType="vm:FileEntryItem">
-                    <TextBlock Text="{Binding ModifiedText}" Classes.marked="{Binding IsMarked}" VerticalAlignment="Center" />
-                  </DataTemplate>
-                </DataGridTemplateColumn.CellTemplate>
-              </DataGridTemplateColumn>
+              <DataGridTemplateColumn Header="Name" Tag="Name" CanUserSort="True" Width="*" MinWidth="100" CellTemplate="{StaticResource NameCell}" />
+              <DataGridTemplateColumn Header="Ext" Tag="Ext" CanUserSort="True" Width="70" CellTemplate="{StaticResource ExtCell}" />
+              <DataGridTemplateColumn Header="Size" Tag="Size" CanUserSort="True" Width="100" CellTemplate="{StaticResource SizeCell}" />
+              <DataGridTemplateColumn Header="Modified" Tag="Modified" CanUserSort="True" Width="150" CellTemplate="{StaticResource ModifiedCell}" />
+              <DataGridTemplateColumn Header="Comparison" CanUserSort="False" IsVisible="{Binding IsComparisonEnabled}" Width="125" CellTemplate="{StaticResource ComparisonCell}" />
             </DataGrid.Columns>
           </DataGrid>
         </DockPanel>
       </Border>
-
-      <GridSplitter Grid.Column="1" Width="6" ResizeBehavior="PreviousAndNext" Background="Gray" DoubleTapped="OnSplitterDoubleTapped" ToolTip.Tip="Double-click to restore 50/50" />
-
-      <!-- Right panel -->
-      <Border Grid.Column="2" Margin="0,6,0,6" BorderBrush="DodgerBlue" BorderThickness="2" CornerRadius="4"
-              IsVisible="{Binding !IsLeftActive}">
-        <DockPanel>
-          <StackPanel DockPanel.Dock="Top" Orientation="Vertical" Spacing="2" Margin="4">
-            <TextBlock Text="▶ RIGHT (active source/dest — click to activate)" FontWeight="Bold" />
-            <ComboBox ItemsSource="{Binding Right.Drives}" SelectedItem="{Binding Right.SelectedDrive}"
-                      IsVisible="{Binding ShowDriveCombo}" MinWidth="200" Margin="0,0,0,2"
-                      ToolTip.Tip="Select drive">
-              <ComboBox.ItemTemplate>
-                <DataTemplate x:DataType="vm:DriveView">
-                  <TextBlock Text="{Binding Display}" ToolTip.Tip="{Binding Tooltip}" />
-                </DataTemplate>
-              </ComboBox.ItemTemplate>
-            </ComboBox>
-            <ItemsControl IsVisible="{Binding ShowDriveButtons}" ItemsSource="{Binding Right.Drives}">
-              <ItemsControl.ItemsPanel>
-                <ItemsPanelTemplate>
-                  <WrapPanel Orientation="Horizontal" />
-                </ItemsPanelTemplate>
-              </ItemsControl.ItemsPanel>
-              <ItemsControl.ItemTemplate>
-                <DataTemplate x:DataType="vm:DriveView">
-                  <Button Content="{Binding Display}" Tag="Right" CommandParameter="{Binding}" Click="OnDriveClick" Margin="0,0,2,2" Padding="6,2" ToolTip.Tip="{Binding Tooltip}" />
-                </DataTemplate>
-              </ItemsControl.ItemTemplate>
-            </ItemsControl>
-            <TextBox Text="{Binding Right.CurrentPath}" IsReadOnly="True" />
-            <StackPanel Orientation="Horizontal" Spacing="4">
-              <TextBlock Text="{Binding Right.Status}" VerticalAlignment="Center" />
-              <TextBlock Text="{Binding Right.DriveStatus}" VerticalAlignment="Center" FontStyle="Italic" />
-            </StackPanel>
-          </StackPanel>
-          <DataGrid x:Name="RightList" Tag="Right"
-                    ItemsSource="{Binding Right.Entries}" SelectedItem="{Binding Right.SelectedEntry}"
-                    AutoGenerateColumns="False" IsReadOnly="True" SelectionMode="Single"
-                    CanUserResizeColumns="True" CanUserSortColumns="True" GridLinesVisibility="Horizontal"
-                    DoubleTapped="OnRightDoubleTapped">
-            <DataGrid.Columns>
-              <DataGridTemplateColumn Width="30" CanUserResize="False" CanUserSort="False" CellTemplate="{StaticResource FileIconTemplate}" />
-              <DataGridTemplateColumn Header="Name" Tag="Name" Width="*" CanUserSort="True">
-                <DataGridTemplateColumn.CellTemplate>
-                  <DataTemplate x:DataType="vm:FileEntryItem">
-                    <TextBlock Text="{Binding BaseName}" Classes.marked="{Binding IsMarked}" VerticalAlignment="Center" />
-                  </DataTemplate>
-                </DataGridTemplateColumn.CellTemplate>
-              </DataGridTemplateColumn>
-              <DataGridTemplateColumn Header="Ext" Tag="Ext" Width="70" CanUserSort="True">
-                <DataGridTemplateColumn.CellTemplate>
-                  <DataTemplate x:DataType="vm:FileEntryItem">
-                    <TextBlock Text="{Binding Extension}" Classes.marked="{Binding IsMarked}" VerticalAlignment="Center" />
-                  </DataTemplate>
-                </DataGridTemplateColumn.CellTemplate>
-              </DataGridTemplateColumn>
-              <DataGridTemplateColumn Header="Size" Tag="Size" Width="100" CanUserSort="True">
-                <DataGridTemplateColumn.CellTemplate>
-                  <DataTemplate x:DataType="vm:FileEntryItem">
-                    <TextBlock Text="{Binding SizeText}" Classes.marked="{Binding IsMarked}" HorizontalAlignment="Right" VerticalAlignment="Center" />
-                  </DataTemplate>
-                </DataGridTemplateColumn.CellTemplate>
-              </DataGridTemplateColumn>
-              <DataGridTemplateColumn Header="Modified" Tag="Modified" Width="140" CanUserSort="True">
-                <DataGridTemplateColumn.CellTemplate>
-                  <DataTemplate x:DataType="vm:FileEntryItem">
-                    <TextBlock Text="{Binding ModifiedText}" Classes.marked="{Binding IsMarked}" VerticalAlignment="Center" />
-                  </DataTemplate>
-                </DataGridTemplateColumn.CellTemplate>
-              </DataGridTemplateColumn>
-            </DataGrid.Columns>
-          </DataGrid>
-        </DockPanel>
-      </Border>
-      <Border Grid.Column="2" Margin="0,6,0,6" BorderBrush="Gray" BorderThickness="1" CornerRadius="4"
-              IsVisible="{Binding IsLeftActive}">
-        <DockPanel>
-          <StackPanel DockPanel.Dock="Top" Orientation="Vertical" Spacing="2" Margin="4">
-            <TextBlock Text="RIGHT (click to activate)" />
-            <ComboBox ItemsSource="{Binding Right.Drives}" SelectedItem="{Binding Right.SelectedDrive}"
-                      IsVisible="{Binding ShowDriveCombo}" MinWidth="200" Margin="0,0,0,2"
-                      ToolTip.Tip="Select drive">
-              <ComboBox.ItemTemplate>
-                <DataTemplate x:DataType="vm:DriveView">
-                  <TextBlock Text="{Binding Display}" ToolTip.Tip="{Binding Tooltip}" />
-                </DataTemplate>
-              </ComboBox.ItemTemplate>
-            </ComboBox>
-            <ItemsControl IsVisible="{Binding ShowDriveButtons}" ItemsSource="{Binding Right.Drives}">
-              <ItemsControl.ItemsPanel>
-                <ItemsPanelTemplate>
-                  <WrapPanel Orientation="Horizontal" />
-                </ItemsPanelTemplate>
-              </ItemsControl.ItemsPanel>
-              <ItemsControl.ItemTemplate>
-                <DataTemplate x:DataType="vm:DriveView">
-                  <Button Content="{Binding Display}" Tag="Right" CommandParameter="{Binding}" Click="OnDriveClick" Margin="0,0,2,2" Padding="6,2" ToolTip.Tip="{Binding Tooltip}" />
-                </DataTemplate>
-              </ItemsControl.ItemTemplate>
-            </ItemsControl>
-            <TextBox Text="{Binding Right.CurrentPath}" IsReadOnly="True" />
-            <StackPanel Orientation="Horizontal" Spacing="4">
-              <TextBlock Text="{Binding Right.Status}" VerticalAlignment="Center" />
-              <TextBlock Text="{Binding Right.DriveStatus}" VerticalAlignment="Center" FontStyle="Italic" />
-            </StackPanel>
-          </StackPanel>
-          <DataGrid Tag="Right"
-                    ItemsSource="{Binding Right.Entries}" SelectedItem="{Binding Right.SelectedEntry}"
-                    AutoGenerateColumns="False" IsReadOnly="True" SelectionMode="Single"
-                    CanUserResizeColumns="True" CanUserSortColumns="True" GridLinesVisibility="Horizontal"
-                    DoubleTapped="OnRightDoubleTapped">
-            <DataGrid.Columns>
-              <DataGridTemplateColumn Width="30" CanUserResize="False" CanUserSort="False" CellTemplate="{StaticResource FileIconTemplate}" />
-              <DataGridTemplateColumn Header="Name" Tag="Name" Width="*" CanUserSort="True">
-                <DataGridTemplateColumn.CellTemplate>
-                  <DataTemplate x:DataType="vm:FileEntryItem">
-                    <TextBlock Text="{Binding BaseName}" Classes.marked="{Binding IsMarked}" VerticalAlignment="Center" />
-                  </DataTemplate>
-                </DataGridTemplateColumn.CellTemplate>
-              </DataGridTemplateColumn>
-              <DataGridTemplateColumn Header="Ext" Tag="Ext" Width="70" CanUserSort="True">
-                <DataGridTemplateColumn.CellTemplate>
-                  <DataTemplate x:DataType="vm:FileEntryItem">
-                    <TextBlock Text="{Binding Extension}" Classes.marked="{Binding IsMarked}" VerticalAlignment="Center" />
-                  </DataTemplate>
-                </DataGridTemplateColumn.CellTemplate>
-              </DataGridTemplateColumn>
-              <DataGridTemplateColumn Header="Size" Tag="Size" Width="100" CanUserSort="True">
-                <DataGridTemplateColumn.CellTemplate>
-                  <DataTemplate x:DataType="vm:FileEntryItem">
-                    <TextBlock Text="{Binding SizeText}" Classes.marked="{Binding IsMarked}" HorizontalAlignment="Right" VerticalAlignment="Center" />
-                  </DataTemplate>
-                </DataGridTemplateColumn.CellTemplate>
-              </DataGridTemplateColumn>
-              <DataGridTemplateColumn Header="Modified" Tag="Modified" Width="140" CanUserSort="True">
-                <DataGridTemplateColumn.CellTemplate>
-                  <DataTemplate x:DataType="vm:FileEntryItem">
-                    <TextBlock Text="{Binding ModifiedText}" Classes.marked="{Binding IsMarked}" VerticalAlignment="Center" />
-                  </DataTemplate>
-                </DataGridTemplateColumn.CellTemplate>
-              </DataGridTemplateColumn>
-            </DataGrid.Columns>
-          </DataGrid>
-        </DockPanel>
-      </Border>
-
     </Grid>
   </DockPanel>
 </Window>
