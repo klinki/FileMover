@@ -15,6 +15,11 @@ public sealed class InventoryNode(string name, string relativePath, bool isDirec
     public DateTime Modified { get; init; }
     public string? Digest { get; init; }
     public bool HasScanError { get; init; }
+    public string EntryKind { get; init; } = BackupNormalizer.EntryKind.File;
+    public bool IsLink => EntryKind != BackupNormalizer.EntryKind.File;
+    public string? LinkTarget { get; init; }
+    public string? TargetPath { get; init; }
+    public string? LinkNote { get; init; }
     public Dictionary<string, InventoryNode> Children { get; } = new(comparer);
 }
 
@@ -40,17 +45,23 @@ public sealed class InventoryRoot(StorageRootRow root, string? scanStatus)
         string relative = "";
         for (int i = 0; i < parts.Length; i++)
         {
+            if (parent.IsLink) return; // Historical descendants beneath a newly recorded link are not navigable.
             relative = relative.Length == 0 ? parts[i] : relative + "/" + parts[i];
-            bool directory = i < parts.Length - 1;
+            bool intermediate = i < parts.Length - 1;
+            bool directory = intermediate || file.EntryKind == EntryKind.DirectoryLink;
             if (!Nodes.TryGetValue(relative, out var node))
             {
                 node = new InventoryNode(parts[i], relative, directory, Comparer)
                 {
-                    Size = directory ? 0 : file.Size,
-                    Modified = !directory && DateTimeOffset.TryParse(file.ModifiedUtc, CultureInfo.InvariantCulture,
+                    Size = intermediate ? 0 : file.Size,
+                    Modified = !intermediate && DateTimeOffset.TryParse(file.ModifiedUtc, CultureInfo.InvariantCulture,
                         DateTimeStyles.None, out var date) ? date.LocalDateTime : DateTime.MinValue,
                     Digest = directory ? null : file.Digest,
-                    HasScanError = !directory && file.Status != FileStatus.Ok,
+                    HasScanError = !intermediate && file.Status != FileStatus.Ok,
+                    EntryKind = intermediate ? EntryKind.File : file.EntryKind,
+                    LinkTarget = intermediate ? null : file.LinkTarget,
+                    TargetPath = intermediate ? null : file.TargetPath,
+                    LinkNote = intermediate ? null : file.LinkNote,
                 };
                 Nodes.Add(relative, node);
                 parent.Children.Add(parts[i], node);

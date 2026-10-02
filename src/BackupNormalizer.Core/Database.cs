@@ -5,12 +5,15 @@ namespace BackupNormalizer;
 
 public sealed record StorageRootRow(string Id, string Name, string Path, bool Writable, string FileSystemId, string CaseSensitivity, string CreatedUtc);
 public sealed record ScanRow(long Id, string StorageRootId, string StartedUtc, string? CompletedUtc, string Status);
-public sealed record FileEntryRow(long Id, string StorageRootId, string RelativePath, string Name, long Size, string ModifiedUtc, string? CreatedUtc, string? FileIdentity, long LastSeenScanId, string Status, string? Error);
+public sealed record FileEntryRow(long Id, string StorageRootId, string RelativePath, string Name, long Size, string ModifiedUtc, string? CreatedUtc, string? FileIdentity, long LastSeenScanId, string Status, string? Error,
+    string EntryKind = BackupNormalizer.EntryKind.File, string? LinkTarget = null, string? TargetPath = null, string? LinkNote = null);
 public sealed record FileHashRow(long FileEntryId, string Algorithm, string Digest, long SizeAtHash, string ModifiedUtcAtHash, string CalculatedUtc, string State);
 
 public sealed class Database : IDisposable
 {
     private readonly bool _readOnly;
+    private readonly bool _hasLinkMetadata;
+    private readonly bool _hasSkipReason;
 
     public string DbPath { get; }
 
@@ -63,6 +66,8 @@ public sealed class Database : IDisposable
                 Context.Database.ExecuteSqlRaw("PRAGMA synchronous=NORMAL;");
                 Context.Database.Migrate();
             }
+            _hasLinkMetadata = !readOnly || HasColumn("FileEntry", "EntryKind");
+            _hasSkipReason = !readOnly || HasColumn("PlanOperation", "SkipReason");
         }
         catch
         {
@@ -74,6 +79,16 @@ public sealed class Database : IDisposable
     public void Dispose() => Context.Dispose();
 
     public static string UtcNow() => DateTime.UtcNow.ToString("o");
+
+    private bool HasColumn(string table, string column)
+    {
+        using var command = Context.Database.GetDbConnection().CreateCommand();
+        command.CommandText = $"PRAGMA table_info({table})";
+        using var reader = command.ExecuteReader();
+        while (reader.Read())
+            if (reader.GetString(1) == column) return true;
+        return false;
+    }
 
     // ---- Roots ----
     public void UpsertRoot(StorageRootRow r)
@@ -175,12 +190,14 @@ public sealed class Database : IDisposable
     public long UpsertFileEntry(FileEntryRow e)
     {
         EnsureWritable();
-        var id = Context.FileEntries
+        var previous = Context.FileEntries
             .Where(x => x.StorageRootId == e.StorageRootId && x.RelativePath == e.RelativePath)
-            .Select(x => x.Id)
+            .Select(x => new { x.Id, x.EntryKind })
             .FirstOrDefault();
-        if (id != 0)
+        if (previous != null)
         {
+            long id = previous.Id;
+            if (previous.EntryKind != e.EntryKind) MarkFileHashesStale(id);
             Context.FileEntries
                 .Where(x => x.Id == id)
                 .ExecuteUpdate(setters => setters
@@ -191,7 +208,11 @@ public sealed class Database : IDisposable
                     .SetProperty(x => x.FileIdentity, e.FileIdentity)
                     .SetProperty(x => x.LastSeenScanId, e.LastSeenScanId)
                     .SetProperty(x => x.Status, e.Status)
-                    .SetProperty(x => x.Error, e.Error));
+                    .SetProperty(x => x.Error, e.Error)
+                    .SetProperty(x => x.EntryKind, e.EntryKind)
+                    .SetProperty(x => x.LinkTarget, e.LinkTarget)
+                    .SetProperty(x => x.TargetPath, e.TargetPath)
+                    .SetProperty(x => x.LinkNote, e.LinkNote));
             return id;
         }
 
@@ -206,7 +227,11 @@ public sealed class Database : IDisposable
             FileIdentity = e.FileIdentity,
             LastSeenScanId = e.LastSeenScanId,
             Status = e.Status,
-            Error = e.Error
+            Error = e.Error,
+            EntryKind = e.EntryKind,
+            LinkTarget = e.LinkTarget,
+            TargetPath = e.TargetPath,
+            LinkNote = e.LinkNote
         };
         AddAndSave(Context.FileEntries, entry);
         return entry.Id;
@@ -230,7 +255,8 @@ public sealed class Database : IDisposable
 
     public sealed record FileWithHashRow(long Id, string StorageRootId, string RelativePath, string Name,
         long Size, string ModifiedUtc, string? CreatedUtc, string? FileIdentity, long LastSeenScanId,
-        string Status, string? Error, string? Digest);
+        string Status, string? Error, string? Digest, string EntryKind = BackupNormalizer.EntryKind.File,
+        string? LinkTarget = null, string? TargetPath = null, string? LinkNote = null);
 
     /// <summary>
     /// File entries with their usable full-file digest in a single query.
@@ -240,7 +266,7 @@ public sealed class Database : IDisposable
     {
         var entries = Context.FileEntries.AsNoTracking();
         if (rootId != null) entries = entries.Where(x => x.StorageRootId == rootId);
-        return entries
+        var query = entries
             .OrderBy(x => x.StorageRootId)
             .ThenBy(x => x.RelativePath)
             .GroupJoin(Context.FileHashes.AsNoTracking().Where(h => h.Algorithm == algorithm),
@@ -248,10 +274,22 @@ public sealed class Database : IDisposable
                 (entry, hashes) => new { entry, digest = hashes
                     .Where(h => h.State == HashState.Ok && h.SizeAtHash == entry.Size && h.ModifiedUtcAtHash == entry.ModifiedUtc)
                     .Select(h => h.Digest)
-                    .FirstOrDefault() })
-            .Select(x => new FileWithHashRow(x.entry.Id, x.entry.StorageRootId, x.entry.RelativePath,
+                    .FirstOrDefault() });
+        if (!_hasLinkMetadata)
+            return query.Select(x => new FileWithHashRow(x.entry.Id, x.entry.StorageRootId, x.entry.RelativePath,
                 x.entry.Name, x.entry.Size, x.entry.ModifiedUtc, x.entry.CreatedUtc, x.entry.FileIdentity,
-                x.entry.LastSeenScanId, x.entry.Status, x.entry.Error, x.digest))
+                x.entry.LastSeenScanId,
+                x.entry.Status == FileStatus.UnsupportedEntry && x.entry.Error == "symlink" ? FileStatus.Ok : x.entry.Status,
+                x.entry.Status == FileStatus.UnsupportedEntry && x.entry.Error == "symlink" ? null : x.entry.Error,
+                x.entry.Status == FileStatus.Ok ? x.digest : null,
+                x.entry.Status == FileStatus.UnsupportedEntry && x.entry.Error == "symlink" ? EntryKind.ReparsePoint : EntryKind.File,
+                null, null, x.entry.Status == FileStatus.UnsupportedEntry && x.entry.Error == "symlink" ? "Rescan to record link metadata." : null))
+                .ToList();
+        return query.Select(x => new FileWithHashRow(x.entry.Id, x.entry.StorageRootId, x.entry.RelativePath,
+                x.entry.Name, x.entry.Size, x.entry.ModifiedUtc, x.entry.CreatedUtc, x.entry.FileIdentity,
+                x.entry.LastSeenScanId, x.entry.Status, x.entry.Error,
+                x.entry.Status == FileStatus.Ok && x.entry.EntryKind == EntryKind.File ? x.digest : null,
+                x.entry.EntryKind, x.entry.LinkTarget, x.entry.TargetPath, x.entry.LinkNote))
             .ToList();
     }
 
@@ -298,6 +336,13 @@ public sealed class Database : IDisposable
             .ExecuteUpdate(setters => setters.SetProperty(x => x.State, HashState.Stale));
     }
 
+    public void MarkFileHashesStale(long fileEntryId)
+    {
+        EnsureWritable();
+        Context.FileHashes.Where(x => x.FileEntryId == fileEntryId)
+            .ExecuteUpdate(setters => setters.SetProperty(x => x.State, HashState.Stale));
+    }
+
     // ---- Plans ----
     public void InsertPlan(string planId, string sourceDatabasePath, string sourceRootId, string sourceRootPath,
         string targetRootId, string targetRootPath, long estBytes, string status = PlanStatus.Planned)
@@ -318,7 +363,8 @@ public sealed class Database : IDisposable
     }
 
     public void InsertOperation(string planId, int seq, string type, string? sourceKind, string? srcRoot,
-        string? srcPath, string? dstRoot, string? dstPath, long size, string? hash, string status = OpStatus.Planned)
+        string? srcPath, string? dstRoot, string? dstPath, long size, string? hash, string status = OpStatus.Planned,
+        string? skipReason = null)
     {
         EnsureWritable();
         AddAndSave(Context.PlanOperations, new PlanOperationEntity
@@ -333,7 +379,8 @@ public sealed class Database : IDisposable
             DestinationPath = dstPath,
             ExpectedSize = size,
             ExpectedHash = hash,
-            Status = status
+            Status = status,
+            SkipReason = skipReason
         });
     }
 
@@ -341,7 +388,7 @@ public sealed class Database : IDisposable
 
     public sealed record PlanOperationRow(long Id, int Sequence, string Type, string? SourceKind,
         string? SourceRoot, string? SourcePath, string? DestRoot, string? DestPath,
-        long ExpectedSize, string? ExpectedHash, string Status, string? Error);
+        long ExpectedSize, string? ExpectedHash, string Status, string? Error, string? SkipReason = null);
 
     public List<PlanOperationRow> ListPlanOperations(string planId, bool onlyProblems = false)
     {
@@ -349,9 +396,13 @@ public sealed class Database : IDisposable
         if (onlyProblems)
             query = query.Where(x => x.Status == OpStatus.Conflict || x.Status == OpStatus.Failed || x.Status == OpStatus.Skipped);
 
+        if (!_hasSkipReason)
+            return query.OrderBy(x => x.Sequence)
+                .Select(x => new PlanOperationRow(x.Id, x.Sequence, x.Type, x.SourceKind, x.SourceRootId, x.SourcePath,
+                    x.DestinationRootId, x.DestinationPath, x.ExpectedSize, x.ExpectedHash, x.Status, x.Error, null)).ToList();
         return query.OrderBy(x => x.Sequence)
             .Select(x => new PlanOperationRow(x.Id, x.Sequence, x.Type, x.SourceKind, x.SourceRootId, x.SourcePath,
-                x.DestinationRootId, x.DestinationPath, x.ExpectedSize, x.ExpectedHash, x.Status, x.Error))
+                x.DestinationRootId, x.DestinationPath, x.ExpectedSize, x.ExpectedHash, x.Status, x.Error, x.SkipReason))
             .ToList();
     }
 
@@ -442,6 +493,16 @@ public sealed class Database : IDisposable
                 .SetProperty(x => x.Error, error));
     }
 
+    public void MarkOperationSkipped(long operationId, string reason)
+    {
+        EnsureWritable();
+        Context.PlanOperations.Where(x => x.Id == operationId).ExecuteUpdate(setters => setters
+            .SetProperty(x => x.Status, OpStatus.Skipped)
+            .SetProperty(x => x.CompletedUtc, UtcNow())
+            .SetProperty(x => x.Error, (string?)null)
+            .SetProperty(x => x.SkipReason, reason));
+    }
+
     public void AddExecutionLog(long operationId, string level, string message, string timestampUtc)
     {
         EnsureWritable();
@@ -468,6 +529,7 @@ public sealed class Database : IDisposable
         (from fileHash in Context.FileHashes.AsNoTracking()
          join entry in Context.FileEntries.AsNoTracking() on fileHash.FileEntryId equals entry.Id
          where fileHash.Digest == hash && fileHash.State == HashState.Ok && entry.Status == FileStatus.Ok
+            && entry.EntryKind == EntryKind.File
             && entry.StorageRootId == targetRootId
             && !(entry.StorageRootId == excludeRootId && entry.RelativePath == excludePath)
          select new CopyCandidate(entry.StorageRootId, entry.RelativePath, entry.Size))
@@ -475,7 +537,7 @@ public sealed class Database : IDisposable
 
     public sealed record PlanOperationSeed(int Sequence, string Type, string? SourceKind,
         string? SourceRoot, string? SourcePath, string? DestRoot, string? DestPath,
-        long ExpectedSize, string? ExpectedHash);
+        long ExpectedSize, string? ExpectedHash, string? SkipReason = null);
 
     public void AddPlanWithOperations(string planId, string createdUtc, string sourceDatabasePath,
         string sourceRootId, string sourceRootPath, string targetRootId, string targetRootPath,
@@ -509,6 +571,7 @@ public sealed class Database : IDisposable
                 DestinationPath = op.DestPath,
                 ExpectedSize = op.ExpectedSize,
                 ExpectedHash = op.ExpectedHash,
+                SkipReason = op.SkipReason,
                 Status = OpStatus.Planned,
             });
         }
@@ -552,9 +615,19 @@ public sealed class Database : IDisposable
     public List<string> AppliedMigrations() => Context.Database.GetAppliedMigrations().ToList();
     public List<string> PendingMigrations() => Context.Database.GetPendingMigrations().ToList();
 
-    private static System.Linq.Expressions.Expression<Func<FileEntryEntity, FileEntryRow>> ToFileEntryRow() => x =>
+    private System.Linq.Expressions.Expression<Func<FileEntryEntity, FileEntryRow>> ToFileEntryRow()
+    {
+        if (!_hasLinkMetadata) return x => new FileEntryRow(x.Id, x.StorageRootId, x.RelativePath, x.Name, x.Size, x.ModifiedUtc,
+            x.CreatedUtc, x.FileIdentity, x.LastSeenScanId,
+            x.Status == FileStatus.UnsupportedEntry && x.Error == "symlink" ? FileStatus.Ok : x.Status,
+            x.Status == FileStatus.UnsupportedEntry && x.Error == "symlink" ? null : x.Error,
+            x.Status == FileStatus.UnsupportedEntry && x.Error == "symlink" ? EntryKind.ReparsePoint : EntryKind.File,
+            null, null, x.Status == FileStatus.UnsupportedEntry && x.Error == "symlink" ? "Rescan to record link metadata." : null);
+        return x =>
         new FileEntryRow(x.Id, x.StorageRootId, x.RelativePath, x.Name, x.Size, x.ModifiedUtc,
-            x.CreatedUtc, x.FileIdentity, x.LastSeenScanId, x.Status, x.Error);
+            x.CreatedUtc, x.FileIdentity, x.LastSeenScanId, x.Status, x.Error,
+            x.EntryKind, x.LinkTarget, x.TargetPath, x.LinkNote);
+    }
 
     private void AddAndSave<TEntity>(DbSet<TEntity> set, TEntity entity) where TEntity : class
     {

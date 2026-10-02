@@ -37,13 +37,25 @@ public sealed partial class FileEntryItem : ObservableObject
     public string FullPath { get; }
     public bool IsDirectory { get; }
     public bool IsParentEntry { get; }
+    public string EntryKind { get; init; } = BackupNormalizer.EntryKind.File;
+    public bool IsLink => EntryKind != BackupNormalizer.EntryKind.File;
+    public string? LinkTarget { get; init; }
+    public string? TargetPath { get; init; }
+    public string? LinkNote { get; init; }
+    public string Tooltip => IsLink ? $"{Name}\n{KindText}\nTarget: {LinkTarget ?? "unavailable"}\nPath: {TargetPath ?? "unavailable"}\n{LinkNote}" : Name;
     public long Size { get; }
     public DateTime Modified { get; }
     public string BaseName => IsDirectory ? Name : Path.GetFileNameWithoutExtension(Name);
     public string Extension => IsDirectory ? "" : Path.GetExtension(Name).TrimStart('.');
-    public string SizeText => IsParentEntry ? "" : IsDirectory ? "<DIR>" : Size.ToString("N0");
+    public string SizeText => IsParentEntry ? "" : IsLink ? KindText : IsDirectory ? "<DIR>" : Size.ToString("N0");
     public string ModifiedText => IsParentEntry || Modified == DateTime.MinValue ? "" : Modified.ToString("yyyy-MM-dd HH:mm");
-    public string KindText => IsDirectory ? "dir" : "file";
+    public string KindText => EntryKind switch
+    {
+        BackupNormalizer.EntryKind.FileLink => "file link",
+        BackupNormalizer.EntryKind.DirectoryLink => "directory link",
+        BackupNormalizer.EntryKind.ReparsePoint => "reparse point",
+        _ => IsDirectory ? "dir" : "file",
+    };
 
     private static readonly HashSet<string> ArchiveExts = new(StringComparer.OrdinalIgnoreCase)
         { ".zip", ".rar", ".7z", ".tar", ".gz", ".tgz", ".bz2", ".xz", ".cab", ".iso", ".jar", ".war" };
@@ -84,8 +96,9 @@ public sealed partial class FileEntryItem : ObservableObject
         ComparisonState.OnlyLeft => "Only left",
         ComparisonState.OnlyRight => "Only right",
         ComparisonState.Unverified => "Unverified",
-        ComparisonState.TypeConflict => "File / folder conflict",
+        ComparisonState.TypeConflict => "Type conflict",
         ComparisonState.ScanError => "Scan error",
+        ComparisonState.Skipped => "Skipped link",
         _ => "",
     };
 
@@ -324,7 +337,7 @@ public sealed partial class FilePanelViewModel : ObservableObject
     public bool NavigateTo(FileEntryItem entry)
     {
         if (entry.IsParentEntry) { GoUp(); return true; }
-        if (!entry.IsDirectory) return false;
+        if (!entry.IsDirectory || entry.IsLink) return false;
         if (IsDatabase) { NavigateInventory(entry.FullPath); return true; }
         CurrentPath = entry.FullPath;
         Refresh();

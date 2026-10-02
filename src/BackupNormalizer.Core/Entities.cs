@@ -33,6 +33,10 @@ public sealed class FileEntryEntity
     public long LastSeenScanId { get; set; }
     public string Status { get; set; } = string.Empty;
     public string? Error { get; set; }
+    public string EntryKind { get; set; } = BackupNormalizer.EntryKind.File;
+    public string? LinkTarget { get; set; }
+    public string? TargetPath { get; set; }
+    public string? LinkNote { get; set; }
 }
 
 public sealed class FileHashEntity
@@ -78,6 +82,7 @@ public sealed class PlanOperationEntity
     public string? StartedUtc { get; set; }
     public string? CompletedUtc { get; set; }
     public string? Error { get; set; }
+    public string? SkipReason { get; set; }
 }
 
 public sealed class ExecutionLogEntity

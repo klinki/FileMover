@@ -87,6 +87,11 @@ public sealed partial class FilePanelViewModel
 
     public void NavigateInventory(string path)
     {
+        if (SelectedInventoryRoot?.Nodes.TryGetValue(path, out var node) == true && node.IsLink)
+        {
+            Status = "Linked folders are excluded from browsing.";
+            return;
+        }
         InventoryPath = path;
         string root = SelectedInventoryRoot?.Root.Path ?? "";
         char separator = root.Contains('\\') || (root.Length > 1 && root[1] == ':') ? '\\' : '/';
@@ -114,18 +119,19 @@ public sealed partial class FilePanelViewModel
             Status = "Folder not indexed on this side.";
             return;
         }
-        int folders = 0, files = 0;
+        int folders = 0, files = 0, links = 0;
         foreach (var node in directory.Children.Values)
         {
             var state = _comparisonStates != null && _comparisonStates.TryGetValue(node.RelativePath, out var found)
                 ? found : ComparisonState.None;
-            if (_differencesOnly && state == ComparisonState.Equal) continue;
+            if (_differencesOnly && state is ComparisonState.Equal or ComparisonState.Skipped) continue;
             Entries.Add(new FileEntryItem(node.Name, node.RelativePath, node.IsDirectory, node.Size, node.Modified)
-                { Comparison = state });
-            if (node.IsDirectory) folders++; else files++;
+                { Comparison = state, EntryKind = node.EntryKind, LinkTarget = node.LinkTarget,
+                    TargetPath = node.TargetPath, LinkNote = node.LinkNote });
+            if (node.IsLink) links++; else if (node.IsDirectory) folders++; else files++;
         }
         SortEntries();
-        Status = $"{folders} dirs, {files} files | Scan: {root.ScanStatus ?? "not scanned"}";
+        Status = $"{folders} dirs, {files} files, {links} links | Scan: {root.ScanStatus ?? "not scanned"}";
         DriveStatus = "";
     }
 }

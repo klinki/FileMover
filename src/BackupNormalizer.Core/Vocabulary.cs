@@ -12,6 +12,7 @@ public static class OpType
     public const string Copy = "COPY";
     public const string Verify = "VERIFY";
     public const string Trash = "TRASH";
+    public const string SkipLink = "SKIP_LINK";
 }
 
 public static class OpStatus
@@ -37,6 +38,14 @@ public static class FileStatus
     public const string Missing = "Missing";
     public const string UnsupportedEntry = "UnsupportedEntry";
     public const string ScanError = "ScanError";
+}
+
+public static class EntryKind
+{
+    public const string File = "File";
+    public const string FileLink = "FileLink";
+    public const string DirectoryLink = "DirectoryLink";
+    public const string ReparsePoint = "ReparsePoint";
 }
 
 public static class HashState

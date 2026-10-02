@@ -2,6 +2,39 @@ namespace BackupNormalizer;
 
 public static class Paths
 {
+    public static string? FindRecordedLink(string relative, IReadOnlySet<string> linkPaths)
+    {
+        string path = NormalizeRelative(relative);
+        while (path.Length > 0)
+        {
+            if (linkPaths.Contains(path)) return path;
+            int slash = path.LastIndexOf('/');
+            if (slash < 0) break;
+            path = path[..slash];
+        }
+        return null;
+    }
+
+    /// <summary>Find a reparse entry below the explicitly selected root without following it.</summary>
+    public static string? FindLink(string rootPath, string relative)
+    {
+        _ = CombineRoot(rootPath, relative);
+        var path = Path.GetFullPath(rootPath);
+        foreach (var part in NormalizeRelative(relative).Split('/', StringSplitOptions.RemoveEmptyEntries))
+        {
+            path = Path.Combine(path, part);
+            try
+            {
+                if (File.GetAttributes(path).HasFlag(FileAttributes.ReparsePoint)) return path;
+            }
+            catch (Exception ex) when (ex is FileNotFoundException or DirectoryNotFoundException)
+            {
+                return null;
+            }
+        }
+        return null;
+    }
+
     public static string NormalizeRelative(string relative)
     {
         var p = relative.Replace('\\', '/').TrimStart('/');

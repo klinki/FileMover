@@ -11,7 +11,7 @@ public static class Inventory
         int Unverified,
         string? SourceScanStatus,
         string? TargetScanStatus,
-        List<string> Samples);
+        List<string> Samples, int SkippedLinks = 0, int LinkConflicts = 0);
 
     public static DiffSummary Diff(string sourceDbPath, string sourceRootId,
         string targetDbPath, string targetRootId, string algo = "sha256", int samples = 20)
@@ -25,14 +25,22 @@ public static class Inventory
         if (sourceDb.GetRoot(sourceRootId) == null) throw new InvalidOperationException($"unknown source root '{sourceRootId}'");
         if (target.GetRoot(targetRootId) == null) throw new InvalidOperationException($"unknown target root '{targetRootId}'");
 
-        var sourceFiles = Matcher.LoadFromDb(sourceDb, algo, sourceRootId).ToDictionary(file => file.RelativePath);
-        var targetFiles = Matcher.LoadFromDb(target, algo, targetRootId).ToDictionary(file => file.RelativePath);
+        var sourceLinks = sourceDb.ListFiles(sourceRootId).Where(f => f.Status != FileStatus.Missing && f.EntryKind != EntryKind.File).ToList();
+        var targetLinks = target.ListFiles(targetRootId).Where(f => f.Status != FileStatus.Missing && f.EntryKind != EntryKind.File).ToList();
+        var comparer = sourceDb.GetRoot(sourceRootId)!.CaseSensitivity == "insensitive" && target.GetRoot(targetRootId)!.CaseSensitivity == "insensitive"
+            ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal;
+        var sourceLinkPaths = sourceLinks.Select(f => f.RelativePath).ToHashSet(comparer);
+        var targetLinkPaths = targetLinks.Select(f => f.RelativePath).ToHashSet(comparer);
+        var sourceFiles = Matcher.LoadFromDb(sourceDb, algo, sourceRootId).Where(f => Paths.FindRecordedLink(f.RelativePath, sourceLinkPaths) == null).ToDictionary(file => file.RelativePath);
+        var targetFiles = Matcher.LoadFromDb(target, algo, targetRootId).Where(f => Paths.FindRecordedLink(f.RelativePath, targetLinkPaths) == null).ToDictionary(file => file.RelativePath);
         int sourceOnly = 0, targetOnly = 0, changed = 0, identical = 0, unverified = 0;
+        int linkConflicts = 0;
         var sampleLines = new List<string>();
         void Sample(string line) { if (sampleLines.Count < samples) sampleLines.Add(line); }
 
         foreach (var (path, source) in sourceFiles)
         {
+            if (Paths.FindRecordedLink(path, targetLinkPaths) != null) { linkConflicts++; Sample($"type-conflict: {path} is blocked by a target link"); continue; }
             if (!targetFiles.TryGetValue(path, out var dest))
             {
                 sourceOnly++;
@@ -59,6 +67,7 @@ public static class Inventory
 
         foreach (var (path, _) in targetFiles)
         {
+            if (Paths.FindRecordedLink(path, sourceLinkPaths) != null) { linkConflicts++; Sample($"type-conflict: {path} is excluded by a source link"); continue; }
             if (!sourceFiles.ContainsKey(path))
             {
                 targetOnly++;
@@ -67,6 +76,7 @@ public static class Inventory
         }
 
         return new DiffSummary(sourceOnly, targetOnly, changed, identical, unverified,
-            sourceDb.LatestScanStatus(sourceRootId), target.LatestScanStatus(targetRootId), sampleLines);
+            sourceDb.LatestScanStatus(sourceRootId), target.LatestScanStatus(targetRootId), sampleLines,
+            sourceLinks.Count + targetLinks.Count, linkConflicts);
     }
 }

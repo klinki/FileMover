@@ -57,6 +57,10 @@ public sealed class BackupNormalizerDbContext(DbContextOptions<BackupNormalizerD
             entity.Property(x => x.LastSeenScanId).HasColumnName("LastSeenScanId");
             entity.Property(x => x.Status).HasColumnName("Status").HasDefaultValue(FileStatus.Ok);
             entity.Property(x => x.Error).HasColumnName("Error");
+            entity.Property(x => x.EntryKind).HasColumnName("EntryKind").HasDefaultValue(EntryKind.File).IsRequired();
+            entity.Property(x => x.LinkTarget).HasColumnName("LinkTarget");
+            entity.Property(x => x.TargetPath).HasColumnName("TargetPath");
+            entity.Property(x => x.LinkNote).HasColumnName("LinkNote");
             entity.HasAlternateKey(x => new { x.StorageRootId, x.RelativePath });
             entity.HasIndex(x => x.StorageRootId).HasDatabaseName("IX_FileEntry_Root");
             entity.HasIndex(x => x.Size).HasDatabaseName("IX_FileEntry_Size");
@@ -97,6 +101,7 @@ public sealed class BackupNormalizerDbContext(DbContextOptions<BackupNormalizerD
 
         modelBuilder.Entity<PlanOperationEntity>(entity =>
         {
+            entity.Property(x => x.SkipReason).HasColumnName("SkipReason");
             entity.ToTable("PlanOperation");
             entity.HasKey(x => x.Id);
             entity.Property(x => x.Id).HasColumnName("Id").ValueGeneratedOnAdd();

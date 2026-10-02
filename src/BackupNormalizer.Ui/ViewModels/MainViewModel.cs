@@ -18,8 +18,9 @@ public sealed partial class StagedOpItem : ObservableObject
     public string SizeText => Size == 0 ? "" : Size.ToString("N0");
     public string HashShort { get; }
     public string HashFull { get; }
+    public string? SkipReason { get; }
 
-    public StagedOpItem(string type, string source, string dest, long size, string? hash)
+    public StagedOpItem(string type, string source, string dest, long size, string? hash, string? skipReason = null)
     {
         Type = type;
         Source = source;
@@ -27,6 +28,7 @@ public sealed partial class StagedOpItem : ObservableObject
         Size = size;
         HashShort = hash is null ? "" : hash.Length > 12 ? hash[..12] + "…" : hash;
         HashFull = hash ?? "";
+        SkipReason = skipReason;
     }
 }
 
@@ -199,7 +201,7 @@ public sealed partial class MainViewModel : ViewModelBase
             if (_stagedCore.Any(s => s.Type == op.Type && s.SourceRel == op.SourceRel && (s.DestRel ?? "") == (op.DestRel ?? "")))
                 continue; // dedupe
             _stagedCore.Add(op);
-            Staged.Add(new StagedOpItem(op.Type, src, dst, op.ExpectedSize, op.ExpectedHash));
+            Staged.Add(new StagedOpItem(op.Type, src, dst, op.ExpectedSize, op.ExpectedHash, op.SkipReason));
             added++;
         }
         UpdateSummary();
@@ -224,7 +226,7 @@ public sealed partial class MainViewModel : ViewModelBase
         long bytes = _stagedCore.Where(o => o.Type == OpType.Copy).Sum(o => o.ExpectedSize);
         PlanSummary = _stagedCore.Count == 0
             ? "No staged operations."
-            : $"Staged: MKDIR {mkdir}  MOVE {move}  COPY {copy}  TRASH {trash}  | bytes to copy: {bytes:N0}";
+            : $"Staged: MKDIR {mkdir}  MOVE {move}  COPY {copy}  TRASH {trash}  SKIP_LINK {_stagedCore.Count(o => o.Type == OpType.SkipLink)}  | bytes to copy: {bytes:N0}";
     }
 
     [RelayCommand(CanExecute = nameof(CanStage))]

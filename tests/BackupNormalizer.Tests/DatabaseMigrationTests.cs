@@ -15,12 +15,12 @@ public sealed class DatabaseMigrationTests
         {
             using (var db = new Database(path))
             {
-                Assert.Equal(2, db.AppliedMigrations().Count);
+                Assert.Equal(3, db.AppliedMigrations().Count);
                 Assert.Empty(db.PendingMigrations());
             }
 
             using var reopened = new Database(path);
-            Assert.Equal(2, reopened.AppliedMigrations().Count);
+            Assert.Equal(3, reopened.AppliedMigrations().Count);
             Assert.Empty(reopened.PendingMigrations());
         }
         finally
@@ -44,7 +44,7 @@ public sealed class DatabaseMigrationTests
                 old.Database.ExecuteSqlRaw("INSERT INTO ExecutionLog (PlanOperationId, TimestampUtc, Level, Message) VALUES (42, 'before', 'INFO', 'preserved')");
             }
             using var upgraded = new Database(path);
-            Assert.Equal(2, upgraded.AppliedMigrations().Count);
+            Assert.Equal(3, upgraded.AppliedMigrations().Count);
             Assert.Empty(upgraded.PendingMigrations());
             var plan = upgraded.GetPlan("old")!;
             Assert.Equal(PlanStatus.Partial, plan.Status);

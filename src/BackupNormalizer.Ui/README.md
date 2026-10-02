@@ -22,9 +22,9 @@ scanner, see the repo README).
 2. Browse to the folders to compare, then select **Compare folders**. Comparison
    includes descendants and matches paths relative to the selected folders.
 3. The comparison column labels entries **Only left**, **Only right**,
-   **Different**, **Equal**, **Unverified**, or **File / folder conflict**. Colored
+   **Different**, **Equal**, **Unverified**, **Skipped link**, or **Type conflict**. Colored
    markers beside names show the same status. Parent folders reflect differences
-   below them. **Differences only** hides equal files and equal folder trees.
+   below them. **Differences only** hides equal files, equal folder trees, and skipped links.
 4. **Linked browsing** opens corresponding folders in both panels. A folder
    missing from the other inventory displays an empty listing there; the parent
    entry returns to the containing folder. Disable linked browsing to navigate
@@ -47,6 +47,14 @@ may still exist on the drive. Scan-error entries remain visible. Files marked
 missing by a rescan are excluded. The inventory schema stores files, so empty
 folders cannot appear in this view. This mode compares recorded snapshots and
 does not copy, delete, or synchronize files.
+
+Links show their kind in the size column. Hover over a name to see its target
+text, absolute immediate target path, and any metadata note. Linked folders
+cannot be opened. Links are excluded from content comparisons and scan-error
+counts; a regular entry opposite a link is a type conflict.
+
+Staging records excluded links and blocked paths as `SKIP_LINK` operations.
+Their reasons appear in the staged operations window and exported plans.
 
 ## Basic usage
 

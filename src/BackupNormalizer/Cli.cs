@@ -137,12 +137,12 @@ public static class Cli
             {
                 int rootErrors = RunRootErrors(r.Id, r.Id, out int rootScanned);
                 totalErrors += rootErrors;
-                Console.WriteLine($"scan {r.Id}: {rootScanned} files, {rootErrors} errors ({(rootErrors == 0 ? "complete" : "incomplete")})");
+                Console.WriteLine($"scan {r.Id}: {rootScanned} entries, {rootErrors} errors ({(rootErrors == 0 ? "complete" : "incomplete")})");
             }
             return totalErrors == 0 ? 0 : 3;
         }
         int errors = RunRootErrors(a[0], a[0], out int scanned);
-        Console.WriteLine($"scan {a[0]}: {scanned} files, {errors} errors ({(errors == 0 ? "complete" : "incomplete")})");
+        Console.WriteLine($"scan {a[0]}: {scanned} entries, {errors} errors ({(errors == 0 ? "complete" : "incomplete")})");
         return errors == 0 ? 0 : 3;
     }
 
@@ -163,7 +163,7 @@ public static class Cli
             string pct = _estimate > 0 ? $" ({Math.Min(99, p.Scanned * 100 / _estimate)}% of ~{_estimate:N0})" : "";
             double rate = p.Elapsed.TotalSeconds > 0 ? p.Scanned / p.Elapsed.TotalSeconds : 0;
             string dir = p.CurrentPath.Length > 40 ? "…" + p.CurrentPath[^39..] : p.CurrentPath;
-            string line = $"scan {_label}: {p.Scanned:N0} files{pct} | {rate:N0}/s | {p.Elapsed:mm\\:ss} | {dir}";
+            string line = $"scan {_label}: {p.Scanned:N0} entries{pct} | {rate:N0}/s | {p.Elapsed:mm\\:ss} | {dir}";
             try { Console.Write("\r" + line.PadRight(110)); } catch { }
         }
 
@@ -237,7 +237,8 @@ public static class Cli
             Console.WriteLine($"Plan {doc.PlanId} created {doc.CreatedUtc} estBytes={doc.EstimatedBytesCopied}");
             Console.WriteLine($"Source: {doc.SourceRoot} at {doc.SourcePath}");
             Console.WriteLine($"Target: {doc.TargetRoot} at {doc.TargetPath}");
-            foreach (var o in doc.Operations) Console.WriteLine($"  {o.Id:D4} {o.Type,-7} {o.SourceKind}:{o.SourceRoot}:{o.SourcePath} -> {o.DestinationRoot}:{o.DestinationPath} size={o.ExpectedSize}");
+            foreach (var o in doc.Operations) Console.WriteLine($"  {o.Id:D4} {o.Type,-7} {o.SourceKind}:{o.SourceRoot}:{o.SourcePath} -> {o.DestinationRoot}:{o.DestinationPath} size={o.ExpectedSize}" +
+                (o.SkipReason == null ? "" : $" reason={o.SkipReason}"));
             return 0;
         }
         if (a[0] == "export" && a.Length >= 2)
@@ -294,7 +295,7 @@ public static class Cli
     private static void PrintPlan(Planner.PlanResult r)
     {
         Console.WriteLine($"Plan {r.PlanId}");
-        Console.WriteLine($"KEEP {r.Keep}  MOVE {r.Move}  COPY {r.Copy}  TRASH {r.Trash}  MKDIR {r.Mkdir}");
+        Console.WriteLine($"KEEP {r.Keep}  MOVE {r.Move}  COPY {r.Copy}  TRASH {r.Trash}  MKDIR {r.Mkdir}  SKIP_LINK {r.SkippedLinks}");
         Console.WriteLine($"Bytes requiring actual copying: {r.BytesToCopy}");
         Console.WriteLine($"Bytes avoided through moves: {r.BytesAvoided}");
         Console.WriteLine("No files were modified.");
@@ -325,7 +326,7 @@ public static class Cli
             }
         }
         var sum = new Executor(d).Execute(a[0], sourcePath, targetPath, Has(a, "--resume"), Has(a, "--stop-on-error"));
-        Console.WriteLine($"execute {a[0]}: completed={sum.Completed} failed={sum.Failed} conflicts={sum.Conflicts}");
+        Console.WriteLine($"execute {a[0]}: completed={sum.Completed} skipped={sum.Skipped} failed={sum.Failed} conflicts={sum.Conflicts}");
         return sum.Failed == 0 && sum.Conflicts == 0 ? 0 : 3;
     }
 
@@ -347,14 +348,15 @@ public static class Cli
         if (plan == null) return Fail($"unknown plan '{a[0]}'");
         string sourcePath = Path.GetFullPath(sourcePathOverride ?? plan.ExecutionSourceRootPath ?? plan.SourceRootPath);
         string targetPath = Path.GetFullPath(targetPathOverride ?? plan.ExecutionTargetRootPath ?? plan.TargetRootPath);
-        int ok = 0, bad = 0;
+        int ok = 0, bad = 0, skipped = 0;
         var hasher = HasherFactory.Create(null);
         var operations = d.ListPlanOperations(a[0]);
-        if (operations.Any(operation => operation.SourceKind == SourceScope.Source) && Paths.RootsOverlap(sourcePath, targetPath))
+        if (operations.Any(operation => operation.SourceKind == SourceScope.Source && operation.Type != OpType.SkipLink) && Paths.RootsOverlap(sourcePath, targetPath))
             return Fail("source and target paths overlap; verification requires disjoint roots");
         foreach (var operation in operations)
         {
             string type = operation.Type;
+            if (type == OpType.SkipLink || operation.Status == OpStatus.Skipped) { skipped++; continue; }
             if (type is OpType.Keep or OpType.Verify or OpType.Move or OpType.Copy)
             {
                 string? dp = operation.DestPath;
@@ -362,6 +364,8 @@ public static class Cli
                 string abs;
                 try { abs = Paths.CombineRoot(targetPath, dp); }
                 catch (InvalidOperationException) { Console.WriteLine($"INVALID-PATH {dp}"); bad++; continue; }
+                if (Paths.FindLink(targetPath, dp) is { } link)
+                { Console.WriteLine($"SKIPPED {dp}: link {link}"); skipped++; continue; }
                 if (!File.Exists(abs)) { Console.WriteLine($"MISSING {plan.TargetRootId}:{dp}"); bad++; continue; }
                 long sz = operation.ExpectedSize;
                 string? eh = operation.ExpectedHash;
@@ -372,7 +376,7 @@ public static class Cli
                 ok++;
             }
         }
-        Console.WriteLine($"verify {a[0]}: ok={ok} bad={bad}");
+        Console.WriteLine($"verify {a[0]}: ok={ok} bad={bad} skipped={skipped}");
         return bad == 0 ? 0 : 3;
     }
 
@@ -419,6 +423,7 @@ public static class Cli
             return Fail("diff requires --source-db S.db --source-root R --target-db T.db --target-root R");
         var s = Inventory.Diff(sourceDb, sourceRoot, targetDb, targetRoot);
         Console.WriteLine($"source-only: {s.SourceOnly}  target-only: {s.TargetOnly}  changed: {s.Changed}  identical: {s.Identical}  unverified: {s.Unverified}");
+        Console.WriteLine($"skipped links: {s.SkippedLinks}  link conflicts: {s.LinkConflicts}");
         Console.WriteLine($"scan status: source={s.SourceScanStatus ?? "never scanned"} target={s.TargetScanStatus ?? "never scanned"}");
         foreach (var l in s.Samples) Console.WriteLine("  " + l);
         return 0;

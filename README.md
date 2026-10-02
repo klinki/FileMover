@@ -106,6 +106,10 @@ The executor checks sizes and full hashes before moving or trashing files. Copie
 
 EF Core applies migrations when it opens a writable database. The current initial migration creates `StorageRoot`, `Scan`, `FileEntry`, `FileHash`, `Plan`, `PlanOperation`, and `ExecutionLog`. A complete rescan marks files that disappeared as missing. An incomplete scan never removes stale entries and cannot be used for planning.
 
+Scans retain file symlinks, directory symlinks, and junctions with their original target text and absolute immediate target path. They do not traverse linked directories or hash linked contents. Broken targets and unavailable link metadata produce notes rather than scan errors. Read-only inventories from before this migration remain browsable; open the database writable and rescan to populate link metadata and replace an older incomplete scan result.
+
+Links and paths blocked by links appear as `SKIP_LINK` operations with a reason in exported plans. Execution reports them as skipped and continues with other files. It also checks for links introduced after scanning, including linked parent directories. Copying external targets and recreating links are deferred.
+
 This is the first release schema. Databases created by the earlier pre-release schema with root roles must be recreated. The application detects them and reports an error without modifying them. Later EF migrations will apply to current-schema databases.
 
 ## Desktop planner

@@ -33,10 +33,13 @@ public sealed class Executor
                 SourceScope.Target when rootId == plan.TargetRootId => targetBasePath,
                 _ => throw new InvalidOperationException($"root '{rootId}' is not part of plan '{planId}' as {sourceKind}")
             };
-            return Paths.CombineRoot(basePath, rel);
+            var full = Paths.CombineRoot(basePath, rel);
+            if (Paths.FindLink(basePath, rel) is { } link)
+                throw new SkipLinkException($"Path '{full}' is excluded because '{link}' is a link or reparse point.");
+            return full;
         }
         string TrashDirFor(string rootId) => rootId == plan.TargetRootId
-            ? Path.Combine(targetBasePath, _trashName, planId)
+            ? ResolvePath(SourceScope.Target, rootId, Paths.NormalizeRelative(Path.Combine(_trashName, planId)))
             : throw new InvalidOperationException($"trash root '{rootId}' is not the plan target");
 
         // Invariant 1 at execute time (not just plan time): a TRASH must leave
@@ -72,9 +75,10 @@ public sealed class Executor
         }
         var ops = _db.ListPlanOperations(planId);
         if (ops.Count == 0) throw new InvalidOperationException($"unknown or empty plan '{planId}'");
-        if (ops.Any(op => op.SourceKind == SourceScope.Source) && Paths.RootsOverlap(sourceBasePath, targetBasePath))
+        bool readsSource = ops.Any(op => op.SourceKind == SourceScope.Source && op.Type != OpType.SkipLink);
+        if (readsSource && Paths.RootsOverlap(sourceBasePath, targetBasePath))
             throw new InvalidOperationException("source and target paths overlap; execution requires disjoint roots");
-        _db.BindPlanExecution(planId, ops.Any(op => op.SourceKind == SourceScope.Source) ? sourceBasePath : null, targetBasePath);
+        _db.BindPlanExecution(planId, readsSource ? sourceBasePath : null, targetBasePath);
         int done = 0, failed = 0, skipped = 0, conflicts = 0;
         int pos = 0, total = ops.Count;
         foreach (var op in ops)
@@ -82,6 +86,12 @@ public sealed class Executor
             pos++;
             string tag = $"[{pos}/{total}]";
             if (op.Status == OpStatus.Completed) { done++; continue; }
+            if (op.Type == OpType.SkipLink)
+            {
+                Skip(op.Id, op.SkipReason ?? "Link excluded from content processing.");
+                skipped++;
+                continue;
+            }
             if (op.Type is OpType.Mkdir)
             {
                 try
@@ -93,12 +103,18 @@ public sealed class Executor
                     Journal(op.Id, "INFO", $"{tag} MKDIR {op.DestRoot}:{op.DestPath}");
                     done++;
                 }
+                catch (SkipLinkException ex) { Skip(op.Id, ex.Message); skipped++; }
                 catch (Exception ex) { Mark(op.Id, OpStatus.Failed, ex.Message); Journal(op.Id, "ERROR", $"{tag} {ex.Message}"); failed++; if (stopOnError) break; }
                 continue;
             }
             try
             {
                 SetStarted(op.Id);
+                // Check all paths before any ordinary operation reads or changes a file.
+                if (op.SourceRoot != null && op.SourcePath != null)
+                    _ = ResolvePath(op.SourceKind!, op.SourceRoot, op.SourcePath);
+                if (op.DestRoot != null && op.DestPath != null)
+                    _ = ResolvePath(SourceScope.Target, op.DestRoot, op.DestPath);
                 switch (op.Type)
                 {
                     case OpType.Keep: DoVerify(op, ResolvePath); break;
@@ -111,6 +127,11 @@ public sealed class Executor
                 Mark(op.Id, OpStatus.Completed);
                 Journal(op.Id, "INFO", $"{tag} {op.Type} ok {op.SourceRoot}:{op.SourcePath} -> {op.DestRoot}:{op.DestPath} size={op.ExpectedSize} hash={op.ExpectedHash}");
                 done++;
+            }
+            catch (SkipLinkException ex)
+            {
+                Skip(op.Id, ex.Message);
+                skipped++;
             }
             catch (ConflictException ex)
             {
@@ -133,6 +154,13 @@ public sealed class Executor
     }
 
     private sealed class ConflictException : Exception { public ConflictException(string m) : base(m) { } }
+    private sealed class SkipLinkException(string message) : Exception(message);
+
+    private void Skip(long opId, string reason)
+    {
+        _db.MarkOperationSkipped(opId, reason);
+        Journal(opId, "INFO", $"SKIPPED: {reason}");
+    }
 
     private void SetStarted(long opId) => _db.MarkOperationStarted(opId, Database.UtcNow());
 
@@ -209,7 +237,8 @@ public sealed class Executor
         if (op.SourceKind is not (SourceScope.Source or SourceScope.Target)) throw new ConflictException("COPY has no valid source scope");
         string src;
         try { src = resolve(op.SourceKind, op.SourceRoot!, op.SourcePath!); }
-        catch { throw new ConflictException($"copy source '{op.SourceKind}:{op.SourceRoot}:{op.SourcePath}' is not available"); }
+        catch (Exception ex) when (ex is not SkipLinkException)
+        { throw new ConflictException($"copy source '{op.SourceKind}:{op.SourceRoot}:{op.SourcePath}' is not available"); }
         var dst = resolve(SourceScope.Target, op.DestRoot!, op.DestPath!);
         if (!File.Exists(src)) throw new ConflictException($"copy source missing: {src} (stale plan fails safely, §32.8)");
         var sfi = new FileInfo(src);
@@ -229,6 +258,8 @@ public sealed class Executor
         // Crash-safe: copy -> tmp -> flush -> verify -> rename (§21)
         string tmp = Path.Combine(Path.GetDirectoryName(dst)!,
             $".{Path.GetFileName(dst)}.backup-normalizer.{op.Id}.tmp");
+        if (Paths.FindLink(Path.GetDirectoryName(tmp)!, Path.GetFileName(tmp)) is { } temporaryLink)
+            throw new SkipLinkException($"Copy temporary path is a link: {temporaryLink}");
         const int Buf = 4 * 1024 * 1024;
         using (var ins = new FileStream(src, FileMode.Open, FileAccess.Read, FileShare.Read, Buf, FileOptions.SequentialScan))
         using (var outs = new FileStream(tmp, FileMode.Create, FileAccess.Write, FileShare.None, Buf, FileOptions.SequentialScan))
@@ -274,6 +305,8 @@ public sealed class Executor
         string trashDir = trashDirFor(op.SourceRoot!);
         string rel = op.SourcePath!;
         string dst = Path.Combine(trashDir, rel.Replace('/', Path.DirectorySeparatorChar));
+        if (Paths.FindLink(trashDir, rel) is { } trashLink)
+            throw new SkipLinkException($"Trash path is blocked by a link: {trashLink}");
         Directory.CreateDirectory(Path.GetDirectoryName(dst)!);
         if (File.Exists(dst)) dst += "." + Guid.NewGuid().ToString("N");
         try { File.Move(src, dst); }

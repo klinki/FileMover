@@ -78,7 +78,7 @@ public sealed class Scanner
                 mft = volume;
                 string volumeRoot = Path.GetPathRoot(Path.GetFullPath(root.Path))!;
                 entries = volume!.EnumerateFiles(volumeRoot, root.Path)
-                    .Select(f => new FsEntry(f.FullPath, false, f.Size, f.ModifiedUtc, f.CreatedUtc,
+                    .Select(f => new FsEntry(f.FullPath, f.IsDirectory, f.Size, f.ModifiedUtc, f.CreatedUtc,
                         HasMetadata: true, IsReparse: f.IsReparse, Error: null));
             }
             else
@@ -101,14 +101,20 @@ public sealed class Scanner
                     string rel;
                     rel = Paths.GetRelative(root.Path, file);
                     rel = Paths.NormalizeRelative(rel);
-                    bool isReparse;
+                    // Inspect the link before any length/content access, including dangling links.
+                    if (scanEntry.IsReparse)
+                    {
+                        _db.UpsertFileEntry(ReadLink(rootId, rel, scanId, scanEntry));
+                        scanned++;
+                        if (scanned % 64 == 0) Report();
+                        continue;
+                    }
                     long sizeBefore;
                     string mBefore;
-                    string cBefore;
+                    string? cBefore;
                     string name;
                     if (scanEntry.HasMetadata)
                     {
-                        isReparse = scanEntry.IsReparse;
                         sizeBefore = scanEntry.Size;
                         mBefore = scanEntry.ModifiedUtc.ToString("o");
                         cBefore = scanEntry.CreatedUtc.ToString("o");
@@ -117,19 +123,19 @@ public sealed class Scanner
                     else
                     {
                         var fi = new FileInfo(file);
-                        // ReparsePoint already filtered, but double-check
-                        isReparse = fi.Attributes.HasFlag(FileAttributes.ReparsePoint);
+                        // A regular entry may have become a link since enumeration.
+                        if (fi.Attributes.HasFlag(FileAttributes.ReparsePoint))
+                        {
+                            _db.UpsertFileEntry(ReadLink(rootId, rel, scanId,
+                                scanEntry with { IsDirectory = fi.Attributes.HasFlag(FileAttributes.Directory) }));
+                            scanned++;
+                            if (scanned % 64 == 0) Report();
+                            continue;
+                        }
                         sizeBefore = fi.Length;
                         mBefore = fi.LastWriteTimeUtc.ToString("o");
                         cBefore = SafeTime(fi.CreationTimeUtc);
                         name = fi.Name;
-                    }
-                    if (isReparse)
-                    {
-                        _db.UpsertFileEntry(new FileEntryRow(0, rootId, rel, name, 0,
-                            mBefore, cBefore, null, scanId, FileStatus.UnsupportedEntry, "symlink"));
-                        errors++;
-                        continue;
                     }
                     // incremental reuse check (§8): same root+path+size+mtime => reuse hash
                     var prev = _db.GetFileEntry(rootId, rel);
@@ -188,7 +194,47 @@ public sealed class Scanner
         catch { }
     }
 
-    private static IEnumerable<FsEntry> EnumerateRecursive(string root)
+    private static FileEntryRow ReadLink(string rootId, string rel, long scanId, FsEntry entry)
+    {
+        FileSystemInfo info = entry.IsDirectory ? new DirectoryInfo(entry.Path) : new FileInfo(entry.Path);
+        string? target = null, targetPath = null, note = null, created = null;
+        string modified = entry.HasMetadata ? entry.ModifiedUtc.ToString("o") : Database.UtcNow();
+        string kind = EntryKind.ReparsePoint;
+        try
+        {
+            target = info.LinkTarget;
+            if (target != null)
+            {
+                kind = entry.IsDirectory ? EntryKind.DirectoryLink : EntryKind.FileLink;
+                var immediate = info.ResolveLinkTarget(false);
+                targetPath = immediate?.FullName;
+                if (immediate != null && !immediate.Exists) note = "Target is missing or unavailable.";
+            }
+            else note = "Reparse target is unavailable or unsupported.";
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException
+            or System.Security.SecurityException)
+        {
+            note = ex.Message;
+        }
+        try
+        {
+            if (entry.HasMetadata) created = entry.CreatedUtc.ToString("o");
+            else
+            {
+                if (info.LastWriteTimeUtc.Year > 1601) modified = SafeTime(info.LastWriteTimeUtc);
+                if (info.CreationTimeUtc.Year > 1601) created = SafeTime(info.CreationTimeUtc);
+            }
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or System.Security.SecurityException)
+        {
+            note = note == null ? ex.Message : note + " " + ex.Message;
+        }
+        return new FileEntryRow(0, rootId, rel, Path.GetFileName(entry.Path), 0, modified, created,
+            null, scanId, FileStatus.Ok, null, kind, target, targetPath, note);
+    }
+
+    internal static IEnumerable<FsEntry> EnumerateRecursive(string root)
     {
         var stack = new Stack<string>();
         stack.Push(root);
@@ -215,7 +261,7 @@ public sealed class Scanner
                 bool isReparse = attr.Value.HasFlag(FileAttributes.ReparsePoint);
                 if (isReparse)
                 {
-                    if (!isDir) yield return new FsEntry(path, false, 0, default, default, false, true, null);
+                    yield return new FsEntry(path, isDir, 0, default, default, false, true, null);
                     continue;
                 }
                 if (isDir) stack.Push(path);
@@ -241,10 +287,7 @@ public sealed class Scanner
                 catch { continue; }
                 if (attr.HasFlag(FileAttributes.ReparsePoint))
                 {
-                    // §7.3: do not follow; if it's a file-link yield it so caller records UnsupportedEntry,
-                    // if dir-link skip recursion.
-                    if (!attr.HasFlag(FileAttributes.Directory))
-                        yield return e;
+                    // Content enumeration omits both file and directory links.
                     continue;
                 }
                 if (attr.HasFlag(FileAttributes.Directory))
@@ -293,22 +336,10 @@ public sealed class Scanner
         Report("");
         Parallel.ForEach(files, opts, f =>
         {
-            if (f.Status != FileStatus.Ok)
+            if (f.Status != FileStatus.Ok || f.EntryKind != EntryKind.File)
             {
                 Complete(f.RelativePath);
                 return;
-            }
-            lock (lockObj)
-            {
-                if (!all)
-                {
-                    var existing = _db.GetHash(f.Id, _algo);
-                    if (existing != null && existing.State == HashState.Ok && existing.SizeAtHash == f.Size && existing.ModifiedUtcAtHash == f.ModifiedUtc)
-                    {
-                        Complete(f.RelativePath);
-                        return;
-                    }
-                }
             }
             if (!roots.TryGetValue(f.StorageRootId, out var root)) { Complete(f.RelativePath); return; }
             var abs = Paths.CombineRoot(root.Path, f.RelativePath);
@@ -316,6 +347,24 @@ public sealed class Scanner
             long lenBefore;
             try
             {
+                if (Paths.FindLink(root.Path, f.RelativePath) != null)
+                {
+                    lock (lockObj) _db.MarkFileHashesStale(f.Id);
+                    Complete(abs);
+                    return;
+                }
+                lock (lockObj)
+                {
+                    if (!all)
+                    {
+                        var existing = _db.GetHash(f.Id, _algo);
+                        if (existing != null && existing.State == HashState.Ok && existing.SizeAtHash == f.Size && existing.ModifiedUtcAtHash == f.ModifiedUtc)
+                        {
+                            Complete(f.RelativePath);
+                            return;
+                        }
+                    }
+                }
                 var fi = new FileInfo(abs);
                 lenBefore = fi.Length; mBefore = fi.LastWriteTimeUtc.ToString("o");
             }
@@ -333,6 +382,12 @@ public sealed class Scanner
             catch { Complete(abs); return; }
             try
             {
+                if (Paths.FindLink(root.Path, f.RelativePath) != null)
+                {
+                    lock (lockObj) _db.MarkFileHashesStale(f.Id);
+                    Complete(abs);
+                    return;
+                }
                 var fi2 = new FileInfo(abs);
                 string mAfter = fi2.LastWriteTimeUtc.ToString("o");
                 long lenAfter = fi2.Length;

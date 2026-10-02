@@ -35,6 +35,7 @@
           </DataGridTemplateColumn.CellTemplate>
         </DataGridTemplateColumn>
         <DataGridTextColumn Header="Size" Binding="{Binding SizeText}" Width="90" />
+        <DataGridTextColumn Header="Skip reason" Binding="{Binding SkipReason}" Width="200" />
         <DataGridTemplateColumn Header="Hash" Width="200" CanUserSort="False">
           <DataGridTemplateColumn.CellTemplate>
             <DataTemplate x:DataType="vm:StagedOpItem">

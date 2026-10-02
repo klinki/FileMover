@@ -3,13 +3,13 @@ using System.Text.Json;
 namespace BackupNormalizer;
 
 public sealed record PlanOp(string Type, string? SourceKind, string? SourceRoot, string? SourcePath,
-    string? DestRoot, string? DestPath, long ExpectedSize, string? ExpectedHash);
+    string? DestRoot, string? DestPath, long ExpectedSize, string? ExpectedHash, string? SkipReason = null);
 public sealed record PlanDoc(string PlanId, string CreatedUtc, long EstimatedBytesCopied,
     string? SourceDatabasePath, string? SourceRoot, string? SourcePath,
     string TargetRoot, string TargetPath, List<PlanOpDoc> Operations);
 public sealed record PlanOpDoc(int Id, string Type, string? SourceKind, string? SourceRoot,
     string? SourcePath, string? DestinationRoot, string? DestinationPath,
-    long ExpectedSize, string? ExpectedHash);
+    long ExpectedSize, string? ExpectedHash, string? SkipReason = null);
 
 /// <summary>Builds a target-root plan from one selected source root.</summary>
 public sealed class Planner
@@ -24,7 +24,7 @@ public sealed class Planner
     }
 
     public sealed record PlanResult(string PlanId, int Keep, int Move, int Copy, int Trash, int Mkdir,
-        long BytesToCopy, long BytesAvoided);
+        long BytesToCopy, long BytesAvoided, int SkippedLinks = 0);
 
     public PlanResult PlanFromRoots(Database sourceDb, string sourceRootId, string targetRootId, string planId)
     {
@@ -42,10 +42,21 @@ public sealed class Planner
         if (_targetDb.PlanExists(planId))
             throw new InvalidOperationException($"plan '{planId}' already exists (plans are immutable)");
 
+        var sourceLinks = sourceDb.ListFiles(sourceRootId)
+            .Where(f => f.Status != FileStatus.Missing && f.EntryKind != EntryKind.File).ToList();
+        var targetLinks = _targetDb.ListFiles(targetRootId)
+            .Where(f => f.Status != FileStatus.Missing && f.EntryKind != EntryKind.File).ToList();
+        var sourceComparer = sourceRoot.CaseSensitivity == "insensitive" ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal;
+        var targetComparer = targetRoot.CaseSensitivity == "insensitive" ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal;
+        var sourceLinkPaths = sourceLinks.Select(f => f.RelativePath).ToHashSet(sourceComparer);
+        var preservedTargetPaths = sourceLinks.Select(f => f.RelativePath).ToHashSet(targetComparer);
+        var targetLinkPaths = targetLinks.Select(f => f.RelativePath).ToHashSet(targetComparer);
         var sourceFiles = Matcher.LoadFromDb(sourceDb, _algo, sourceRootId)
             .OrderBy(file => file.RelativePath, StringComparer.Ordinal)
             .ToList();
         var targetFiles = Matcher.LoadFromDb(_targetDb, _algo, targetRootId)
+            .Where(f => Paths.FindRecordedLink(f.RelativePath, preservedTargetPaths) == null
+                && Paths.FindRecordedLink(f.RelativePath, targetLinkPaths) == null)
             .OrderBy(file => file.RelativePath, StringComparer.Ordinal)
             .ToList();
         var desired = sourceFiles.ToDictionary(file => file.RelativePath, StringComparer.Ordinal);
@@ -59,6 +70,12 @@ public sealed class Planner
         var mkdirs = new HashSet<string>(StringComparer.Ordinal);
         long bytesToCopy = 0, bytesAvoided = 0;
         int keep = 0, move = 0, copy = 0, trash = 0, mkdir = 0;
+        foreach (var link in sourceLinks)
+            ops.Add(new PlanOp(OpType.SkipLink, SourceScope.Source, sourceRootId, link.RelativePath,
+                targetRootId, link.RelativePath, 0, null, $"Source link '{link.RelativePath}' and its target counterpart are excluded."));
+        foreach (var link in targetLinks)
+            ops.Add(new PlanOp(OpType.SkipLink, SourceScope.Target, targetRootId, link.RelativePath,
+                targetRootId, link.RelativePath, 0, null, $"Target link '{link.RelativePath}' is preserved."));
 
         void EnsureMkdir(string rel)
         {
@@ -80,6 +97,14 @@ public sealed class Planner
 
         foreach (var want in sourceFiles)
         {
+            var blocking = Paths.FindRecordedLink(want.RelativePath, targetLinkPaths)
+                ?? Paths.FindRecordedLink(want.RelativePath, sourceLinkPaths);
+            if (blocking != null)
+            {
+                ops.Add(new PlanOp(OpType.SkipLink, SourceScope.Target, targetRootId, blocking,
+                    targetRootId, want.RelativePath, 0, null, $"Path '{want.RelativePath}' is blocked by link '{blocking}'."));
+                continue;
+            }
             if (want.Hash == null)
                 throw new InvalidOperationException($"source file '{want.RelativePath}' is not fully hashed; hash the source root before planning");
 
@@ -167,8 +192,9 @@ public sealed class Planner
             PlanStatus.Planned, bytesToCopy,
             ops.OrderBy(OperationOrder).Select((op, index) => new Database.PlanOperationSeed(
                 index + 1, op.Type, op.SourceKind, op.SourceRoot, op.SourcePath,
-                op.DestRoot, op.DestPath, op.ExpectedSize, op.ExpectedHash)));
-        return new PlanResult(planId, keep, move, copy, trash, mkdir, bytesToCopy, bytesAvoided);
+                op.DestRoot, op.DestPath, op.ExpectedSize, op.ExpectedHash, op.SkipReason)));
+        return new PlanResult(planId, keep, move, copy, trash, mkdir, bytesToCopy, bytesAvoided,
+            ops.Count(op => op.Type == OpType.SkipLink));
     }
 
     private static int OperationOrder(PlanOp op) => op.Type switch
@@ -190,7 +216,7 @@ public sealed class Planner
             .Select(operation => new PlanOpDoc(operation.Sequence, operation.Type,
                 operation.SourceKind, operation.SourceRoot, operation.SourcePath,
                 operation.DestRoot, operation.DestPath,
-                operation.ExpectedSize, operation.ExpectedHash))
+                operation.ExpectedSize, operation.ExpectedHash, operation.SkipReason))
             .ToList();
         return new PlanDoc(planId, plan.CreatedUtc, plan.EstimatedBytesCopied,
             plan.SourceDatabasePath, plan.SourceRootId, plan.SourceRootPath,

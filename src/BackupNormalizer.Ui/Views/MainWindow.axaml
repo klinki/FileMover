@@ -99,7 +99,7 @@
                 Classes.different="{Binding IsDifferent}" Classes.unverified="{Binding IsUnverified}"
                 Classes.equal="{Binding IsEqual}" Margin="0,3,0,3" />
         <TextBlock Grid.Column="1" Text="{Binding BaseName}" Classes.marked="{Binding IsMarked}"
-                   Margin="5,0,0,0" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Name}" VerticalAlignment="Center" />
+                   Margin="5,0,0,0" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Tooltip}" VerticalAlignment="Center" />
       </Grid>
     </DataTemplate>
     <DataTemplate x:Key="ExtCell" x:DataType="vm:FileEntryItem">

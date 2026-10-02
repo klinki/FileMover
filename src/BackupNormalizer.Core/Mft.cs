@@ -14,7 +14,7 @@ namespace BackupNormalizer;
 public static class NtfsMftEnumerator
 {
     public sealed record MftFile(ulong RecordNumber, string FullPath, string Name, ulong ParentRecord,
-        long Size, DateTime ModifiedUtc, DateTime CreatedUtc, bool IsReparse);
+        long Size, DateTime ModifiedUtc, DateTime CreatedUtc, bool IsReparse, bool IsDirectory = false);
 
     /// <summary>Parsed $FILE_NAME view of one MFT record. Pure function, unit-tested.</summary>
     public sealed record ParsedFileRecord(
@@ -158,44 +158,9 @@ public static class NtfsMftEnumerator
 
         public IEnumerable<MftFile> EnumerateFiles(string volumeRoot, string requestedRoot)
         {
-            // Memory strategy: the volume is read twice. Pass 1 keeps DIRECTORY
-            // records only; pass 2 resolves each file against that dir map and
-            // emits it immediately. Peak memory scales with directory count
-            // (typically 1-5% of entries), not file count. A live volume may
-            // change between passes; re-added dirs make this converge instead
-            // of failing, and per-file races resolve the same way as a
-            // recursive scan (size/mtime mismatch marks hashes stale later).
-            var dirs = new Dictionary<ulong, (string Name, ulong Parent)>();
             int skipped = 0;
-            foreach (var (frn, parsed) in ReadRecords())
-            {
-                if (parsed == null) { skipped++; continue; }
-                if (parsed.IsDirectory) dirs[frn] = (parsed.Name, parsed.ParentRecord);
-            }
-            string prefix = requestedRoot.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)
-                + Path.DirectorySeparatorChar;
-            foreach (var (frn, parsed) in ReadRecords())
-            {
-                if (parsed == null) { skipped++; continue; }
-                if (frn < MftReservedCount) continue;
-                if (parsed.IsDirectory)
-                {
-                    // INVARIANT: the lookup map holds directory records only.
-                    // Files resolve through it but are never stored in it;
-                    // see TryResolvePath. Do not add file records here.
-                    dirs[frn] = (parsed.Name, parsed.ParentRecord);
-                    continue;
-                }
-                if (!TryResolvePath(dirs, parsed.Name, parsed.ParentRecord, volumeRoot, out string? full) || full == null)
-                {
-                    throw new IOException($"Cannot resolve the path of MFT record {frn} ('{parsed.Name}').");
-                }
-                if (!full.StartsWith(prefix, OperatingSystem.IsWindows()
-                    ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal))
-                    continue;
-                yield return new MftFile(frn, full, parsed.Name, parsed.ParentRecord,
-                    parsed.Size, parsed.ModifiedUtc, parsed.CreatedUtc, parsed.IsReparse);
-            }
+            foreach (var entry in EnumerateEntries(volumeRoot, requestedRoot, ReadRecords, () => skipped++))
+                yield return entry;
             SkippedRecords = skipped;
         }
 
@@ -266,6 +231,52 @@ public static class NtfsMftEnumerator
             yield return record;
             if (record.Frn == 0) yield break;
             requested = record.Frn - 1;
+        }
+    }
+
+    // Two passes retain only directory ancestry and stream leaf entries. Keeping
+    // this independent of volume I/O also permits deterministic parity tests.
+    internal static IEnumerable<MftFile> EnumerateEntries(string volumeRoot, string requestedRoot,
+        Func<IEnumerable<(ulong Frn, ParsedFileRecord? Parsed)>> readRecords, Action? onSkipped = null)
+    {
+        var dirs = new Dictionary<ulong, (string Name, ulong Parent)>();
+        var linkedDirs = new HashSet<ulong>();
+        foreach (var (frn, parsed) in readRecords())
+        {
+            if (parsed == null) { onSkipped?.Invoke(); continue; }
+            if (!parsed.IsDirectory) continue;
+            dirs[frn] = (parsed.Name, parsed.ParentRecord);
+            if (parsed.IsReparse) linkedDirs.Add(frn);
+        }
+        var prefix = requestedRoot.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)
+            + Path.DirectorySeparatorChar;
+        foreach (var (frn, parsed) in readRecords())
+        {
+            if (parsed == null) { onSkipped?.Invoke(); continue; }
+            if (frn < MftReservedCount) continue;
+            if (parsed.IsDirectory)
+            {
+                dirs[frn] = (parsed.Name, parsed.ParentRecord);
+                if (parsed.IsReparse) linkedDirs.Add(frn);
+                else linkedDirs.Remove(frn);
+                if (!parsed.IsReparse) continue;
+            }
+            ulong ancestor = parsed.ParentRecord;
+            int depth = 0;
+            bool underLink = false;
+            while (ancestor != VolumeRootRecord && dirs.TryGetValue(ancestor, out var parent))
+            {
+                if (linkedDirs.Contains(ancestor)) { underLink = true; break; }
+                if (++depth > 512) throw new IOException("Cycle in MFT directory ancestry.");
+                ancestor = parent.Parent;
+            }
+            if (underLink) continue;
+            if (!TryResolvePath(dirs, parsed.Name, parsed.ParentRecord, volumeRoot, out string? full) || full == null)
+                throw new IOException($"Cannot resolve the path of MFT record {frn} ('{parsed.Name}').");
+            if (!full.StartsWith(prefix, OperatingSystem.IsWindows()
+                ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal)) continue;
+            yield return new MftFile(frn, full, parsed.Name, parsed.ParentRecord,
+                parsed.Size, parsed.ModifiedUtc, parsed.CreatedUtc, parsed.IsReparse, parsed.IsDirectory);
         }
     }
 

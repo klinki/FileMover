@@ -10,7 +10,16 @@ namespace BackupNormalizer;
 /// </summary>
 public static class PlanStaging
 {
-    public sealed record StagedOp(string Type, string SourceRel, string? DestRel, long ExpectedSize, string? ExpectedHash);
+    public sealed record StagedOp(string Type, string SourceRel, string? DestRel, long ExpectedSize, string? ExpectedHash,
+        string? SkipReason = null);
+
+    private static StagedOp? LinkSkip(string basePath, string sourceRel, string? destRel)
+    {
+        var link = sourceRel.Length == 0 ? null : Paths.FindLink(basePath, sourceRel);
+        link ??= destRel == null ? null : Paths.FindLink(basePath, destRel);
+        return link == null ? null : new StagedOp(OpType.SkipLink, sourceRel, destRel, 0, null,
+            $"Operation excluded because '{link}' is a link or reparse point.");
+    }
 
     private static void EnsureUnderBase(string basePath, string absPath)
     {
@@ -33,14 +42,15 @@ public static class PlanStaging
     {
         if (File.Exists(absPath)) { yield return absPath; yield break; }
         if (!Directory.Exists(absPath)) throw new DirectoryNotFoundException($"path not found: {absPath}");
-        foreach (var f in Scanner.EnumerateFilesSafe(absPath))
-            yield return f;
+        foreach (var entry in Scanner.EnumerateRecursive(absPath))
+            if (entry.Error == null) yield return entry.Path;
     }
 
     public static List<StagedOp> StageMkdir(string basePath, string absNewDir)
     {
         EnsureUnderBase(basePath, absNewDir);
         string rel = Paths.NormalizeRelative(Paths.GetRelative(basePath, absNewDir));
+        if (LinkSkip(basePath, "", rel) is { } skip) return [skip];
         return [new StagedOp(OpType.Mkdir, "", rel, 0, null)];
     }
 
@@ -48,10 +58,13 @@ public static class PlanStaging
     {
         EnsureUnderBase(basePath, absTarget);
         var ops = new List<StagedOp>();
+        string targetRel = Paths.GetRelative(basePath, absTarget);
+        if (LinkSkip(basePath, targetRel, null) is { } initialSkip) return [initialSkip];
         foreach (var f in FilesUnder(absTarget))
         {
-            var (size, hash) = IdentityOf(f);
             string rel = Paths.NormalizeRelative(Paths.GetRelative(basePath, f));
+            if (LinkSkip(basePath, rel, null) is { } skip) { ops.Add(skip); continue; }
+            var (size, hash) = IdentityOf(f);
             ops.Add(new StagedOp(OpType.Trash, rel, null, size, hash));
         }
         return ops;
@@ -72,6 +85,9 @@ public static class PlanStaging
         EnsureUnderBase(basePath, absSource);
         EnsureUnderBase(basePath, absDestDir);
         var ops = new List<StagedOp>();
+        string sourceRel = Paths.GetRelative(basePath, absSource);
+        string destDirRel = Paths.PathEquals(basePath, absDestDir) ? "" : Paths.GetRelative(basePath, absDestDir);
+        if (LinkSkip(basePath, sourceRel, destDirRel) is { } initialSkip) return [initialSkip];
         var mkdirs = new HashSet<string>();
         void EnsureMkdirRel(string dirRel)
         {
@@ -84,6 +100,7 @@ public static class PlanStaging
             EnsureUnderBase(basePath, destAbs);
             string srcRel = Paths.NormalizeRelative(Paths.GetRelative(basePath, absSource));
             string dstRel = Paths.NormalizeRelative(Paths.GetRelative(basePath, destAbs));
+            if (LinkSkip(basePath, srcRel, dstRel) is { } skip) return [skip];
             string? dir = dstRel.Contains('/') ? dstRel[..dstRel.LastIndexOf('/')] : null;
             if (dir != null) EnsureMkdirRel(dir);
             var (size, hash) = IdentityOf(absSource);
@@ -99,6 +116,7 @@ public static class PlanStaging
             EnsureUnderBase(basePath, destAbs);
             string srcRel = Paths.NormalizeRelative(Paths.GetRelative(basePath, f));
             string dstRel = Paths.NormalizeRelative(Paths.GetRelative(basePath, destAbs));
+            if (LinkSkip(basePath, srcRel, dstRel) is { } skip) { ops.Add(skip); continue; }
             string? dir = dstRel.Contains('/') ? dstRel[..dstRel.LastIndexOf('/')] : null;
             if (dir != null)
             {
@@ -133,7 +151,7 @@ public static class PlanStaging
             };
             if (s.Type == OpType.Copy) bytesToCopy += s.ExpectedSize;
             ops.Add(new PlanOpDoc(seq++, s.Type, srcRoot == null ? null : SourceScope.Target,
-                srcRoot, srcPath, dstRoot, dstPath, s.ExpectedSize, s.ExpectedHash));
+                srcRoot, srcPath, dstRoot, dstPath, s.ExpectedSize, s.ExpectedHash, s.SkipReason));
         }
         string fullPath = Path.GetFullPath(rootPath);
         return new PlanDoc(planId, Database.UtcNow(), bytesToCopy, null,
@@ -153,7 +171,7 @@ public static class PlanStaging
             throw new InvalidOperationException($"plan target root '{doc.TargetRoot}' does not match database root '{rootId}'");
         foreach (var operation in doc.Operations)
         {
-            if (operation.Type is not (OpType.Keep or OpType.Mkdir or OpType.Move or OpType.Copy or OpType.Trash or OpType.Verify))
+            if (operation.Type is not (OpType.Keep or OpType.Mkdir or OpType.Move or OpType.Copy or OpType.Trash or OpType.Verify or OpType.SkipLink))
                 throw new InvalidOperationException($"operation {operation.Id} has an unsupported type");
             if (operation.DestinationRoot != null && operation.DestinationRoot != doc.TargetRoot)
                 throw new InvalidOperationException($"operation {operation.Id} destination is outside the plan target root");
@@ -179,7 +197,7 @@ public static class PlanStaging
             PlanStatus.Planned, doc.EstimatedBytesCopied,
             doc.Operations.OrderBy(o => o.Id).Select(o => new Database.PlanOperationSeed(
                 o.Id, o.Type, o.SourceKind ?? SourceScope.Target, o.SourceRoot, o.SourcePath,
-                o.DestinationRoot, o.DestinationPath, o.ExpectedSize, o.ExpectedHash)));
+                o.DestinationRoot, o.DestinationPath, o.ExpectedSize, o.ExpectedHash, o.SkipReason)));
     }
 
     /// <summary>Import a plan JSON file into a DB (CLI `plan import` + UI "Write to .db" helper).</summary>
@@ -197,7 +215,7 @@ public static class PlanStaging
             throw new InvalidOperationException($"invalid or legacy plan file (missing plan/root metadata): {jsonPath}");
         foreach (var o in doc.Operations)
         {
-            if (o.Type is not (OpType.Keep or OpType.Mkdir or OpType.Move or OpType.Copy or OpType.Trash or OpType.Verify))
+            if (o.Type is not (OpType.Keep or OpType.Mkdir or OpType.Move or OpType.Copy or OpType.Trash or OpType.Verify or OpType.SkipLink))
                 throw new InvalidOperationException($"invalid operation type '{o.Type}' in {jsonPath}");
             if (o.SourceRoot != null && o.SourceKind is not (SourceScope.Source or SourceScope.Target))
                 throw new InvalidOperationException($"invalid source kind in operation {o.Id} in {jsonPath}");

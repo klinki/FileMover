@@ -23,7 +23,7 @@ public static class Matcher
         var roots = db.ListRoots().ToDictionary(r => r.Id);
         foreach (var f in db.ListFilesWithHashes(rootFilter, algo))
         {
-            if (f.Status != FileStatus.Ok) continue;
+            if (f.Status != FileStatus.Ok || f.EntryKind != EntryKind.File) continue;
             if (!roots.TryGetValue(f.StorageRootId, out var r)) continue;
             string basePath = r.Path;
             if (pathOverride != null && pathOverride.TryGetValue(f.StorageRootId, out var ov)) basePath = ov;
