@@ -6,7 +6,8 @@ public sealed record ScanDiagnosticRow(long Id, long ScanId, string Path, string
 public sealed record ScanDetailsRow(ScanRow Scan, string? Mode, int? ScannedCount, int? ErrorCount, string? FallbackReason);
 public sealed record InventoryStatusRow(StorageRootRow Root, ScanDetailsRow? LatestScan, ScanRow? LastSuccessfulScan,
     int RegularFiles, int Links, int MissingEntries, int EntryErrors, int UsableHashes, int MissingHashes,
-    bool PlanningReady, string? BlockingReason, ScanCheckpointRow? Checkpoint, IReadOnlyList<ScanDiagnosticRow> Errors);
+    bool PlanningReady, string? BlockingReason, ScanCheckpointRow? Checkpoint, IReadOnlyList<ScanDiagnosticRow> Errors,
+    IReadOnlyList<string>? ExcludedPathRegexes = null);
 
 public sealed partial class Database
 {
@@ -75,6 +76,7 @@ public sealed partial class Database
             : null;
         return new InventoryStatusRow(root, latest, successful, regular, links,
             entries.Count(e => e.Status == FileStatus.Missing), entryErrors, hashes, regular - hashes,
-            ready, reason, GetScanCheckpoint(rootId), latest == null ? [] : ListScanDiagnostics(latest.Scan.Id));
+            ready, reason, GetScanCheckpoint(rootId), latest == null ? [] : ListScanDiagnostics(latest.Scan.Id),
+            GetExcludedPathRegexes(rootId));
     }
 }

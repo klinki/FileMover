@@ -31,11 +31,13 @@ public sealed class Scanner
     private readonly HashSet<string> _databaseFiles;
     private readonly Func<string, IEnumerable<FsEntry>>? _enumerate;
     private readonly Func<string, IUsnJournal?> _openJournal;
+    private readonly IReadOnlyList<string>? _excludedPathRegexes;
 
     public bool LastScanWasIncremental { get; private set; }
     public string? LastScanFallbackReason { get; private set; }
 
-    public Scanner(Database db, string? algo = null, string? mftMode = null, string? usnMode = null)
+    public Scanner(Database db, string? algo = null, string? mftMode = null, string? usnMode = null,
+        IReadOnlyList<string>? excludedPathRegexes = null)
     {
         _db = db;
         _algo = HasherFactory.NormalizeAlgorithm(algo ?? "sha256");
@@ -44,6 +46,7 @@ public sealed class Scanner
         _usnMode = (usnMode ?? "auto").ToLowerInvariant();
         if (_usnMode is not ("auto" or "off")) throw new ArgumentException("--usn must be auto or off.", nameof(usnMode));
         _openJournal = NtfsUsnJournal.TryOpen;
+        _excludedPathRegexes = excludedPathRegexes == null ? null : new PathExclusions(excludedPathRegexes).Patterns;
         _databaseFiles = new HashSet<string>(OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal)
         {
             db.DbPath, db.DbPath + "-wal", db.DbPath + "-shm", db.DbPath + "-journal"
@@ -51,7 +54,8 @@ public sealed class Scanner
     }
 
     internal Scanner(Database db, Func<string, IEnumerable<FsEntry>> enumerate,
-        Func<string, IUsnJournal?>? openJournal = null) : this(db)
+        Func<string, IUsnJournal?>? openJournal = null, IReadOnlyList<string>? excludedPathRegexes = null)
+        : this(db, excludedPathRegexes: excludedPathRegexes)
     {
         _enumerate = enumerate;
         _openJournal = openJournal ?? (_ => null);
@@ -73,6 +77,11 @@ public sealed class Scanner
         LastScanWasIncremental = false;
         LastScanFallbackReason = null;
         var root = _db.GetRoot(rootId) ?? throw new InvalidOperationException($"unknown root '{rootId}'");
+        var storedExclusions = _db.GetPathExclusions(root);
+        var exclusions = _excludedPathRegexes == null ? storedExclusions
+            : new PathExclusions(_excludedPathRegexes, root.CaseSensitivity == "insensitive");
+        bool scopeChanged = !storedExclusions.Patterns.SequenceEqual(exclusions.Patterns);
+        if (scopeChanged) full = true;
         var previousScan = _db.LatestScan(rootId);
         long scanId = _db.BeginScan(rootId);
         int scanned = 0, errors = 0;
@@ -101,6 +110,7 @@ public sealed class Scanner
         var missing = new List<string>();
         try
         {
+            if (scopeChanged) _db.SetExcludedPathRegexes(rootId, exclusions.Patterns);
             if (!Directory.Exists(root.Path))
                 throw new DirectoryNotFoundException($"root path not found: {root.Path}");
             RetireDatabaseEntries(root);
@@ -137,7 +147,7 @@ public sealed class Scanner
             {
                 try
                 {
-                    entries = PrepareIncrementalEntries(root.Path, changes, missing);
+                    entries = PrepareIncrementalEntries(root.Path, changes, missing, exclusions);
                     LastScanWasIncremental = true;
                     scanMode = "USN";
                     LastScanFallbackReason = null;
@@ -168,13 +178,13 @@ public sealed class Scanner
                             HasMetadata: true, IsReparse: f.IsReparse, Error: null));
                 }
                 if (note != null) Log.Info(note);
-                return EnumerateRecursive(root.Path);
+                return EnumerateRecursive(root.Path, exclusions);
             }
             if (LastScanWasIncremental) scanTransaction = _db.BeginTransaction();
             if (changes != null)
             {
                 foreach (var (relative, invalidate) in changes.Paths)
-                    if (invalidate) _db.MarkPathHashesStale(rootId, relative);
+                    if (invalidate && !exclusions.IsExcluded(relative)) _db.MarkPathHashesStale(rootId, relative);
             }
             foreach (var scanEntry in entries)
             {
@@ -183,6 +193,8 @@ public sealed class Scanner
                 try
                 {
                     if (_databaseFiles.Contains(Path.GetFullPath(file))) continue;
+                    if (exclusions.Patterns.Count > 0 && !Paths.PathEquals(root.Path, file)
+                        && exclusions.IsExcluded(Paths.GetRelative(root.Path, file))) continue;
                     if (scanEntry.Error != null)
                     {
                         ReportError(file, scanEntry.Error);
@@ -239,6 +251,8 @@ public sealed class Scanner
                     // If metadata changed vs previous hash, mark stale (§8)
                     if (prev != null)
                     {
+                        if (prev.Status != FileStatus.Ok || scopeChanged && storedExclusions.IsExcluded(rel))
+                            _db.MarkFileHashesStale(id);
                         var h = _db.GetHash(id, _algo);
                         if (h != null && (h.SizeAtHash != sizeBefore || h.ModifiedUtcAtHash != mBefore))
                             _db.MarkHashStale(id, _algo);
@@ -355,11 +369,13 @@ public sealed class Scanner
         }
     }
 
-    private static List<FsEntry> PrepareIncrementalEntries(string root, UsnChanges changes, List<string> missing)
+    private static List<FsEntry> PrepareIncrementalEntries(string root, UsnChanges changes, List<string> missing,
+        PathExclusions exclusions)
     {
         var entries = new List<FsEntry>();
         foreach (string relative in changes.Paths.Keys)
         {
+            if (exclusions.IsExcluded(relative)) continue;
             string path = Paths.CombineRoot(root, relative);
             try
             {
@@ -434,7 +450,7 @@ public sealed class Scanner
             null, scanId, FileStatus.Ok, null, kind, target, targetPath, note);
     }
 
-    internal static IEnumerable<FsEntry> EnumerateRecursive(string root)
+    internal static IEnumerable<FsEntry> EnumerateRecursive(string root, PathExclusions? exclusions = null)
     {
         var stack = new Stack<string>();
         stack.Push(root);
@@ -448,6 +464,7 @@ public sealed class Scanner
             if (issue != null) { yield return new FsEntry(dir, false, 0, default, default, false, false, issue); continue; }
             foreach (var path in entries!)
             {
+                if (exclusions?.Patterns.Count > 0 && exclusions.IsExcluded(Paths.GetRelative(root, path))) continue;
                 FileAttributes? attr = null;
                 issue = null;
                 try { attr = File.GetAttributes(path); }
@@ -512,6 +529,8 @@ public sealed class Scanner
             RetireDatabaseEntries(root);
         var files = _db.ListFiles(rootId);
         var roots = _db.ListRoots().ToDictionary(r => r.Id);
+        var exclusions = roots.Values.ToDictionary(r => r.Id, r => new PathExclusions(
+            _db.GetExcludedPathRegexes(r.Id).Concat(_excludedPathRegexes ?? []), r.CaseSensitivity == "insensitive"));
         int hashed = 0, skipped = 0, unstable = 0;
         long bytesRead = 0;
         var timer = System.Diagnostics.Stopwatch.StartNew();
@@ -543,6 +562,7 @@ public sealed class Scanner
                 return;
             }
             if (!roots.TryGetValue(f.StorageRootId, out var root)) { Complete(f.RelativePath); return; }
+            if (exclusions[root.Id].IsExcluded(f.RelativePath)) { Complete(f.RelativePath); return; }
             var abs = Paths.CombineRoot(root.Path, f.RelativePath);
             string mBefore;
             long lenBefore;

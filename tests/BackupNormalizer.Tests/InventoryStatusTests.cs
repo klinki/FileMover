@@ -123,7 +123,7 @@ public sealed class InventoryStatusTests : IDisposable
         }
         Assert.Equal(before, File.ReadAllBytes(DbPath));
         using var upgraded = new Database(DbPath);
-        Assert.Equal(5, upgraded.AppliedMigrations().Count);
+        Assert.Equal(6, upgraded.AppliedMigrations().Count);
         Assert.Null(upgraded.GetScanDetails("r")!.ErrorCount);
     }
 

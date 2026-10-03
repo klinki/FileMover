@@ -9,11 +9,15 @@ public static class Cli
         Log.Json = args.Contains("--json");
         try
         {
+            args = NormalizeConfigOption(args);
+            if (args.Length == 0) return Help();
             string cmd = args[0].ToLowerInvariant();
             return cmd switch
             {
                 "--version" or "version" => Version(args[1..]),
                 "init" => Init(args[1..]),
+                "config" => Config(args[1..]),
+                "help" or "--help" or "-h" => Help(),
                 "root" => Root(args[1..]),
                 "scan" => Scan(args[1..]),
                 "status" => Status(args[1..]),
@@ -42,9 +46,11 @@ public static class Cli
             backup-normalizer {BuildInfo.FromAssembly(typeof(Cli).Assembly).ShortVersion} — per-drive source/target comparison
               Usage: BackupNormalizer <command> [options]
               init [--db PATH] [--config PATH]
+              config init|show [--config PATH]
               root add <id> <path> [--name N] [--writable true|false] [--db PATH]
               root list [--db PATH]
               scan <rootId|--all> [--db PATH] [--mft off|auto|require] [--usn auto|off] [--full] [--no-progress]
+                   [--exclude-path-regex REGEX ... | --no-exclusions]
               scan errors <rootId> [--scan ID] [--db PATH] [--json]
               status [rootId] [--db PATH] [--hash-algo ALGORITHM] [--json]
               db export --db SOURCE --output DESTINATION [--json]
@@ -64,6 +70,11 @@ public static class Cli
             --mft require fails loudly instead. --elevate restarts the app elevated via UAC when needed.
             --usn auto refreshes changed entries from an existing NTFS journal after a complete baseline scan.
             --full forces full enumeration; --usn off disables journal checkpoints. Unavailable journals use full scans.
+            --config PATH selects JSON defaults for any command, before or after the command name.
+            Config priority: --config PATH, then BN_CONFIG, then ./settings.json, then legacy ./backup-normalizer.json.
+            CLI values override BN_* variables and JSON defaults.
+            Exclusion regexes match root-relative paths using / and protect matching directory subtrees.
+            Omitted exclusions reuse the root's stored rules. Changing rules forces a full scan.
             """);
         return 0;
     }
@@ -83,7 +94,7 @@ public static class Cli
 
     private static int Status(string[] a)
     {
-        var config = AppConfig.Load(Opt(a, "--config", AppConfig.DefaultPath));
+        var config = LoadConfig(a);
         using var db = Database.OpenReadOnly(Opt(a, "--db", config.Database));
         string algorithm = Opt(a, "--hash-algo", config.HashAlgorithm);
         string? selectedRoot = a.Length > 0 && !a[0].StartsWith("--") ? a[0] : null;
@@ -99,6 +110,8 @@ public static class Cli
             Console.WriteLine($"  last successful scan: {status.LastSuccessfulScan?.CompletedUtc ?? "none"}");
             Console.WriteLine($"  files: {status.RegularFiles}; skipped links: {status.Links}; missing entries: {status.MissingEntries}; entry errors: {status.EntryErrors}");
             Console.WriteLine($"  {TerminalText(algorithm)} hashes: {status.UsableHashes} usable, {status.MissingHashes} needed");
+            foreach (string pattern in status.ExcludedPathRegexes ?? [])
+                Console.WriteLine(TerminalText($"  excluded path regex: {pattern}"));
             Console.WriteLine($"  USN checkpoint: {(status.Checkpoint == null ? "none; next scan uses full enumeration" : "stored; checked against the journal on the next scan")}");
             if (latest?.FallbackReason != null) Console.WriteLine(TerminalText($"  fallback: {latest.FallbackReason}"));
             Console.WriteLine(TerminalText($"  planning: {(status.PlanningReady ? "ready for content planning" : status.BlockingReason)}"));
@@ -111,7 +124,7 @@ public static class Cli
     private static int ScanErrors(string[] a)
     {
         if (a.Length == 0 || a[0].StartsWith("--")) return Fail("scan errors requires a root ID");
-        using var db = Database.OpenReadOnly(Opt(a, "--db", AppConfig.Load(Opt(a, "--config", AppConfig.DefaultPath)).Database));
+        using var db = Database.OpenReadOnly(Opt(a, "--db", LoadConfig(a).Database));
         long? scanId = null;
         if (Has(a, "--scan"))
         {
@@ -138,7 +151,7 @@ public static class Cli
         if (a.Length == 0 || a[0] != "export") return Fail("db requires the export subcommand");
         string destination = Opt(a, "--output", "");
         if (string.IsNullOrWhiteSpace(destination)) return Fail("db export requires --output");
-        string source = Opt(a, "--db", AppConfig.Load(Opt(a, "--config", AppConfig.DefaultPath)).Database);
+        string source = Opt(a, "--db", LoadConfig(a).Database);
         Database.ExportSnapshot(source, destination);
         if (Has(a, "--json")) WriteJson(new { source = Path.GetFullPath(source), destination = Path.GetFullPath(destination) });
         else Console.WriteLine(TerminalText($"exported inventory snapshot: {Path.GetFullPath(destination)}"));
@@ -154,11 +167,63 @@ public static class Cli
         return env ?? fallback;
     }
     private static bool Has(string[] a, string name) => a.Contains(name);
+
+    private static string[] NormalizeConfigOption(string[] args)
+    {
+        var remaining = new List<string>();
+        string? config = null;
+        for (int index = 0; index < args.Length; index++)
+        {
+            if (args[index] != "--config") { remaining.Add(args[index]); continue; }
+            if (config != null) throw new ArgumentException("--config may only be specified once.");
+            if (++index >= args.Length || args[index].StartsWith("--"))
+                throw new ArgumentException("--config requires a file path.");
+            config = args[index];
+        }
+        if (config != null) remaining.AddRange(["--config", config]);
+        return remaining.ToArray();
+    }
+
+    private static AppConfig LoadConfig(string[] a, bool allowMissing = false)
+    {
+        return AppConfig.Load(Has(a, "--config") ? Opt(a, "--config", AppConfig.DefaultPath) : null, allowMissing);
+    }
+
+    private static int Config(string[] a)
+    {
+        if (a.Length == 0) return Fail("config init|show [--config PATH]");
+        if (a[0] == "show") { WriteJson(LoadConfig(a)); return 0; }
+        if (a[0] != "init") return Fail("config init|show [--config PATH]");
+        string path = Opt(a, "--config", AppConfig.DefaultPath);
+        var config = new AppConfig();
+        config.Database = Opt(a, "--db", config.Database);
+        config.Save(path, overwrite: false);
+        Console.WriteLine(TerminalText($"created config: {Path.GetFullPath(path)}"));
+        return 0;
+    }
+
+    private static IReadOnlyList<string>? ScanExclusions(string[] a, AppConfig config)
+    {
+        var patterns = new List<string>();
+        for (int index = 0; index < a.Length; index++)
+        {
+            if (a[index] != "--exclude-path-regex") continue;
+            if (++index >= a.Length || a[index].StartsWith("--"))
+                throw new ArgumentException("--exclude-path-regex requires a regex.");
+            patterns.Add(a[index]);
+        }
+        if (Has(a, "--no-exclusions"))
+        {
+            if (patterns.Count > 0) throw new ArgumentException("Use --no-exclusions or --exclude-path-regex, not both.");
+            return [];
+        }
+        return patterns.Count > 0 ? new PathExclusions(patterns).Patterns : config.ExcludedPathRegexes;
+    }
     private static int Init(string[] a)
     {
-        string db = Opt(a, "--db", AppConfig.Load(Opt(a, "--config", AppConfig.DefaultPath)).Database);
+        string db = Opt(a, "--db", LoadConfig(a, allowMissing: true).Database);
         using var _ = new Database(db);
-        var cfg = AppConfig.Load(Opt(a, "--config", AppConfig.DefaultPath));
+        var cfg = LoadConfig(a, allowMissing: true);
         cfg.Database = db; cfg.Save(Opt(a, "--config", AppConfig.DefaultPath));
         Console.WriteLine($"initialized {db}");
         return 0;
@@ -167,8 +232,7 @@ public static class Cli
     private static int Root(string[] a)
     {
         if (a.Length == 0) return Fail("root add|list");
-        string cfgPath = Opt(a, "--config", AppConfig.DefaultPath);
-        string db = Opt(a, "--db", AppConfig.Load(cfgPath).Database);
+        string db = Opt(a, "--db", LoadConfig(a).Database);
         if (a[0] == "list")
         {
             using var d = new Database(db);
@@ -193,13 +257,15 @@ public static class Cli
     {
         if (a.Length > 0 && a[0] == "errors") return ScanErrors(a[1..]);
         if (a.Length == 0) return Fail("scan <rootId|--all>");
-        string db = Opt(a, "--db", AppConfig.Load(Opt(a, "--config", AppConfig.DefaultPath)).Database);
-        string algo = Opt(a, "--hash-algo", AppConfig.Load(Opt(a, "--config", AppConfig.DefaultPath)).HashAlgorithm);
-        string mft = Opt(a, "--mft", AppConfig.Load(Opt(a, "--config", AppConfig.DefaultPath)).MftMode);
-        string usn = Opt(a, "--usn", AppConfig.Load(Opt(a, "--config", AppConfig.DefaultPath)).UsnMode);
+        var config = LoadConfig(a);
+        string db = Opt(a, "--db", config.Database);
+        string algo = Opt(a, "--hash-algo", config.HashAlgorithm);
+        string mft = Opt(a, "--mft", config.MftMode);
+        string usn = Opt(a, "--usn", config.UsnMode);
+        var exclusions = ScanExclusions(a, config);
         using var d = new Database(db);
-        var sc = new Scanner(d, algo, mft, usn);
-        bool showProgress = !Has(a, "--no-progress") && !Console.IsOutputRedirected;
+        var sc = new Scanner(d, algo, mft, usn, exclusions);
+        bool showProgress = !Has(a, "--no-progress") && !config.NoProgress && !Console.IsOutputRedirected;
         int totalErrors = 0;
         int RunRootErrors(string rootId, string label, out int scanned)
         {
@@ -315,11 +381,13 @@ public static class Cli
         bool needed = Has(a, "--needed");
         string? rootId = a.Length > 0 && !a[0].StartsWith("--") ? a[0] : null;
         if (!needed && rootId == null) return Fail("hash --needed | hash <rootId> --all");
-        string db = Opt(a, "--db", AppConfig.Load(Opt(a, "--config", AppConfig.DefaultPath)).Database);
-        int par = int.TryParse(Opt(a, "--parallelism", "2"), out var p) ? p : 2;
+        var config = LoadConfig(a);
+        string db = Opt(a, "--db", config.Database);
+        if (!int.TryParse(Opt(a, "--parallelism", config.HashParallelism.ToString()), out int par) || par < 1)
+            return Fail("--parallelism must be a positive integer");
         using var d = new Database(db);
-        var sc = new Scanner(d);
-        var renderer = !Has(a, "--no-progress") && !Console.IsOutputRedirected
+        var sc = new Scanner(d, Opt(a, "--hash-algo", config.HashAlgorithm), excludedPathRegexes: config.ExcludedPathRegexes);
+        var renderer = !Has(a, "--no-progress") && !config.NoProgress && !Console.IsOutputRedirected
             ? new HashProgressRenderer(needed ? "--needed" : rootId!) : null;
         (int hashed, int skipped, int unstable) result;
         try { result = sc.HashNeeded(needed ? null : rootId, !needed && Has(a, "--all"), par, renderer); }
@@ -367,9 +435,10 @@ public static class Cli
     private static int Plan(string[] a)
     {
         if (a.Length == 0) return Fail("plan ...");
+        var config = LoadConfig(a);
         if (a[0] == "show" && a.Length >= 2)
         {
-            string db = Opt(a, "--db", AppConfig.Load(Opt(a, "--config", AppConfig.DefaultPath)).Database);
+            string db = Opt(a, "--db", config.Database);
             using var d = new Database(db);
             var doc = new Planner(d).ExportPlan(a[1]);
             Console.WriteLine($"Plan {doc.PlanId} created {doc.CreatedUtc} estBytes={doc.EstimatedBytesCopied}");
@@ -381,7 +450,7 @@ public static class Cli
         }
         if (a[0] == "export" && a.Length >= 2)
         {
-            string db = Opt(a, "--db", AppConfig.Load(Opt(a, "--config", AppConfig.DefaultPath)).Database);
+            string db = Opt(a, "--db", config.Database);
             using var d = new Database(db);
             var doc = new Planner(d).ExportPlan(a[1]);
             string json = Planner.ToJson(doc);
@@ -392,7 +461,7 @@ public static class Cli
         }
         if (a[0] == "conflicts" && a.Length >= 2)
         {
-            string db = Opt(a, "--db", AppConfig.Load(Opt(a, "--config", AppConfig.DefaultPath)).Database);
+            string db = Opt(a, "--db", config.Database);
             using var d = new Database(db);
             if (!d.PlanExists(a[1])) return Fail($"unknown plan '{a[1]}'");
             var bad = d.ListPlanOperations(a[1], onlyProblems: true);
@@ -405,7 +474,7 @@ public static class Cli
         if (a[0] == "import" && a.Length >= 2)
         {
             // UI-generated plan JSON -> DB, so the same executor can run it.
-            string db = Opt(a, "--db", AppConfig.Load(Opt(a, "--config", AppConfig.DefaultPath)).Database);
+            string db = Opt(a, "--db", config.Database);
             string targetPath = Opt(a, "--target-path", "");
             var doc = PlanStaging.ImportJson(a[1]);
             using var d = new Database(db);
@@ -425,7 +494,7 @@ public static class Cli
         string planId = Opt(a, "--plan", DateTime.UtcNow.ToString("yyyy-MM-dd-HHmmss"));
         using var td = new Database(targetDbPath);
         using var sd = Paths.PathEquals(sourceDbPath, targetDbPath) ? null : Database.OpenReadOnly(sourceDbPath);
-        var result = new Planner(td).PlanFromRoots(sd ?? td, sourceRoot, targetRoot, planId);
+        var result = new Planner(td, Opt(a, "--hash-algo", config.HashAlgorithm)).PlanFromRoots(sd ?? td, sourceRoot, targetRoot, planId);
         PrintPlan(result);
         return 0;
     }
@@ -442,7 +511,7 @@ public static class Cli
     private static int Execute(string[] a)
     {
         if (a.Length == 0) return Fail("execute <plan-id>");
-        string db = Opt(a, "--db", AppConfig.Load(Opt(a, "--config", AppConfig.DefaultPath)).Database);
+        string db = Opt(a, "--db", LoadConfig(a).Database);
         string? sourcePath = Has(a, "--source-path") ? Opt(a, "--source-path", "") : null;
         string? targetPath = Has(a, "--target-path") ? Opt(a, "--target-path", "") : null;
         using var d = new Database(db);
@@ -478,7 +547,7 @@ public static class Cli
     private static int Verify(string[] a)
     {
         if (a.Length == 0) return Fail("verify <plan-id>");
-        string db = Opt(a, "--db", AppConfig.Load(Opt(a, "--config", AppConfig.DefaultPath)).Database);
+        string db = Opt(a, "--db", LoadConfig(a).Database);
         string? sourcePathOverride = Has(a, "--source-path") ? Opt(a, "--source-path", "") : null;
         string? targetPathOverride = Has(a, "--target-path") ? Opt(a, "--target-path", "") : null;
         using var d = new Database(db);
@@ -524,7 +593,7 @@ public static class Cli
         if (string.IsNullOrEmpty(older) || !Has(a, "--yes")) return Fail("purge --older-than 30d --yes [--path ROOT] (permanent delete, never implicit §16)");
         int days = int.TryParse(new string(older.TakeWhile(char.IsDigit).ToArray()), out var dd) ? dd : 30;
         string? basePath = Has(a, "--path") ? Opt(a, "--path", "") : null;
-        string db = Opt(a, "--db", AppConfig.Load(Opt(a, "--config", AppConfig.DefaultPath)).Database);
+        string db = Opt(a, "--db", LoadConfig(a).Database);
         List<string> rootsToClean = new();
         if (!string.IsNullOrEmpty(basePath)) rootsToClean.Add(basePath);
         else
@@ -535,7 +604,7 @@ public static class Cli
         int deleted = 0;
         foreach (var rp in rootsToClean)
         {
-            string trashBase = Path.Combine(rp, AppConfig.Load(Opt(a, "--config", AppConfig.DefaultPath)).TrashDirectoryName);
+            string trashBase = Path.Combine(rp, LoadConfig(a).TrashDirectoryName);
             if (!Directory.Exists(trashBase)) continue;
             foreach (var dir in Directory.GetDirectories(trashBase))
             {
@@ -559,7 +628,7 @@ public static class Cli
         if (string.IsNullOrEmpty(sourceDb) || string.IsNullOrEmpty(sourceRoot)
             || string.IsNullOrEmpty(targetDb) || string.IsNullOrEmpty(targetRoot))
             return Fail("diff requires --source-db S.db --source-root R --target-db T.db --target-root R");
-        var s = Inventory.Diff(sourceDb, sourceRoot, targetDb, targetRoot);
+        var s = Inventory.Diff(sourceDb, sourceRoot, targetDb, targetRoot, Opt(a, "--hash-algo", LoadConfig(a).HashAlgorithm));
         Console.WriteLine($"source-only: {s.SourceOnly}  target-only: {s.TargetOnly}  changed: {s.Changed}  identical: {s.Identical}  unverified: {s.Unverified}");
         Console.WriteLine($"skipped links: {s.SkippedLinks}  link conflicts: {s.LinkConflicts}");
         Console.WriteLine($"scan status: source={s.SourceScanStatus ?? "never scanned"} target={s.TargetScanStatus ?? "never scanned"}");

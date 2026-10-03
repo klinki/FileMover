@@ -25,14 +25,18 @@ public static class Inventory
         if (sourceDb.GetRoot(sourceRootId) == null) throw new InvalidOperationException($"unknown source root '{sourceRootId}'");
         if (target.GetRoot(targetRootId) == null) throw new InvalidOperationException($"unknown target root '{targetRootId}'");
 
-        var sourceLinks = sourceDb.ListFiles(sourceRootId).Where(f => f.Status != FileStatus.Missing && f.EntryKind != EntryKind.File).ToList();
-        var targetLinks = target.ListFiles(targetRootId).Where(f => f.Status != FileStatus.Missing && f.EntryKind != EntryKind.File).ToList();
+        var sourceExclusions = sourceDb.GetPathExclusions(sourceDb.GetRoot(sourceRootId)!);
+        var targetExclusions = target.GetPathExclusions(target.GetRoot(targetRootId)!);
+        bool Excluded(string path) => sourceExclusions.IsExcluded(path) || targetExclusions.IsExcluded(path);
+
+        var sourceLinks = sourceDb.ListFiles(sourceRootId).Where(f => f.Status != FileStatus.Missing && f.EntryKind != EntryKind.File && !Excluded(f.RelativePath)).ToList();
+        var targetLinks = target.ListFiles(targetRootId).Where(f => f.Status != FileStatus.Missing && f.EntryKind != EntryKind.File && !Excluded(f.RelativePath)).ToList();
         var comparer = sourceDb.GetRoot(sourceRootId)!.CaseSensitivity == "insensitive" && target.GetRoot(targetRootId)!.CaseSensitivity == "insensitive"
             ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal;
         var sourceLinkPaths = sourceLinks.Select(f => f.RelativePath).ToHashSet(comparer);
         var targetLinkPaths = targetLinks.Select(f => f.RelativePath).ToHashSet(comparer);
-        var sourceFiles = Matcher.LoadFromDb(sourceDb, algo, sourceRootId).Where(f => Paths.FindRecordedLink(f.RelativePath, sourceLinkPaths) == null).ToDictionary(file => file.RelativePath);
-        var targetFiles = Matcher.LoadFromDb(target, algo, targetRootId).Where(f => Paths.FindRecordedLink(f.RelativePath, targetLinkPaths) == null).ToDictionary(file => file.RelativePath);
+        var sourceFiles = Matcher.LoadFromDb(sourceDb, algo, sourceRootId).Where(f => !Excluded(f.RelativePath) && Paths.FindRecordedLink(f.RelativePath, sourceLinkPaths) == null).ToDictionary(file => file.RelativePath);
+        var targetFiles = Matcher.LoadFromDb(target, algo, targetRootId).Where(f => !Excluded(f.RelativePath) && Paths.FindRecordedLink(f.RelativePath, targetLinkPaths) == null).ToDictionary(file => file.RelativePath);
         int sourceOnly = 0, targetOnly = 0, changed = 0, identical = 0, unverified = 0;
         int linkConflicts = 0;
         var sampleLines = new List<string>();

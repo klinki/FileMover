@@ -24,6 +24,9 @@ with `bn scan errors <rootId> --db inventory.db`, or export a standalone copy wi
 
 ## Compare and plan
 
+JSON defaults and root-relative regex exclusions are described in the
+[CLI configuration guide](docs/features/cli-config-exclusions/README.md).
+
 Register a directory in each database, scan it, and hash its files:
 
 ```bash
@@ -71,7 +74,7 @@ bn --elevate scan photos --db ./source.db --mft auto  # restart elevated via UAC
 ```
 
 `--mft` can also be set persistently with `"mftMode": "auto"` in
-`backup-normalizer.json`. Hashing still reads every file, so this only
+`settings.json`. Hashing still reads every file, so this only
 accelerates the metadata pass. Validate once per drive by scanning both ways
 and comparing the inventories. Unexpected read or parsing failures after an
 MFT scan starts fail that scan without marking unseen files missing. Retry
@@ -93,7 +96,7 @@ bn scan photos --db ./source.db --full      # enumerate everything again
 bn scan photos --db ./source.db --usn off  # full scan without a journal checkpoint
 ```
 
-Set `"usnMode": "off"` in `backup-normalizer.json` to disable journal use by
+Set `"usnMode": "off"` in `settings.json` to disable journal use by
 default. Journal access normally requires administrator rights. The app reads
 existing journals and does not create them. Other filesystems, network shares,
 and unavailable journals use full scans; `--mft` selects how those full scans

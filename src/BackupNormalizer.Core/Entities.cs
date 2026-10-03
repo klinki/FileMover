@@ -24,6 +24,12 @@ public sealed class ScanEntity
     public string? FallbackReason { get; set; }
 }
 
+public sealed class RootScanPolicyEntity
+{
+    public string StorageRootId { get; set; } = string.Empty;
+    public string ExcludedPathRegexesJson { get; set; } = "[]";
+}
+
 public sealed class ScanDiagnosticEntity
 {
     public long Id { get; set; }

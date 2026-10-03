@@ -8,6 +8,7 @@ public sealed class BackupNormalizerDbContext(DbContextOptions<BackupNormalizerD
     public DbSet<ScanEntity> Scans => Set<ScanEntity>();
     public DbSet<ScanDiagnosticEntity> ScanDiagnostics => Set<ScanDiagnosticEntity>();
     public DbSet<ScanCheckpointEntity> ScanCheckpoints => Set<ScanCheckpointEntity>();
+    public DbSet<RootScanPolicyEntity> RootScanPolicies => Set<RootScanPolicyEntity>();
     public DbSet<FileEntryEntity> FileEntries => Set<FileEntryEntity>();
     public DbSet<FileHashEntity> FileHashes => Set<FileHashEntity>();
     public DbSet<PlanEntity> Plans => Set<PlanEntity>();
@@ -30,6 +31,14 @@ public sealed class BackupNormalizerDbContext(DbContextOptions<BackupNormalizerD
             entity.Property(x => x.FileSystemId).HasColumnName("FileSystemId").HasDefaultValue("unknown");
             entity.Property(x => x.CaseSensitivity).HasColumnName("CaseSensitivity").HasDefaultValue("unknown");
             entity.Property(x => x.CreatedUtc).HasColumnName("CreatedUtc").IsRequired();
+        });
+
+        modelBuilder.Entity<RootScanPolicyEntity>(entity =>
+        {
+            entity.ToTable("RootScanPolicy");
+            entity.HasKey(x => x.StorageRootId);
+            entity.Property(x => x.ExcludedPathRegexesJson).IsRequired();
+            entity.HasOne<StorageRootEntity>().WithMany().HasForeignKey(x => x.StorageRootId).OnDelete(DeleteBehavior.Cascade);
         });
 
         modelBuilder.Entity<ScanEntity>(entity =>

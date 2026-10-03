@@ -21,10 +21,12 @@ public static class Matcher
     {
         var out_ = new List<PhysicalFile>();
         var roots = db.ListRoots().ToDictionary(r => r.Id);
+        var exclusions = roots.Values.ToDictionary(r => r.Id, db.GetPathExclusions);
         foreach (var f in db.ListFilesWithHashes(rootFilter, algo))
         {
             if (f.Status != FileStatus.Ok || f.EntryKind != EntryKind.File) continue;
             if (!roots.TryGetValue(f.StorageRootId, out var r)) continue;
+            if (exclusions[r.Id].IsExcluded(f.RelativePath)) continue;
             string basePath = r.Path;
             if (pathOverride != null && pathOverride.TryGetValue(f.StorageRootId, out var ov)) basePath = ov;
             out_.Add(new PhysicalFile(f.StorageRootId, f.RelativePath, f.Size, f.Digest, f.ModifiedUtc, Paths.CombineRoot(basePath, f.RelativePath)));

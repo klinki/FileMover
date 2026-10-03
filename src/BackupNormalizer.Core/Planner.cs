@@ -42,20 +42,24 @@ public sealed class Planner
         if (_targetDb.PlanExists(planId))
             throw new InvalidOperationException($"plan '{planId}' already exists (plans are immutable)");
 
+        var sourceExclusions = sourceDb.GetPathExclusions(sourceRoot);
+        var targetExclusions = _targetDb.GetPathExclusions(targetRoot);
+        bool Excluded(string path) => sourceExclusions.IsExcluded(path) || targetExclusions.IsExcluded(path);
         var sourceLinks = sourceDb.ListFiles(sourceRootId)
-            .Where(f => f.Status != FileStatus.Missing && f.EntryKind != EntryKind.File).ToList();
+            .Where(f => f.Status != FileStatus.Missing && f.EntryKind != EntryKind.File && !Excluded(f.RelativePath)).ToList();
         var targetLinks = _targetDb.ListFiles(targetRootId)
-            .Where(f => f.Status != FileStatus.Missing && f.EntryKind != EntryKind.File).ToList();
+            .Where(f => f.Status != FileStatus.Missing && f.EntryKind != EntryKind.File && !Excluded(f.RelativePath)).ToList();
         var sourceComparer = sourceRoot.CaseSensitivity == "insensitive" ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal;
         var targetComparer = targetRoot.CaseSensitivity == "insensitive" ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal;
         var sourceLinkPaths = sourceLinks.Select(f => f.RelativePath).ToHashSet(sourceComparer);
         var preservedTargetPaths = sourceLinks.Select(f => f.RelativePath).ToHashSet(targetComparer);
         var targetLinkPaths = targetLinks.Select(f => f.RelativePath).ToHashSet(targetComparer);
         var sourceFiles = Matcher.LoadFromDb(sourceDb, _algo, sourceRootId)
+            .Where(f => !Excluded(f.RelativePath))
             .OrderBy(file => file.RelativePath, StringComparer.Ordinal)
             .ToList();
         var targetFiles = Matcher.LoadFromDb(_targetDb, _algo, targetRootId)
-            .Where(f => Paths.FindRecordedLink(f.RelativePath, preservedTargetPaths) == null
+            .Where(f => !Excluded(f.RelativePath) && Paths.FindRecordedLink(f.RelativePath, preservedTargetPaths) == null
                 && Paths.FindRecordedLink(f.RelativePath, targetLinkPaths) == null)
             .OrderBy(file => file.RelativePath, StringComparer.Ordinal)
             .ToList();

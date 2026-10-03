@@ -470,7 +470,7 @@ public sealed class UsnScanTests : IDisposable
             Assert.Equal(3, readOnly.AppliedMigrations().Count);
         }
         using var upgraded = Open();
-        Assert.Equal(5, upgraded.AppliedMigrations().Count);
+        Assert.Equal(6, upgraded.AppliedMigrations().Count);
         Assert.False(upgraded.Context.Database.HasPendingModelChanges());
         Scanner(upgraded).ScanRoot("r");
         Assert.NotNull(upgraded.GetScanCheckpoint("r"));
