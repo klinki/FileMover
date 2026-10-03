@@ -28,6 +28,7 @@ public sealed partial class Database : IDisposable
     public Database(string dbPath) : this(dbPath, readOnly: false) { }
 
     public static Database OpenReadOnly(string dbPath, bool pooling = true) => new(dbPath, readOnly: true, pooling: pooling);
+    public static Database OpenWritable(string dbPath, bool pooling = true) => new(dbPath, readOnly: false, pooling: pooling);
 
     internal Database(string dbPath, bool readOnly, bool pooling = true)
     {

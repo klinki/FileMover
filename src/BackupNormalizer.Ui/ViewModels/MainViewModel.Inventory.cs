@@ -41,6 +41,7 @@ public sealed partial class MainViewModel
         OnPropertyChanged(nameof(CanChangeBase));
         OnPropertyChanged(nameof(CanChangePanelSource));
         OnPropertyChanged(nameof(HasDatabasePanels));
+        OnPropertyChanged(nameof(CanCreateDatabasePlan));
         Left.CanChangeSource = Right.CanChangeSource = CanChangePanelSource;
         ApplyBaseCommand.NotifyCanExecuteChanged();
         StageCopyCommand.NotifyCanExecuteChanged();
@@ -52,6 +53,7 @@ public sealed partial class MainViewModel
 
     private void OnPanelSourceChanged()
     {
+        InvalidateDatabasePlanReview();
         ClearComparison();
         UpdateSourceCommands();
     }

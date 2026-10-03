@@ -53,6 +53,13 @@ to inspect scan age, mode, fallback reason, entry counts, planning blockers, and
 error paths and messages. Older inventories show unavailable diagnostic fields as unknown.
 See the [inventory health guide](../../docs/features/gui-inventory-health/README.md).
 
+To generate a plan from database panels, set **Plan ID**, then choose **Plan left → right...**
+or **Plan right → left...**. Planning uses the whole selected roots, even when a panel
+shows a subfolder. Review operation counts, copy bytes, conflicts, and skipped links before
+exporting JSON. Inventory databases stay read-only; only an isolated planning snapshot is
+changed. File-versus-directory conflicts block export, while content mismatches remain
+guarded verification operations. See the [database planning guide](../../docs/features/gui-database-planning/README.md).
+
 Links show their kind in the size column. Hover over a name to see its target
 text, absolute immediate target path, and any metadata note. Linked folders
 cannot be opened. Links are excluded from content comparisons and scan-error

@@ -1,0 +1,93 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:BackupNormalizer.Ui.ViewModels"
+        xmlns:models="using:BackupNormalizer.Ui.Models"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        mc:Ignorable="d" d:DesignWidth="1100" d:DesignHeight="680"
+        x:Class="BackupNormalizer.Ui.Views.DatabasePlanReviewWindow"
+        x:DataType="vm:DatabasePlanReviewViewModel"
+        Icon="/Assets/avalonia-logo.ico"
+        Title="Database plan review"
+        Width="1100" Height="680"
+        MinWidth="760" MinHeight="480"
+        WindowStartupLocation="CenterOwner">
+  <Grid RowDefinitions="Auto,Auto,*,Auto" Margin="12" RowSpacing="8">
+    <StackPanel Grid.Row="0" Spacing="4">
+      <TextBlock Text="Database plan review" FontSize="18" FontWeight="Bold" />
+      <TextBlock Text="{Binding DirectionLabel}" FontWeight="SemiBold" />
+      <TextBlock Text="{Binding ScopeLabel}" />
+      <StackPanel Orientation="Horizontal" Spacing="5">
+        <TextBlock Text="Source:" FontWeight="SemiBold" />
+        <TextBlock Text="{Binding SourceRoot}" TextWrapping="Wrap" />
+      </StackPanel>
+      <StackPanel Orientation="Horizontal" Spacing="5">
+        <TextBlock Text="Source database:" FontWeight="SemiBold" />
+        <TextBlock Text="{Binding SourceDatabasePath}" TextWrapping="Wrap" />
+      </StackPanel>
+      <StackPanel Orientation="Horizontal" Spacing="5">
+        <TextBlock Text="Target:" FontWeight="SemiBold" />
+        <TextBlock Text="{Binding TargetRoot}" TextWrapping="Wrap" />
+      </StackPanel>
+    </StackPanel>
+
+    <StackPanel Grid.Row="1" Spacing="5">
+      <TextBlock Text="{Binding PlanSummary}" TextWrapping="Wrap" />
+      <TextBlock Text="{Binding IssueSummary}" TextWrapping="Wrap" />
+      <ScrollViewer MaxHeight="140" VerticalScrollBarVisibility="Auto">
+        <ItemsControl ItemsSource="{Binding Issues}">
+          <ItemsControl.ItemTemplate>
+            <DataTemplate x:DataType="models:DatabasePlanIssue">
+              <TextBlock Text="{Binding Display}" TextWrapping="Wrap" Margin="2,1" />
+            </DataTemplate>
+          </ItemsControl.ItemTemplate>
+        </ItemsControl>
+      </ScrollViewer>
+    </StackPanel>
+
+    <DataGrid Grid.Row="2" ItemsSource="{Binding Operations}" Margin="0,4"
+              AutoGenerateColumns="False" IsReadOnly="True" SelectionMode="Single"
+              CanUserResizeColumns="True" CanUserSortColumns="False" GridLinesVisibility="Horizontal">
+      <DataGrid.Columns>
+        <DataGridTextColumn Header="Op" Binding="{Binding Type}" Width="85" />
+        <DataGridTemplateColumn Header="Source" Width="*" CanUserSort="False">
+          <DataGridTemplateColumn.CellTemplate>
+            <DataTemplate x:DataType="models:DatabasePlanOperation">
+              <TextBlock Text="{Binding Source}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
+            </DataTemplate>
+          </DataGridTemplateColumn.CellTemplate>
+        </DataGridTemplateColumn>
+        <DataGridTemplateColumn Header="Destination" Width="*" CanUserSort="False">
+          <DataGridTemplateColumn.CellTemplate>
+            <DataTemplate x:DataType="models:DatabasePlanOperation">
+              <TextBlock Text="{Binding Destination}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
+            </DataTemplate>
+          </DataGridTemplateColumn.CellTemplate>
+        </DataGridTemplateColumn>
+        <DataGridTextColumn Header="Size" Binding="{Binding SizeText}" Width="100" />
+        <DataGridTemplateColumn Header="SHA-256" Width="180" CanUserSort="False">
+          <DataGridTemplateColumn.CellTemplate>
+            <DataTemplate x:DataType="models:DatabasePlanOperation">
+              <TextBlock Text="{Binding Hash}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
+            </DataTemplate>
+          </DataGridTemplateColumn.CellTemplate>
+        </DataGridTemplateColumn>
+        <DataGridTemplateColumn Header="Review note" Width="2*" CanUserSort="False">
+          <DataGridTemplateColumn.CellTemplate>
+            <DataTemplate x:DataType="models:DatabasePlanOperation">
+              <TextBlock Text="{Binding Note}" TextWrapping="Wrap" VerticalAlignment="Center" />
+            </DataTemplate>
+          </DataGridTemplateColumn.CellTemplate>
+        </DataGridTemplateColumn>
+      </DataGrid.Columns>
+    </DataGrid>
+
+    <DockPanel Grid.Row="3" LastChildFill="True">
+      <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" Spacing="8">
+        <Button Content="Export plan JSON" IsEnabled="{Binding CanExportJson}" Click="OnExportJson" />
+        <Button Content="Close" IsCancel="True" Click="OnClose" />
+      </StackPanel>
+      <TextBlock Text="{Binding StatusMessage}" TextWrapping="Wrap" VerticalAlignment="Center" />
+    </DockPanel>
+  </Grid>
+</Window>

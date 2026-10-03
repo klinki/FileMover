@@ -160,6 +160,15 @@
         <CheckBox Content="Linked browsing" IsChecked="{Binding LinkedBrowsing}" IsEnabled="{Binding IsComparisonEnabled}" />
       </WrapPanel>
     </Border>
+    <Border DockPanel.Dock="Top" Padding="6" IsVisible="{Binding HasDatabasePanels}">
+      <WrapPanel Orientation="Horizontal" ItemSpacing="6">
+        <TextBlock Text="Plan ID:" VerticalAlignment="Center" />
+        <TextBox Text="{Binding PlanId}" Width="165" IsEnabled="{Binding !IsBusy}" />
+        <Button Content="Plan left → right..." Tag="LeftToRight" Click="OnDatabasePlan" IsEnabled="{Binding CanCreateDatabasePlan}" />
+        <Button Content="Plan right → left..." Tag="RightToLeft" Click="OnDatabasePlan" IsEnabled="{Binding CanCreateDatabasePlan}" />
+        <TextBlock Text="Plans use the whole selected roots." VerticalAlignment="Center" />
+      </WrapPanel>
+    </Border>
     <Border DockPanel.Dock="Top" Padding="6" BorderBrush="Gray" BorderThickness="0,0,0,1" IsVisible="{Binding !HasDatabasePanels}">
       <WrapPanel Orientation="Horizontal" ItemSpacing="6">
         <StackPanel Orientation="Horizontal" Spacing="4">
