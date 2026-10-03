@@ -1,9 +1,10 @@
-# BackupNormalizer.Ui - Inventory comparison and planner
+# BackupNormalizer.Ui - Inventory comparison, planning, and execution
 
 A cross-platform Avalonia UI for browsing inventory databases, comparing
 folders, and staging BackupNormalizer plans. Database browsing and comparison
 are read-only. Live-folder operations create plans with size and hash
-preconditions; the CLI executor applies them later.
+preconditions. Reviewed plans run through the same executor as the CLI, after
+confirmation, with a separate execution database.
 
 ## Run
 
@@ -56,7 +57,7 @@ See the [inventory health guide](../../docs/features/gui-inventory-health/README
 To generate a plan from database panels, set **Plan ID**, then choose **Plan left → right...**
 or **Plan right → left...**. Planning uses the whole selected roots, even when a panel
 shows a subfolder. Review operation counts, copy bytes, conflicts, and skipped links before
-exporting JSON. Inventory databases stay read-only; only an isolated planning snapshot is
+exporting JSON or choosing **Review / execute...**. Inventory databases stay read-only; only an isolated planning snapshot is
 changed. File-versus-directory conflicts block export, while content mismatches remain
 guarded verification operations. See the [database planning guide](../../docs/features/gui-database-planning/README.md).
 
@@ -122,7 +123,15 @@ Their reasons appear in the staged operations window and exported plans.
    followed by a MOVE from the same source.
 5. **Export.** `Save JSON` writes `ui-plan.json`; `Write to DB` writes into
    `ui-plan.db`.
-6. **Execute with the CLI** (the only thing that modifies files):
+6. **Execute.** Choose **Review / execute...**, check the local root paths and
+   execution database, then confirm the run. The execution window shows statuses,
+   copy and hash bytes, elapsed time, errors, and saved logs. Cancel finishes the
+   current operation before stopping. **File → Open execution database...** reopens
+   a saved run for resume or destination verification. See the
+   [execution guide](../../docs/features/gui-execution/README.md).
+
+   The CLI can also apply an exported plan:
+
    ```bash
    dotnet run --project src/BackupNormalizer -- plan import ./ui-plan.json --db ./execution.db --target-path /Volumes/D1
    dotnet run --project src/BackupNormalizer -- execute <plan-id> --db ./execution.db

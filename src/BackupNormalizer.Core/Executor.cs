@@ -1,3 +1,5 @@
+using System.Diagnostics;
+
 namespace BackupNormalizer;
 
 /// <summary>Executor §20-24: pre-validation, crash-safe copy, journaling, resume, conflicts.</summary>
@@ -7,6 +9,8 @@ public sealed class Executor
     private readonly string _algo;
     private readonly string _trashName;
     private readonly IContentHasher _hasher;
+    private Action<long>? _onBytesRead;
+    private Action<long>? _onBytesCopied;
 
     public Executor(Database db, string? algo = null, string trashName = ".backup-normalizer-trash")
     {
@@ -16,16 +20,26 @@ public sealed class Executor
         _hasher = HasherFactory.Create(_algo);
     }
 
-    public sealed record ExecSummary(int Completed, int Failed, int Skipped, int Conflicts);
+    public sealed record ExecSummary(
+        int Completed,
+        int Failed,
+        int Skipped,
+        int Conflicts,
+        bool Canceled = false
+    );
 
     public ExecSummary Execute(
         string planId,
         string? sourcePathOverride = null,
         string? targetPathOverride = null,
         bool resume = false,
-        bool stopOnError = false
+        bool stopOnError = false,
+        IProgress<ExecutionProgress>? progress = null,
+        CancellationToken cancellationToken = default
     )
     {
+        cancellationToken.ThrowIfCancellationRequested();
+        var timer = Stopwatch.StartNew();
         var plan =
             _db.GetPlan(planId) ?? throw new InvalidOperationException($"unknown plan '{planId}'");
         string sourceBasePath = Path.GetFullPath(
@@ -121,7 +135,7 @@ public sealed class Executor
                 try
                 {
                     return string.Equals(
-                        _hasher.HashFile(abs, file.Length),
+                        HashWithProgress(abs, file.Length),
                         op.ExpectedHash,
                         StringComparison.OrdinalIgnoreCase
                     );
@@ -188,19 +202,71 @@ public sealed class Executor
             conflicts = 0;
         int pos = 0,
             total = ops.Count;
+        long copied = 0,
+            read = 0;
+        bool canceled = false;
+        Database.PlanOperationRow? current = null;
+        string currentStatus = OpStatus.Started;
+        TimeSpan lastReport = TimeSpan.MinValue;
+        void Report(string status, string? message = null, bool force = true)
+        {
+            currentStatus = status;
+            if (
+                progress == null
+                || (!force && timer.Elapsed - lastReport < TimeSpan.FromMilliseconds(100))
+            )
+                return;
+            lastReport = timer.Elapsed;
+            progress.Report(
+                new ExecutionProgress(
+                    pos,
+                    total,
+                    current?.Type ?? "",
+                    current?.DestPath ?? current?.SourcePath ?? "",
+                    status,
+                    done,
+                    failed,
+                    skipped,
+                    conflicts,
+                    copied,
+                    read,
+                    timer.Elapsed,
+                    message
+                )
+            );
+        }
+        _onBytesRead = count =>
+        {
+            read += count;
+            Report(currentStatus, force: false);
+        };
+        _onBytesCopied = count =>
+        {
+            copied += count;
+            Report(currentStatus, force: false);
+        };
         foreach (var op in ops)
         {
+            if (cancellationToken.IsCancellationRequested)
+            {
+                canceled = true;
+                break;
+            }
+            current = op;
             pos++;
+            Report(OpStatus.Started);
             string tag = $"[{pos}/{total}]";
             if (op.Status == OpStatus.Completed)
             {
                 done++;
+                Report(OpStatus.Completed, "Already completed; retained on resume.");
                 continue;
             }
             if (op.Type == OpType.SkipLink)
             {
                 Skip(op.Id, op.SkipReason ?? "Link excluded from content processing.");
                 skipped++;
+                Report(OpStatus.Skipped, op.SkipReason);
                 continue;
             }
             if (op.Type is OpType.Mkdir)
@@ -213,17 +279,20 @@ public sealed class Executor
                     Mark(op.Id, OpStatus.Completed);
                     Journal(op.Id, "INFO", $"{tag} MKDIR {op.DestRoot}:{op.DestPath}");
                     done++;
+                    Report(OpStatus.Completed);
                 }
                 catch (SkipLinkException ex)
                 {
                     Skip(op.Id, ex.Message);
                     skipped++;
+                    Report(OpStatus.Skipped, ex.Message);
                 }
                 catch (Exception ex)
                 {
                     Mark(op.Id, OpStatus.Failed, ex.Message);
                     Journal(op.Id, "ERROR", $"{tag} {ex.Message}");
                     failed++;
+                    Report(OpStatus.Failed, ex.Message);
                     if (stopOnError)
                     {
                         break;
@@ -272,17 +341,20 @@ public sealed class Executor
                     $"{tag} {op.Type} ok {op.SourceRoot}:{op.SourcePath} -> {op.DestRoot}:{op.DestPath} size={op.ExpectedSize} hash={op.ExpectedHash}"
                 );
                 done++;
+                Report(OpStatus.Completed);
             }
             catch (SkipLinkException ex)
             {
                 Skip(op.Id, ex.Message);
                 skipped++;
+                Report(OpStatus.Skipped, ex.Message);
             }
             catch (ConflictException ex)
             {
                 Mark(op.Id, OpStatus.Conflict, ex.Message);
                 Journal(op.Id, "WARN", $"{tag} CONFLICT {ex.Message}");
                 conflicts++;
+                Report(OpStatus.Conflict, ex.Message);
                 if (stopOnError)
                 {
                     break;
@@ -293,6 +365,7 @@ public sealed class Executor
                 Mark(op.Id, OpStatus.Failed, ex.Message);
                 Journal(op.Id, "ERROR", $"{tag} {op.Type} failed: {ex.Message}");
                 failed++;
+                Report(OpStatus.Failed, ex.Message);
                 if (stopOnError)
                 {
                     break;
@@ -302,10 +375,16 @@ public sealed class Executor
         // Update plan status
         _db.UpdatePlanStatus(
             planId,
-            failed == 0 && conflicts == 0 ? PlanStatus.Completed : PlanStatus.Partial
+            !canceled && failed == 0 && conflicts == 0 ? PlanStatus.Completed : PlanStatus.Partial
         );
-        return new ExecSummary(done, failed, skipped, conflicts);
+        Report(canceled ? "Canceled" : "Finished");
+        _onBytesRead = null;
+        _onBytesCopied = null;
+        return new ExecSummary(done, failed, skipped, conflicts, canceled);
     }
+
+    private string HashWithProgress(string path, long expectedSize) =>
+        _hasher.HashFile(path, expectedSize, _onBytesRead);
 
     private sealed class ConflictException : Exception
     {
@@ -358,7 +437,7 @@ public sealed class Executor
 
         if (op.ExpectedHash != null)
         {
-            string actual = _hasher.HashFile(dst, fi.Length);
+            string actual = HashWithProgress(dst, fi.Length);
             if (!string.Equals(actual, op.ExpectedHash, StringComparison.OrdinalIgnoreCase))
             {
                 throw new ConflictException($"destination hash mismatch at {dst}");
@@ -384,7 +463,7 @@ public sealed class Executor
                 if (
                     landed.Length == op.ExpectedSize
                     && string.Equals(
-                        _hasher.HashFile(dst, landed.Length),
+                        HashWithProgress(dst, landed.Length),
                         op.ExpectedHash,
                         StringComparison.OrdinalIgnoreCase
                     )
@@ -412,7 +491,7 @@ public sealed class Executor
         // Optional hash check on source before destructive move
         if (op.ExpectedHash != null)
         {
-            string sh = _hasher.HashFile(src, sfi.Length);
+            string sh = HashWithProgress(src, sfi.Length);
             if (!string.Equals(sh, op.ExpectedHash, StringComparison.OrdinalIgnoreCase))
             {
                 throw new ConflictException($"source content changed (hash mismatch): {src}");
@@ -428,7 +507,7 @@ public sealed class Executor
         if (op.ExpectedHash != null)
         {
             var dfi = new FileInfo(dst);
-            string dh = _hasher.HashFile(dst, dfi.Length);
+            string dh = HashWithProgress(dst, dfi.Length);
             if (!string.Equals(dh, op.ExpectedHash, StringComparison.OrdinalIgnoreCase))
             {
                 throw new IOException($"moved file hash mismatch: {dst}");
@@ -473,7 +552,7 @@ public sealed class Executor
             var dfi = new FileInfo(dst);
             if (dfi.Length == op.ExpectedSize && op.ExpectedHash != null)
             {
-                string dh = _hasher.HashFile(dst, dfi.Length);
+                string dh = HashWithProgress(dst, dfi.Length);
                 if (string.Equals(dh, op.ExpectedHash, StringComparison.OrdinalIgnoreCase))
                 {
                     return; // -> KEEP
@@ -516,7 +595,13 @@ public sealed class Executor
             )
         )
         {
-            ins.CopyTo(outs, Buf);
+            var buffer = new byte[Buf];
+            int bytes;
+            while ((bytes = ins.Read(buffer, 0, buffer.Length)) > 0)
+            {
+                outs.Write(buffer, 0, bytes);
+                _onBytesCopied?.Invoke(bytes);
+            }
             outs.Flush(true);
         }
         var tfi = new FileInfo(tmp);
@@ -531,7 +616,7 @@ public sealed class Executor
         }
         if (op.ExpectedHash != null)
         {
-            string dh = _hasher.HashFile(tmp, tfi.Length);
+            string dh = HashWithProgress(tmp, tfi.Length);
             if (!string.Equals(dh, op.ExpectedHash, StringComparison.OrdinalIgnoreCase))
             {
                 try
@@ -574,7 +659,7 @@ public sealed class Executor
             throw new ConflictException($"refusing trash without content identity: {src}");
         }
 
-        string sh = _hasher.HashFile(src, sfi.Length);
+        string sh = HashWithProgress(src, sfi.Length);
         if (!string.Equals(sh, op.ExpectedHash, StringComparison.OrdinalIgnoreCase))
         {
             throw new ConflictException($"refusing trash: source changed: {src}");
@@ -609,7 +694,7 @@ public sealed class Executor
         {
             // Cross-filesystem fallback: copy+verify+delete
             File.Copy(src, dst, false);
-            string dh = _hasher.HashFile(dst, new FileInfo(dst).Length);
+            string dh = HashWithProgress(dst, new FileInfo(dst).Length);
             if (
                 op.ExpectedHash != null
                 && !string.Equals(dh, op.ExpectedHash, StringComparison.OrdinalIgnoreCase)

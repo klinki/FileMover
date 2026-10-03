@@ -7,6 +7,8 @@ namespace BackupNormalizer.Ui.Views;
 
 public partial class DatabasePlanReviewWindow : Window
 {
+    public System.Func<PlanDoc, System.Threading.Tasks.Task>? ExecutePlanAsync { get; init; }
+
     public DatabasePlanReviewWindow(DatabasePlanReviewViewModel viewModel)
     {
         InitializeComponent();
@@ -54,6 +56,17 @@ public partial class DatabasePlanReviewWindow : Window
         catch (System.Exception ex)
         {
             viewModel.ReportExportError("Plan JSON export failed: " + ex.Message);
+        }
+    }
+
+    private async void OnExecutePlan(object? sender, RoutedEventArgs args)
+    {
+        if (
+            ExecutePlanAsync != null
+            && DataContext is DatabasePlanReviewViewModel { CanExportJson: true } viewModel
+        )
+        {
+            await ExecutePlanAsync(viewModel.Document);
         }
     }
 

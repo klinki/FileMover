@@ -198,12 +198,21 @@ public static class Cli
         for (int index = 0; index < args.Length; index++)
         {
             if (args[index] == "--json")
+            {
                 continue;
+            }
+
             if (args[index] != "--inventory" || ++index >= args.Length)
+            {
                 return Fail("coverage requires repeated --inventory DEVICE=DATABASE arguments");
+            }
+
             int separator = args[index].IndexOf('=');
             if (separator <= 0 || separator == args[index].Length - 1)
+            {
                 return Fail("--inventory requires DEVICE=DATABASE");
+            }
+
             inventories.Add((args[index][..separator], args[index][(separator + 1)..]));
         }
         var inputs = new List<CoverageInput>();
@@ -231,29 +240,37 @@ public static class Cli
             "Recorded inventories, not a live verification. Assign the same label to roots and exports from the same physical device."
         );
         foreach (var source in report.Sources)
+        {
             Console.WriteLine(
                 TerminalText(
                     $"{source.Input.DeviceId}: {source.Input.DatabasePath} [{source.Input.RootId}] | {source.ScanStatus ?? "not scanned"} | {BackupCoverage.ScanAge(source.ScannedUtc)} | {(source.LocallyAvailable ? "available locally" : "offline / not available locally")}"
                 )
             );
+        }
+
         foreach (var content in report.Content)
         {
             Console.WriteLine(
                 $"{content.DeviceCount}/{report.Devices.Count} devices | {content.Size:N0} bytes | SHA-256 {content.Digest}"
             );
             foreach (var location in content.Locations)
+            {
                 Console.WriteLine(
                     TerminalText(
                         $"  {location.DeviceId} [{location.RootId}] {location.RelativePath}"
                     )
                 );
+            }
         }
         foreach (var unknown in report.Unverified)
+        {
             Console.WriteLine(
                 TerminalText(
                     $"UNVERIFIED: {unknown.Location.DeviceId} [{unknown.Location.RootId}] {unknown.Location.RelativePath}: {unknown.Reason}"
                 )
             );
+        }
+
         return 0;
     }
 
@@ -1035,101 +1052,24 @@ public static class Cli
         }
 
         string db = Opt(a, "--db", LoadConfig(a).Database);
-        string? sourcePathOverride = Has(a, "--source-path") ? Opt(a, "--source-path", "") : null;
-        string? targetPathOverride = Has(a, "--target-path") ? Opt(a, "--target-path", "") : null;
-        using var d = new Database(db);
-        var plan = d.GetPlan(a[0]);
-        if (plan == null)
+        string? sourcePath = Has(a, "--source-path") ? Opt(a, "--source-path", "") : null;
+        string? targetPath = Has(a, "--target-path") ? Opt(a, "--target-path", "") : null;
+        using var database = Database.OpenReadOnly(db, pooling: false);
+        if (!database.PlanExists(a[0]))
         {
             return Fail($"unknown plan '{a[0]}'");
         }
 
-        string sourcePath = Path.GetFullPath(
-            sourcePathOverride ?? plan.ExecutionSourceRootPath ?? plan.SourceRootPath
-        );
-        string targetPath = Path.GetFullPath(
-            targetPathOverride ?? plan.ExecutionTargetRootPath ?? plan.TargetRootPath
-        );
-        int ok = 0,
-            bad = 0,
-            skipped = 0;
-        var hasher = HasherFactory.Create(null);
-        var operations = d.ListPlanOperations(a[0]);
-        if (
-            operations.Any(operation =>
-                operation.SourceKind == SourceScope.Source && operation.Type != OpType.SkipLink
-            ) && Paths.RootsOverlap(sourcePath, targetPath)
-        )
+        var result = PlanVerifier.Verify(database, a[0], sourcePath, targetPath);
+        foreach (var issue in result.Issues)
         {
-            return Fail("source and target paths overlap; verification requires disjoint roots");
+            Console.WriteLine($"{issue.Path}: {issue.Message}");
         }
 
-        foreach (var operation in operations)
-        {
-            string type = operation.Type;
-            if (type == OpType.SkipLink || operation.Status == OpStatus.Skipped)
-            {
-                skipped++;
-                continue;
-            }
-            if (type is OpType.Keep or OpType.Verify or OpType.Move or OpType.Copy)
-            {
-                string? dp = operation.DestPath;
-                if (operation.DestRoot != plan.TargetRootId || dp == null)
-                {
-                    continue;
-                }
-
-                string abs;
-                try
-                {
-                    abs = Paths.CombineRoot(targetPath, dp);
-                }
-                catch (InvalidOperationException)
-                {
-                    Console.WriteLine($"INVALID-PATH {dp}");
-                    bad++;
-                    continue;
-                }
-                if (Paths.FindLink(targetPath, dp) is { } link)
-                {
-                    Console.WriteLine($"SKIPPED {dp}: link {link}");
-                    skipped++;
-                    continue;
-                }
-                if (!File.Exists(abs))
-                {
-                    Console.WriteLine($"MISSING {plan.TargetRootId}:{dp}");
-                    bad++;
-                    continue;
-                }
-                long sz = operation.ExpectedSize;
-                string? eh = operation.ExpectedHash;
-                var fi = new FileInfo(abs);
-                if (sz != 0 && fi.Length != sz)
-                {
-                    Console.WriteLine($"SIZE-MISMATCH {plan.TargetRootId}:{dp}");
-                    bad++;
-                    continue;
-                }
-                if (
-                    eh != null
-                    && !string.Equals(
-                        hasher.HashFile(abs, fi.Length),
-                        eh,
-                        StringComparison.OrdinalIgnoreCase
-                    )
-                )
-                {
-                    Console.WriteLine($"HASH-MISMATCH {plan.TargetRootId}:{dp}");
-                    bad++;
-                    continue;
-                }
-                ok++;
-            }
-        }
-        Console.WriteLine($"verify {a[0]}: ok={ok} bad={bad} skipped={skipped}");
-        return bad == 0 ? 0 : 3;
+        Console.WriteLine(
+            $"verify {a[0]}: ok={result.Ok} bad={result.Bad} skipped={result.Skipped}"
+        );
+        return result.Bad == 0 ? 0 : 3;
     }
 
     private static int Purge(string[] a)

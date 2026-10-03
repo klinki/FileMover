@@ -43,8 +43,8 @@ public sealed partial class StagedOpItem : ObservableObject
 }
 
 /// <summary>
-/// Total Commander style planner: two drive-local panels, plan-only staging.
-/// Nothing is executed here — Generate writes an executor-compatible plan JSON/DB.
+/// Total Commander style planner with two drive-local panels and reviewed execution.
+/// Staging records operations; execution starts only after a separate confirmation.
 /// </summary>
 public sealed partial class MainViewModel : ViewModelBase
 {
@@ -68,8 +68,7 @@ public sealed partial class MainViewModel : ViewModelBase
     public partial bool IsLeftActive { get; set; } = true;
 
     [ObservableProperty]
-    public partial string StatusMessage { get; set; } =
-        "Plan-only mode: nothing is executed from this UI.";
+    public partial string StatusMessage { get; set; } = "Stage, export, or review a plan.";
 
     [ObservableProperty]
     public partial string PlanSummary { get; set; } = "No staged operations.";

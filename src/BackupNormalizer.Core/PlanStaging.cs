@@ -4,8 +4,8 @@ namespace BackupNormalizer;
 
 /// <summary>
 /// Plan staging for the Total Commander style UI (drive-local, plan-only).
-/// The UI never touches user files: it records intents with preconditions
-/// (size + full hash) so the existing <see cref="Executor"/> can run them
+/// Staging records size and full-hash preconditions without changing user files,
+/// so the existing <see cref="Executor"/> can run the operations
 /// later, including on another drive via --target-path.
 /// </summary>
 public static class PlanStaging

@@ -20,7 +20,11 @@ public partial class MainWindow
         var review = await Vm.PreparePlanAsync(direction);
         if (review != null)
         {
-            await new DatabasePlanReviewWindow(review).ShowDialog(this);
+            var window = new DatabasePlanReviewWindow(review)
+            {
+                ExecutePlanAsync = ShowExecutionWindowAsync,
+            };
+            await window.ShowDialog(this);
         }
     }
 }

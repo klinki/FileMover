@@ -1,0 +1,62 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:BackupNormalizer.Ui.ViewModels"
+        x:Class="BackupNormalizer.Ui.Views.PlanExecutionWindow"
+        x:DataType="vm:PlanExecutionViewModel"
+        Title="Plan execution" Width="1100" Height="800" MinWidth="800" MinHeight="660"
+        WindowStartupLocation="CenterOwner">
+  <Grid Margin="12" RowDefinitions="Auto,Auto,Auto,*,Auto,Auto,Auto" RowSpacing="8">
+    <StackPanel Spacing="5">
+      <TextBlock Text="Review and execute plan" FontSize="22" FontWeight="SemiBold" />
+      <TextBlock Text="{Binding Summary}" TextWrapping="Wrap" />
+    </StackPanel>
+    <Grid Grid.Row="1" ColumnDefinitions="Auto,*,Auto" RowDefinitions="Auto,Auto,Auto" ColumnSpacing="8" RowSpacing="6">
+      <TextBlock Text="Local source root" VerticalAlignment="Center" />
+      <TextBox Grid.Column="1" Text="{Binding SourcePath}" IsEnabled="{Binding CanEditRoots}" />
+      <Button Grid.Column="2" Content="Browse..." Tag="Source" Click="OnBrowseRoot" IsEnabled="{Binding CanEditRoots}" />
+      <TextBlock Grid.Row="1" Text="Local target root" VerticalAlignment="Center" />
+      <TextBox Grid.Row="1" Grid.Column="1" Text="{Binding TargetPath}" IsEnabled="{Binding CanEditRoots}" />
+      <Button Grid.Row="1" Grid.Column="2" Content="Browse..." Tag="Target" Click="OnBrowseRoot" IsEnabled="{Binding CanEditRoots}" />
+      <TextBlock Grid.Row="2" Text="Execution database" VerticalAlignment="Center" />
+      <TextBox Grid.Row="2" Grid.Column="1" Text="{Binding DatabasePath}" IsEnabled="{Binding CanEditJournal}"
+               ToolTip.Tip="A separate database records completed operations so this run can be resumed after a restart." />
+      <Button Grid.Row="2" Grid.Column="2" Content="Choose..." Click="OnChooseJournal" IsEnabled="{Binding CanEditJournal}" />
+    </Grid>
+    <WrapPanel Grid.Row="2" Orientation="Horizontal" ItemSpacing="12">
+      <CheckBox Content="Stop on first error or conflict" IsChecked="{Binding StopOnError}" IsEnabled="{Binding CanRun}" />
+      <CheckBox Content="Verify file destinations after execution" IsChecked="{Binding VerifyAfterExecution}" IsEnabled="{Binding CanRun}" />
+      <TextBlock Text="Saved execution roots are locked." IsVisible="{Binding RootsBound}" VerticalAlignment="Center" />
+    </WrapPanel>
+    <DataGrid Grid.Row="3" ItemsSource="{Binding Operations}" AutoGenerateColumns="False"
+              IsReadOnly="True" CanUserResizeColumns="True" CanUserSortColumns="False">
+      <DataGrid.Columns>
+        <DataGridTextColumn Header="#" Binding="{Binding Id}" Width="45" />
+        <DataGridTextColumn Header="Operation" Binding="{Binding Type}" Width="90" />
+        <DataGridTextColumn Header="Source" Binding="{Binding Source}" Width="*" />
+        <DataGridTextColumn Header="Destination" Binding="{Binding Destination}" Width="*" />
+        <DataGridTextColumn Header="Bytes" Binding="{Binding SizeText}" Width="95" />
+        <DataGridTextColumn Header="Status" Binding="{Binding Status}" Width="100" />
+        <DataGridTextColumn Header="Verification" Binding="{Binding Verification}" Width="140" />
+        <DataGridTextColumn Header="Details" Binding="{Binding Note}" Width="2*" />
+      </DataGrid.Columns>
+    </DataGrid>
+    <StackPanel Grid.Row="4" Spacing="5">
+      <ProgressBar Value="{Binding ProgressPercent}" Minimum="0" Maximum="100" Height="8" />
+      <TextBlock Text="{Binding ProgressText}" TextWrapping="Wrap" />
+      <TextBlock Text="{Binding CurrentPath}" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding CurrentPath}" />
+      <TextBlock Text="{Binding TransferText}" TextWrapping="Wrap" />
+    </StackPanel>
+    <Expander Grid.Row="5" Header="Execution log" HorizontalAlignment="Stretch">
+      <ListBox ItemsSource="{Binding Activity}" Height="120" />
+    </Expander>
+    <StackPanel Grid.Row="6" Spacing="8">
+      <TextBlock Text="{Binding Status}" TextWrapping="Wrap" />
+      <WrapPanel Orientation="Horizontal" ItemSpacing="8">
+        <Button Content="{Binding RunLabel}" Click="OnExecute" IsEnabled="{Binding CanRun}" />
+        <Button Content="Verify destinations" Click="OnVerify" IsEnabled="{Binding CanVerify}" />
+        <Button Content="Cancel after current operation" Command="{Binding CancelCommand}" IsEnabled="{Binding IsRunning}" />
+        <Button Content="Close" Click="OnClose" />
+      </WrapPanel>
+    </StackPanel>
+  </Grid>
+</Window>

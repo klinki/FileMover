@@ -18,7 +18,7 @@ public partial class MainWindow
 
     private async void OnClosingWithInventoryJob(object? sender, WindowClosingEventArgs args)
     {
-        if (_jobShutdownAllowed || Vm?.Job.IsRunning != true)
+        if (_jobShutdownAllowed || (Vm?.Job.IsRunning != true && Vm?.Execution?.IsRunning != true))
         {
             return;
         }
@@ -31,6 +31,11 @@ public partial class MainWindow
 
         _waitingForJobShutdown = true;
         await Vm.CancelAndWaitForJobAsync();
+        if (Vm.Execution != null)
+        {
+            await Vm.Execution.CancelAndWaitAsync();
+        }
+
         _jobShutdownAllowed = true;
         Close();
     }
