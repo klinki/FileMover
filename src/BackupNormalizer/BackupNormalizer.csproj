@@ -13,6 +13,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\BackupNormalizer.Core\BackupNormalizer.Core.csproj" />
+    <InternalsVisibleTo Include="BackupNormalizer.Tests" />
   </ItemGroup>
 
 </Project>

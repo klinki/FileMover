@@ -5,6 +5,8 @@ namespace BackupNormalizer;
 
 public sealed record StorageRootRow(string Id, string Name, string Path, bool Writable, string FileSystemId, string CaseSensitivity, string CreatedUtc);
 public sealed record ScanRow(long Id, string StorageRootId, string StartedUtc, string? CompletedUtc, string Status);
+public sealed record ScanCheckpointRow(string StorageRootId, string RootPath, string VolumeIdentity,
+    string RootIdentity, string JournalId, long NextUsn, long ScanId);
 public sealed record FileEntryRow(long Id, string StorageRootId, string RelativePath, string Name, long Size, string ModifiedUtc, string? CreatedUtc, string? FileIdentity, long LastSeenScanId, string Status, string? Error,
     string EntryKind = BackupNormalizer.EntryKind.File, string? LinkTarget = null, string? TargetPath = null, string? LinkNote = null);
 public sealed record FileHashRow(long FileEntryId, string Algorithm, string Digest, long SizeAtHash, string ModifiedUtcAtHash, string CalculatedUtc, string State);
@@ -60,6 +62,8 @@ public sealed class Database : IDisposable
             // Keep the connection open so connection-scoped settings such as synchronous=NORMAL
             // remain in effect for the lifetime of this database facade.
             Context.Database.OpenConnection();
+            ((SqliteConnection)Context.Database.GetDbConnection()).CreateCollation("BN_PATH",
+                (left, right) => (OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal).Compare(left, right));
             if (!readOnly)
             {
                 Context.Database.ExecuteSqlRaw("PRAGMA journal_mode=WAL;");
@@ -107,6 +111,7 @@ public sealed class Database : IDisposable
                     .SetProperty(x => x.CaseSensitivity, r.CaseSensitivity));
             if (!Paths.PathEquals(previousPath, r.Path))
             {
+                ClearScanCheckpoint(r.Id);
                 Context.FileHashes
                     .Where(hash => Context.FileEntries.Any(entry =>
                         entry.Id == hash.FileEntryId && entry.StorageRootId == r.Id))
@@ -170,6 +175,73 @@ public sealed class Database : IDisposable
         .OrderByDescending(x => x.Id)
         .Select(x => x.Status)
         .FirstOrDefault();
+
+    public ScanRow? LatestScan(string rootId) => Context.Scans.AsNoTracking()
+        .Where(x => x.StorageRootId == rootId).OrderByDescending(x => x.Id)
+        .Select(x => new ScanRow(x.Id, x.StorageRootId, x.StartedUtc, x.CompletedUtc, x.Status)).FirstOrDefault();
+
+    public ScanCheckpointRow? GetScanCheckpoint(string rootId)
+    {
+        // Opening historical inventories read-only must not require the new table.
+        if (_readOnly && !HasColumn("ScanCheckpoint", "NextUsn")) return null;
+        return Context.ScanCheckpoints.AsNoTracking().Where(x => x.StorageRootId == rootId)
+            .Select(x => new ScanCheckpointRow(x.StorageRootId, x.RootPath, x.VolumeIdentity,
+                x.RootIdentity, x.JournalId, x.NextUsn, x.ScanId)).FirstOrDefault();
+    }
+
+    public void SaveScanCheckpoint(ScanCheckpointRow checkpoint)
+    {
+        EnsureWritable();
+        ClearScanCheckpoint(checkpoint.StorageRootId);
+        AddAndSave(Context.ScanCheckpoints, new ScanCheckpointEntity
+        {
+            StorageRootId = checkpoint.StorageRootId, RootPath = checkpoint.RootPath,
+            VolumeIdentity = checkpoint.VolumeIdentity, RootIdentity = checkpoint.RootIdentity,
+            JournalId = checkpoint.JournalId, NextUsn = checkpoint.NextUsn, ScanId = checkpoint.ScanId
+        });
+    }
+
+    public void ClearScanCheckpoint(string rootId)
+    {
+        EnsureWritable();
+        Context.ScanCheckpoints.Where(x => x.StorageRootId == rootId).ExecuteDelete();
+    }
+
+    public void MarkRootHashesStale(string rootId)
+    {
+        EnsureWritable();
+        Context.FileHashes.Where(h => Context.FileEntries.Any(e => e.Id == h.FileEntryId && e.StorageRootId == rootId))
+            .ExecuteUpdate(setters => setters.SetProperty(h => h.State, HashState.Stale));
+    }
+
+    public void MarkPathHashesStale(string rootId, string relativePath)
+    {
+        EnsureWritable();
+        Context.FileHashes.Where(h => Context.FileEntries.Any(e => e.Id == h.FileEntryId
+                && e.StorageRootId == rootId && e.RelativePath == relativePath))
+            .ExecuteUpdate(setters => setters.SetProperty(h => h.State, HashState.Stale));
+    }
+
+    public void MarkPathMissing(string rootId, string relativePath)
+    {
+        EnsureWritable();
+        Context.FileEntries.Where(e => e.StorageRootId == rootId && e.RelativePath == relativePath)
+            .ExecuteUpdate(setters => setters.SetProperty(e => e.Status, FileStatus.Missing)
+                .SetProperty(e => e.Error, (string?)null));
+    }
+
+    internal void RetireDatabasePaths(string rootId, string[] relativePaths)
+    {
+        EnsureWritable();
+        if (relativePaths.Length == 0) return;
+        var entries = Context.FileEntries.Where(e => e.StorageRootId == rootId
+            && relativePaths.Contains(EF.Functions.Collate(e.RelativePath, "BN_PATH")));
+        Context.FileHashes.Where(h => entries.Any(e => e.Id == h.FileEntryId))
+            .ExecuteUpdate(setters => setters.SetProperty(h => h.State, HashState.Stale));
+        entries.Where(e => e.Status != FileStatus.Missing)
+            .ExecuteUpdate(setters => setters.SetProperty(e => e.Status, FileStatus.Missing)
+                .SetProperty(e => e.Error, (string?)null));
+    }
 
     public int MarkUnseenFilesMissing(string rootId, long scanId)
     {

@@ -68,6 +68,40 @@ and comparing the inventories. Unexpected read or parsing failures after an
 MFT scan starts fail that scan without marking unseen files missing. Retry
 with `--mft off`; `auto` falls back only when MFT initialization is unavailable.
 
+### Incremental NTFS rescans
+
+Scanning defaults to `--usn auto`. On a local NTFS volume with an existing USN
+change journal and sufficient access, the first successful scan stores a
+checkpoint. Later scans refresh changed file and link entries and mark deleted
+paths missing, preserving untouched inventory and hashes. The summary reports
+entries refreshed using USN, rather than the total inventory size. Hashing stays
+a separate step:
+
+```bash
+bn --elevate scan photos --db ./source.db
+bn hash --needed --db ./source.db
+bn scan photos --db ./source.db --full      # enumerate everything again
+bn scan photos --db ./source.db --usn off  # full scan without a journal checkpoint
+```
+
+Set `"usnMode": "off"` in `backup-normalizer.json` to disable journal use by
+default. Journal access normally requires administrator rights. The app reads
+existing journals and does not create them. Other filesystems, network shares,
+and unavailable journals use full scans; `--mft` selects how those full scans
+enumerate NTFS metadata.
+
+Journal resets, lost history, moved or replaced roots, incomplete scans,
+directory namespace or link changes, hard-link changes, and ambiguous paths
+trigger a full scan. An untrustworthy change window also invalidates cached
+hashes conservatively, so the next `hash --needed` can require reading otherwise
+unchanged files. Known content writes invalidate hashes even when size and
+timestamp match the previous scan. Checkpoints advance only with successful
+inventory updates. Older databases establish their first checkpoint through a
+full scan; they do not become complete merely by upgrading.
+
+See the [implementation plan](docs/features/usn-incremental-scans/implementation-plan.md)
+and [delivery notes](docs/features/usn-incremental-scans/delivery.md) for scope and verification.
+
 `plan` only writes operations to the target database. It keeps identical target files, moves matching target files to desired paths, and copies bytes from the source when needed. It moves an extra target file to recoverable trash only when the target has another verified copy of its content. A file at a desired path with different content becomes a conflict; the planner does not overwrite it. Empty directories are outside the inventory.
 
 ## Execute

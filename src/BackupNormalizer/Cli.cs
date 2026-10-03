@@ -42,7 +42,7 @@ public static class Cli
               init [--db PATH] [--config PATH]
               root add <id> <path> [--name N] [--writable true|false] [--db PATH]
               root list [--db PATH]
-              scan <rootId|--all> [--db PATH] [--mft off|auto|require] [--no-progress]
+              scan <rootId|--all> [--db PATH] [--mft off|auto|require] [--usn auto|off] [--full] [--no-progress]
               hash <rootId> --all | hash --needed [--db PATH] [--parallelism N] [--no-progress]
               plan --source-db S.db --source-root R --target-db T.db --target-root R [--plan ID]
               plan show <plan-id> [--db PATH] | plan export <plan-id> [--format json] [--output F] [--db PATH]
@@ -57,6 +57,8 @@ public static class Cli
             for each diff or plan. Automatic plans require fully scanned, disjoint roots.
             --mft auto uses fast NTFS direct enumeration on Windows (needs NTFS + admin, else falls back);
             --mft require fails loudly instead. --elevate restarts the app elevated via UAC when needed.
+            --usn auto refreshes changed entries from an existing NTFS journal after a complete baseline scan.
+            --full forces full enumeration; --usn off disables journal checkpoints. Unavailable journals use full scans.
             """);
         return 0;
     }
@@ -113,8 +115,9 @@ public static class Cli
         string db = Opt(a, "--db", AppConfig.Load(Opt(a, "--config", AppConfig.DefaultPath)).Database);
         string algo = Opt(a, "--hash-algo", AppConfig.Load(Opt(a, "--config", AppConfig.DefaultPath)).HashAlgorithm);
         string mft = Opt(a, "--mft", AppConfig.Load(Opt(a, "--config", AppConfig.DefaultPath)).MftMode);
+        string usn = Opt(a, "--usn", AppConfig.Load(Opt(a, "--config", AppConfig.DefaultPath)).UsnMode);
         using var d = new Database(db);
-        var sc = new Scanner(d, algo, mft);
+        var sc = new Scanner(d, algo, mft, usn);
         bool showProgress = !Has(a, "--no-progress") && !Console.IsOutputRedirected;
         int totalErrors = 0;
         int RunRootErrors(string rootId, string label, out int scanned)
@@ -122,14 +125,24 @@ public static class Cli
             int estimate = 0;
             try { estimate = d.CountFiles(rootId); } catch { }
             ScanProgressRenderer? renderer = showProgress ? new ScanProgressRenderer(label, estimate) : null;
+            var scanErrors = new List<ScanError>();
             try
             {
-                var progress = renderer == null ? null : new Progress<ScanProgress>(p => renderer.Report(p));
-                var (s, e) = sc.ScanRoot(rootId, progress);
+                var (s, e) = sc.ScanRoot(rootId, renderer, scanErrors.Add, full: Has(a, "--full"));
                 scanned = s;
                 return e;
             }
-            finally { renderer?.Finish(); }
+            finally
+            {
+                renderer?.Finish();
+                if (showProgress && sc.LastScanFallbackReason != null)
+                    Log.Info(new string($"scan {rootId}: {sc.LastScanFallbackReason}".Select(c => char.IsControl(c) ? ' ' : c).ToArray()));
+                foreach (var error in scanErrors)
+                {
+                    string message = $"scan {error.RootId}: ERROR \"{error.Path}\": {error.Message}";
+                    Console.Error.WriteLine(new string(message.Select(c => char.IsControl(c) ? ' ' : c).ToArray()));
+                }
+            }
         }
         if (a[0] == "--all")
         {
@@ -137,39 +150,82 @@ public static class Cli
             {
                 int rootErrors = RunRootErrors(r.Id, r.Id, out int rootScanned);
                 totalErrors += rootErrors;
-                Console.WriteLine($"scan {r.Id}: {rootScanned} entries, {rootErrors} errors ({(rootErrors == 0 ? "complete" : "incomplete")})");
+                Console.WriteLine(Summary(r.Id, rootScanned, rootErrors));
             }
             return totalErrors == 0 ? 0 : 3;
         }
         int errors = RunRootErrors(a[0], a[0], out int scanned);
-        Console.WriteLine($"scan {a[0]}: {scanned} entries, {errors} errors ({(errors == 0 ? "complete" : "incomplete")})");
+        Console.WriteLine(Summary(a[0], scanned, errors));
         return errors == 0 ? 0 : 3;
+        string Summary(string id, int count, int issues)
+            => $"scan {id}: {count} {(sc.LastScanWasIncremental ? "entries refreshed using USN" : "entries")}, {issues} errors ({(issues == 0 ? "complete" : "incomplete")})";
     }
 
     /// <summary>Single-line TTY progress; silent when output is redirected.</summary>
-    private sealed class ScanProgressRenderer
+    internal sealed class ScanProgressRenderer : IProgress<ScanProgress>
     {
         private readonly string _label;
         private readonly int _estimate;
+        private readonly TextWriter _output;
+        private readonly Func<int> _windowWidth;
+        private ScanProgress? _latest;
+        private TimeSpan? _lastUpdate;
+        private int _lineWidth;
+        private bool _finished;
 
-        public ScanProgressRenderer(string label, int estimate)
+        public ScanProgressRenderer(string label, int estimate, TextWriter? output = null, Func<int>? windowWidth = null)
         {
             _label = label;
             _estimate = estimate;
+            _output = output ?? Console.Out;
+            _windowWidth = windowWidth ?? (() => Console.WindowWidth);
         }
 
         public void Report(ScanProgress p)
         {
-            string pct = _estimate > 0 ? $" ({Math.Min(99, p.Scanned * 100 / _estimate)}% of ~{_estimate:N0})" : "";
-            double rate = p.Elapsed.TotalSeconds > 0 ? p.Scanned / p.Elapsed.TotalSeconds : 0;
-            string dir = p.CurrentPath.Length > 40 ? "…" + p.CurrentPath[^39..] : p.CurrentPath;
-            string line = $"scan {_label}: {p.Scanned:N0} entries{pct} | {rate:N0}/s | {p.Elapsed:mm\\:ss} | {dir}";
-            try { Console.Write("\r" + line.PadRight(110)); } catch { }
+            if (_finished) return;
+            _latest = p;
+            if (_lastUpdate.HasValue && p.Elapsed >= _lastUpdate.Value
+                && p.Elapsed - _lastUpdate.Value < TimeSpan.FromMilliseconds(200)) return;
+            Render(p);
+        }
+
+        private void Render(ScanProgress p)
+        {
+            _lastUpdate = p.Elapsed;
+            try
+            {
+                int columns = _windowWidth();
+                int width = columns > 1 ? columns - 1 : 120;
+                string pct = !p.Incremental && _estimate > 0 ? $" ({Math.Min(99, 100L * p.Scanned / _estimate)}% of ~{_estimate:N0})" : "";
+                double rate = p.Elapsed.TotalSeconds > 0 ? p.Scanned / p.Elapsed.TotalSeconds : 0;
+                string dir = p.CurrentPath.Length > 40 ? "…" + p.CurrentPath[^39..] : p.CurrentPath;
+                string line = $"scan {_label}: {p.Scanned:N0} {(p.Incremental ? "entries refreshed using USN" : "entries")}{pct} | {rate:N0}/s | {p.Elapsed:mm\\:ss} | {dir}";
+                line = new string(line.Select(c => char.IsControl(c) ? ' ' : c).ToArray());
+
+                // Reserve two cells for non-ASCII characters so wide paths cannot wrap.
+                int length = 0, cells = 0;
+                foreach (char c in line)
+                {
+                    int cellWidth = char.IsAscii(c) ? 1 : 2;
+                    if (cells + cellWidth > width) break;
+                    cells += cellWidth;
+                    length++;
+                }
+                if (length > 0 && char.IsHighSurrogate(line[length - 1])) { length--; cells -= 2; }
+                int padding = Math.Max(0, Math.Min(_lineWidth, width) - cells);
+                _output.Write("\r" + line[..length] + new string(' ', padding));
+                _lineWidth = cells;
+            }
+            catch { }
         }
 
         public void Finish()
         {
-            try { Console.WriteLine(); } catch { }
+            if (_finished) return;
+            _finished = true;
+            if (_latest != null) Render(_latest);
+            try { _output.WriteLine(); } catch { }
         }
     }
 

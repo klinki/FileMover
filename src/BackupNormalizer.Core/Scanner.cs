@@ -7,7 +7,11 @@ public sealed record FsEntry(string Path, bool IsDirectory, long Size, DateTime 
 
 /// <summary>Live scan progress snapshot. Totals are unknown upfront (recursive
 /// walk), so consumers estimate against a baseline (e.g. previous scan count).</summary>
-public sealed record ScanProgress(string RootId, int Scanned, int Errors, string CurrentPath, TimeSpan Elapsed);
+public sealed record ScanProgress(string RootId, int Scanned, int Errors, string CurrentPath, TimeSpan Elapsed,
+    bool Incremental = false);
+
+/// <summary>A filesystem scan failure, separate from non-fatal link metadata notes.</summary>
+public sealed record ScanError(string RootId, string Path, string Message);
 
 /// <summary>Hashing progress, including read chunks before a file completes.</summary>
 public sealed record HashProgress(int TotalFiles, int Hashed, int Skipped, int Unstable,
@@ -23,68 +27,146 @@ public sealed class Scanner
     private readonly IContentHasher _hasher;
     private readonly string _algo;
     private readonly string _mftMode;
+    private readonly string _usnMode;
     private readonly HashSet<string> _databaseFiles;
     private readonly Func<string, IEnumerable<FsEntry>>? _enumerate;
+    private readonly Func<string, IUsnJournal?> _openJournal;
 
-    public Scanner(Database db, string? algo = null, string? mftMode = null)
+    public bool LastScanWasIncremental { get; private set; }
+    public string? LastScanFallbackReason { get; private set; }
+
+    public Scanner(Database db, string? algo = null, string? mftMode = null, string? usnMode = null)
     {
         _db = db;
         _algo = HasherFactory.NormalizeAlgorithm(algo ?? "sha256");
         _hasher = HasherFactory.Create(_algo);
         _mftMode = mftMode ?? "off";
+        _usnMode = (usnMode ?? "auto").ToLowerInvariant();
+        if (_usnMode is not ("auto" or "off")) throw new ArgumentException("--usn must be auto or off.", nameof(usnMode));
+        _openJournal = NtfsUsnJournal.TryOpen;
         _databaseFiles = new HashSet<string>(OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal)
         {
             db.DbPath, db.DbPath + "-wal", db.DbPath + "-shm", db.DbPath + "-journal"
         };
     }
 
-    internal Scanner(Database db, Func<string, IEnumerable<FsEntry>> enumerate) : this(db)
-        => _enumerate = enumerate;
+    internal Scanner(Database db, Func<string, IEnumerable<FsEntry>> enumerate,
+        Func<string, IUsnJournal?>? openJournal = null) : this(db)
+    {
+        _enumerate = enumerate;
+        _openJournal = openJournal ?? (_ => null);
+    }
 
     private void RetireDatabaseEntries(StorageRootRow root)
     {
-        var ids = _db.ListFiles(root.Id)
-            .Where(f => _databaseFiles.Contains(Paths.CombineRoot(root.Path, f.RelativePath)))
-            .Select(f => f.Id).ToArray();
-        _db.MarkFilesMissing(ids);
+        string prefix = Path.GetFullPath(root.Path).TrimEnd(Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar;
+        var comparison = OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
+        var relativePaths = _databaseFiles.Where(path => path.StartsWith(prefix, comparison))
+            .Select(path => Paths.GetRelative(root.Path, path)).ToArray();
+        _db.RetireDatabasePaths(root.Id, relativePaths);
     }
 
-    public (int scanned, int errors) ScanRoot(string rootId, IProgress<ScanProgress>? progress = null)
+    public (int scanned, int errors) ScanRoot(string rootId, IProgress<ScanProgress>? progress = null,
+        Action<ScanError>? onError = null, bool full = false)
     {
+        LastScanWasIncremental = false;
+        LastScanFallbackReason = null;
         var root = _db.GetRoot(rootId) ?? throw new InvalidOperationException($"unknown root '{rootId}'");
+        var previousScan = _db.LatestScan(rootId);
         long scanId = _db.BeginScan(rootId);
         int scanned = 0, errors = 0;
         var startedAt = DateTime.UtcNow;
         string currentDir = root.Path;
         void Report()
         {
-            try { progress?.Report(new ScanProgress(rootId, scanned, errors, currentDir, DateTime.UtcNow - startedAt)); }
+            try { progress?.Report(new ScanProgress(rootId, scanned, errors, currentDir, DateTime.UtcNow - startedAt, LastScanWasIncremental)); }
             catch { }
         }
+        void ReportError(string path, string message)
+        {
+            errors++;
+            try { onError?.Invoke(new ScanError(rootId, path, message)); }
+            catch { } // Diagnostic observers must not change scan results.
+        }
         NtfsMftEnumerator.NtfsVolume? mft = null;
+        IUsnJournal? journal = null;
+        UsnState? baseline = null;
+        UsnChanges? changes = null;
+        Database.DatabaseTransaction? scanTransaction = null;
+        var missing = new List<string>();
         try
         {
             if (!Directory.Exists(root.Path))
                 throw new DirectoryNotFoundException($"root path not found: {root.Path}");
             RetireDatabaseEntries(root);
+            var checkpoint = _db.GetScanCheckpoint(rootId);
+            if (_usnMode != "off")
+            {
+                try
+                {
+                    journal = _openJournal(root.Path);
+                    if (journal != null)
+                    {
+                        baseline = journal.Query(); // Capture before full enumeration, never after it.
+                        if (checkpoint != null && UsnReplay.IsValid(checkpoint, previousScan, root.Path, baseline))
+                            changes = UsnReplay.Read(journal, root.Path, checkpoint.NextUsn, baseline, _databaseFiles);
+                        else if (checkpoint != null)
+                            throw new IOException("The USN checkpoint, root identity, or retained journal history is no longer valid.");
+                        else LastScanFallbackReason = "No USN checkpoint; establishing a full-scan baseline.";
+                    }
+                    else if (checkpoint != null) throw new IOException("The USN journal is unavailable or inaccessible.");
+                    else LastScanFallbackReason = "USN journal unavailable; using a full scan.";
+                }
+                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException)
+                {
+                    LastScanFallbackReason = ex.Message;
+                    if (checkpoint != null) _db.MarkRootHashesStale(rootId);
+                    _db.ClearScanCheckpoint(rootId);
+                    changes = null;
+                    // The pre-scan snapshot can establish a new baseline after fallback.
+                }
+            }
+            else _db.ClearScanCheckpoint(rootId);
             IEnumerable<FsEntry> entries;
-            if (_enumerate != null)
+            if (changes != null && !full)
             {
-                entries = _enumerate(root.Path);
+                try
+                {
+                    entries = PrepareIncrementalEntries(root.Path, changes, missing);
+                    LastScanWasIncremental = true;
+                    LastScanFallbackReason = null;
+                }
+                catch (IOException ex)
+                {
+                    LastScanFallbackReason = ex.Message;
+                    _db.MarkRootHashesStale(rootId);
+                    _db.ClearScanCheckpoint(rootId);
+                    changes = null;
+                    missing.Clear();
+                    entries = FullEntries();
+                }
             }
-            else if (NtfsMftEnumerator.TryCreate(root.Path, _mftMode, out var volume, out string? note))
+            else entries = FullEntries();
+            IEnumerable<FsEntry> FullEntries()
             {
+                if (_enumerate != null) return _enumerate(root.Path);
+                if (NtfsMftEnumerator.TryCreate(root.Path, _mftMode, out var volume, out string? note))
+                {
+                    if (note != null) Log.Info(note);
+                    mft = volume;
+                    string volumeRoot = Path.GetPathRoot(Path.GetFullPath(root.Path))!;
+                    return volume!.EnumerateFiles(volumeRoot, root.Path)
+                        .Select(f => new FsEntry(f.FullPath, f.IsDirectory, f.Size, f.ModifiedUtc, f.CreatedUtc,
+                            HasMetadata: true, IsReparse: f.IsReparse, Error: null));
+                }
                 if (note != null) Log.Info(note);
-                mft = volume;
-                string volumeRoot = Path.GetPathRoot(Path.GetFullPath(root.Path))!;
-                entries = volume!.EnumerateFiles(volumeRoot, root.Path)
-                    .Select(f => new FsEntry(f.FullPath, f.IsDirectory, f.Size, f.ModifiedUtc, f.CreatedUtc,
-                        HasMetadata: true, IsReparse: f.IsReparse, Error: null));
+                return EnumerateRecursive(root.Path);
             }
-            else
+            if (LastScanWasIncremental) scanTransaction = _db.BeginTransaction();
+            if (changes != null)
             {
-                if (note != null) Log.Info(note);
-                entries = EnumerateRecursive(root.Path);
+                foreach (var (relative, invalidate) in changes.Paths)
+                    if (invalidate) _db.MarkPathHashesStale(rootId, relative);
             }
             foreach (var scanEntry in entries)
             {
@@ -94,13 +176,16 @@ public sealed class Scanner
                     if (_databaseFiles.Contains(Path.GetFullPath(file))) continue;
                     if (scanEntry.Error != null)
                     {
-                        errors++;
+                        ReportError(file, scanEntry.Error);
                         continue;
                     }
                     currentDir = Path.GetDirectoryName(file) ?? root.Path;
                     string rel;
                     rel = Paths.GetRelative(root.Path, file);
                     rel = Paths.NormalizeRelative(rel);
+                    if (LastScanWasIncremental && Paths.FindLink(root.Path, rel) is { } parentLink
+                        && !Paths.PathEquals(parentLink, file))
+                        throw new IOException("The entry acquired a linked parent while refreshing its metadata.");
                     // Inspect the link before any length/content access, including dangling links.
                     if (scanEntry.IsReparse)
                     {
@@ -154,24 +239,85 @@ public sealed class Scanner
                 }
                 catch (Exception ex) when (ex is UnauthorizedAccessException or IOException or ArgumentException)
                 {
-                    errors++;
+                    ReportError(file, ex.Message);
                     TryRecordError(rootId, file, root.Path, scanId, FileStatus.ScanError, ex.Message);
                 }
             }
             Report();
             if (errors == 0)
             {
-                _db.MarkUnseenFilesMissing(rootId, scanId);
+                ScanCheckpointRow? nextCheckpoint = null;
+                if (journal != null && baseline != null)
+                {
+                    long nextUsn = changes?.NextUsn ?? baseline.NextUsn;
+                    nextCheckpoint = new ScanCheckpointRow(rootId, root.Path, baseline.VolumeIdentity,
+                        baseline.RootIdentity, baseline.JournalId, nextUsn, scanId);
+                    try
+                    {
+                        var completed = new ScanRow(scanId, rootId, "", null, ScanStatus.Completed);
+                        if (!UsnReplay.IsValid(nextCheckpoint, completed, root.Path, journal.Query()))
+                            throw new IOException("The USN journal changed while scanning.");
+                    }
+                    catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+                    {
+                        nextCheckpoint = null;
+                        if (LastScanWasIncremental)
+                        {
+                            scanTransaction!.Rollback();
+                            scanTransaction.Dispose();
+                            scanTransaction = null;
+                            _db.MarkRootHashesStale(rootId);
+                            _db.ClearScanCheckpoint(rootId);
+                            _db.FinishScan(scanId, ScanStatus.Incomplete);
+                            // One bounded retry: full scans never recursively retry journal failures.
+                            var result = ScanRoot(rootId, progress, onError, full: true);
+                            LastScanFallbackReason = ex.Message;
+                            return result;
+                        }
+                        LastScanFallbackReason = ex.Message;
+                        _db.MarkRootHashesStale(rootId);
+                    }
+                }
+                scanTransaction ??= _db.BeginTransaction();
+                if (LastScanWasIncremental)
+                {
+                    foreach (string relative in missing)
+                    {
+                        _db.MarkPathHashesStale(rootId, relative);
+                        _db.MarkPathMissing(rootId, relative);
+                    }
+                    scanned += missing.Count;
+                    Report();
+                }
+                else _db.MarkUnseenFilesMissing(rootId, scanId);
                 _db.FinishScan(scanId, ScanStatus.Completed);
+                if (nextCheckpoint != null) _db.SaveScanCheckpoint(nextCheckpoint);
+                else _db.ClearScanCheckpoint(rootId);
+                scanTransaction.Commit();
             }
             else
             {
+                scanTransaction?.Rollback();
+                scanTransaction?.Dispose();
+                scanTransaction = null;
+                if (LastScanWasIncremental) _db.MarkRootHashesStale(rootId);
+                _db.ClearScanCheckpoint(rootId);
                 _db.FinishScan(scanId, ScanStatus.Incomplete);
             }
             return (scanned, errors);
         }
         catch (Exception ex)
         {
+            scanTransaction?.Rollback();
+            scanTransaction?.Dispose();
+            scanTransaction = null;
+            ReportError(root.Path, ex.Message);
+            try
+            {
+                _db.ClearScanCheckpoint(rootId);
+                if (LastScanWasIncremental) _db.MarkRootHashesStale(rootId);
+            }
+            catch { }
             try { _db.FinishScan(scanId, ScanStatus.Failed); } catch { }
             if (mft != null)
                 throw new IOException($"MFT scan failed: {ex.Message} Retry with --mft off.", ex);
@@ -179,8 +325,38 @@ public sealed class Scanner
         }
         finally
         {
+            scanTransaction?.Dispose();
+            journal?.Dispose();
             mft?.Dispose();
         }
+    }
+
+    private static List<FsEntry> PrepareIncrementalEntries(string root, UsnChanges changes, List<string> missing)
+    {
+        var entries = new List<FsEntry>();
+        foreach (string relative in changes.Paths.Keys)
+        {
+            string path = Paths.CombineRoot(root, relative);
+            try
+            {
+                if (Paths.FindLink(root, relative) is { } link && !Paths.PathEquals(link, path))
+                    throw new IOException("A changed entry lies beneath a link; a full scan is required.");
+                var attributes = File.GetAttributes(path);
+                bool directory = attributes.HasFlag(FileAttributes.Directory);
+                bool reparse = attributes.HasFlag(FileAttributes.ReparsePoint);
+                if (directory && !reparse) throw new IOException("A changed file became a directory; a full scan is required.");
+                entries.Add(new FsEntry(path, directory, 0, default, default, false, reparse, null));
+            }
+            catch (Exception ex) when (ex is FileNotFoundException or DirectoryNotFoundException)
+            {
+                missing.Add(relative);
+            }
+            catch (UnauthorizedAccessException ex)
+            {
+                entries.Add(new FsEntry(path, false, 0, default, default, false, false, ex.Message));
+            }
+        }
+        return entries;
     }
 
     private void TryRecordError(string rootId, string full, string rootPath, long scanId, string status, string msg)

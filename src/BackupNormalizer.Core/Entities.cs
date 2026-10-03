@@ -20,6 +20,17 @@ public sealed class ScanEntity
     public string Status { get; set; } = string.Empty;
 }
 
+public sealed class ScanCheckpointEntity
+{
+    public string StorageRootId { get; set; } = string.Empty;
+    public string RootPath { get; set; } = string.Empty;
+    public string VolumeIdentity { get; set; } = string.Empty;
+    public string RootIdentity { get; set; } = string.Empty;
+    public string JournalId { get; set; } = string.Empty;
+    public long NextUsn { get; set; }
+    public long ScanId { get; set; }
+}
+
 public sealed class FileEntryEntity
 {
     public long Id { get; set; }
