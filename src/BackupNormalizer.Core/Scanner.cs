@@ -67,8 +67,9 @@ public sealed class Scanner
     }
 
     public (int scanned, int errors) ScanRoot(string rootId, IProgress<ScanProgress>? progress = null,
-        Action<ScanError>? onError = null, bool full = false)
+        Action<ScanError>? onError = null, bool full = false, CancellationToken cancellationToken = default)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         LastScanWasIncremental = false;
         LastScanFallbackReason = null;
         var root = _db.GetRoot(rootId) ?? throw new InvalidOperationException($"unknown root '{rootId}'");
@@ -177,6 +178,7 @@ public sealed class Scanner
             }
             foreach (var scanEntry in entries)
             {
+                cancellationToken.ThrowIfCancellationRequested();
                 var file = scanEntry.Path!;
                 try
                 {
@@ -251,6 +253,7 @@ public sealed class Scanner
                 }
             }
             Report();
+            cancellationToken.ThrowIfCancellationRequested();
             if (errors == 0)
             {
                 ScanCheckpointRow? nextCheckpoint = null;
@@ -277,7 +280,7 @@ public sealed class Scanner
                             _db.ClearScanCheckpoint(rootId);
                             _db.FinishScan(scanId, ScanStatus.Incomplete);
                             // One bounded retry: full scans never recursively retry journal failures.
-                            var result = ScanRoot(rootId, progress, onError, full: true);
+                            var result = ScanRoot(rootId, progress, onError, full: true, cancellationToken: cancellationToken);
                             LastScanFallbackReason = ex.Message;
                             return result;
                         }
@@ -300,6 +303,7 @@ public sealed class Scanner
                 _db.FinishScan(scanId, ScanStatus.Completed);
                 if (nextCheckpoint != null) _db.SaveScanCheckpoint(nextCheckpoint);
                 else _db.ClearScanCheckpoint(rootId);
+                cancellationToken.ThrowIfCancellationRequested();
                 scanTransaction.Commit();
             }
             else
@@ -312,6 +316,17 @@ public sealed class Scanner
                 _db.FinishScan(scanId, ScanStatus.Incomplete);
             }
             return (scanned, errors);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            scanTransaction?.Rollback();
+            scanTransaction?.Dispose();
+            scanTransaction = null;
+            _db.ClearScanCheckpoint(rootId);
+            if (LastScanWasIncremental) _db.MarkRootHashesStale(rootId);
+            LastScanFallbackReason = "Scan canceled. Rescan to establish completeness.";
+            _db.FinishScan(scanId, ScanStatus.Incomplete);
+            throw;
         }
         catch (Exception ex)
         {
@@ -490,8 +505,9 @@ public sealed class Scanner
 
     /// <summary>Demand-driven hashing (§9): hash only needed/ambiguous or all.</summary>
     public (int hashed, int skipped, int unstable) HashNeeded(string? rootId = null, bool all = false,
-        int parallelism = 2, IProgress<HashProgress>? progress = null)
+        int parallelism = 2, IProgress<HashProgress>? progress = null, CancellationToken cancellationToken = default)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         foreach (var root in _db.ListRoots().Where(r => rootId == null || r.Id == rootId))
             RetireDatabaseEntries(root);
         var files = _db.ListFiles(rootId);
@@ -499,7 +515,7 @@ public sealed class Scanner
         int hashed = 0, skipped = 0, unstable = 0;
         long bytesRead = 0;
         var timer = System.Diagnostics.Stopwatch.StartNew();
-        var opts = new ParallelOptions { MaxDegreeOfParallelism = Math.Max(1, parallelism) };
+        var opts = new ParallelOptions { MaxDegreeOfParallelism = Math.Max(1, parallelism), CancellationToken = cancellationToken };
         // HDD/NAS: default conservative (§29). Parallel file reads only; DB writes serialized via lock.
         var lockObj = new object();
         // Call under the same lock as counters so parallel workers deliver ordered snapshots.
@@ -555,8 +571,10 @@ public sealed class Scanner
             }
             catch { Complete(abs); return; }
             string digest;
-            Action<long>? onBytesRead = progress == null ? null : count =>
+            Action<long> onBytesRead = count =>
             {
+                cancellationToken.ThrowIfCancellationRequested();
+                if (progress == null) return;
                 lock (lockObj)
                 {
                     bytesRead += count;
@@ -564,7 +582,9 @@ public sealed class Scanner
                 }
             };
             try { digest = _hasher.HashFile(abs, lenBefore, onBytesRead); }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { throw; }
             catch { Complete(abs); return; }
+            cancellationToken.ThrowIfCancellationRequested();
             try
             {
                 if (Paths.FindLink(root.Path, f.RelativePath) != null)

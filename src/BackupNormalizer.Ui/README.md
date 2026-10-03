@@ -8,7 +8,7 @@ preconditions; the CLI executor applies them later.
 ## Run
 
 ```bash
-dotnet run --project src/BackupNormalizer.Ui
+dotnet run --project src/BackupNormalizer.Ui -c Release
 ```
 
 Requires the .NET 10 SDK. No Docker needed (Docker is only for the QNAP
@@ -66,6 +66,14 @@ folders visible, and filters combine with **Differences only**. Select an entry 
 timestamps, its current SHA-256 digest, comparison state, and link metadata in the details
 pane. The pane starts collapsed in smaller windows and can be expanded manually.
 See the [inventory search guide](../../docs/features/gui-inventory-search/README.md).
+
+Choose **Inventory → Inventory jobs...** for the active database root. Run **Scan**,
+**Hash needed**, or **Scan then hash** with progress and cancellation. Jobs require the
+recorded root to be available on this computer. Hashing reuses current hashes and skips
+links. An incomplete scan prevents the combined job from starting its hash pass.
+Closing the jobs window keeps the job running; closing the app cancels and awaits it.
+Results remain available in the jobs window, and both panels refresh when they use the
+changed database. See the [background jobs guide](../../docs/features/gui-background-jobs/README.md).
 
 Links show their kind in the size column. Hover over a name to see its target
 text, absolute immediate target path, and any metadata note. Linked folders

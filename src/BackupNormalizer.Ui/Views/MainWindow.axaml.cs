@@ -47,6 +47,7 @@ public partial class MainWindow : Window
         InitializeComponent();
         Title = $"BackupNormalizer {BuildInfo.FromAssembly(typeof(MainWindow).Assembly).ShortVersion} - Inventory comparison and planner";
         DataContextChanged += OnDataContextChanged;
+        Closing += OnClosingWithInventoryJob;
         Closed += (_, _) =>
         {
             if (_observedViewModel != null) _observedViewModel.PropertyChanged -= OnViewModelChanged;

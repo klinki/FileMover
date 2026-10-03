@@ -141,6 +141,9 @@
         <MenuItem Header="Activate left" Command="{Binding SetActiveCommand}" CommandParameter="Left" />
         <MenuItem Header="Activate right" Command="{Binding SetActiveCommand}" CommandParameter="Right" />
       </MenuItem>
+      <MenuItem Header="_Inventory">
+        <MenuItem Header="Inventory jobs..." Click="OnShowInventoryJobs" IsEnabled="{Binding HasDatabasePanels}" />
+      </MenuItem>
     </Menu>
     <Border DockPanel.Dock="Top" Padding="6,4" BorderBrush="Gray" BorderThickness="0,0,0,1">
       <WrapPanel Orientation="Horizontal" ItemSpacing="6">

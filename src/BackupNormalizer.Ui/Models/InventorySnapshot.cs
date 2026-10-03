@@ -30,6 +30,8 @@ public sealed class InventoryRoot(StorageRootRow root, string? scanStatus, Inven
     public string Display => $"{Root.Name} [{Root.Id}]";
     public string? ScanStatus { get; } = scanStatus;
     public InventoryStatusRow? HealthStatus { get; } = healthStatus;
+    // Snapshot loading runs in the background. Avoid filesystem probes in UI command getters.
+    public bool LocalRootAvailable { get; } = Path.IsPathFullyQualified(root.Path) && Directory.Exists(root.Path);
     public string HealthSummary => HealthStatus is { } health
         ? $"Scan: {ScanStatus ?? "not scanned"} | SHA-256: {health.UsableHashes:N0}/{health.RegularFiles:N0} | " +
             (health.PlanningReady ? "Content ready for planning" : health.BlockingReason)

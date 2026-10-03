@@ -31,6 +31,12 @@ public sealed partial class MainViewModel
     private InventoryComparison? _comparison;
 
     partial void OnIsBusyChanged(bool value) => UpdateSourceCommands();
+    partial void OnIsLeftActiveChanged(bool value)
+    {
+        OnPropertyChanged(nameof(Active));
+        OnPropertyChanged(nameof(Inactive));
+        UpdateSourceCommands();
+    }
 
     partial void OnDifferencesOnlyChanged(bool value) => ApplyComparisonToPanels();
 
@@ -49,6 +55,7 @@ public sealed partial class MainViewModel
         StageTrashCommand.NotifyCanExecuteChanged();
         CompareFoldersCommand.NotifyCanExecuteChanged();
         UseLivePanelCommand.NotifyCanExecuteChanged();
+        NotifyInventoryJobCommands();
     }
 
     private void OnPanelSourceChanged()

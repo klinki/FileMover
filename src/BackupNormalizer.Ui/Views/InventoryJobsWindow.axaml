@@ -1,0 +1,62 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:BackupNormalizer.Ui.ViewModels"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        mc:Ignorable="d" d:DesignWidth="720" d:DesignHeight="560"
+        x:Class="BackupNormalizer.Ui.Views.InventoryJobsWindow"
+        x:DataType="vm:MainViewModel"
+        Title="Inventory jobs"
+        Width="720" Height="560" MinWidth="560" MinHeight="420"
+        WindowStartupLocation="CenterOwner">
+  <ScrollViewer>
+    <StackPanel Margin="18" Spacing="12">
+      <TextBlock Text="Scan and hash inventory" FontSize="22" FontWeight="SemiBold" />
+
+      <Border Padding="12" CornerRadius="6">
+        <StackPanel Spacing="5">
+          <TextBlock Text="Selected database" FontWeight="SemiBold" />
+          <TextBlock Text="{Binding Active.SourceLabel}" TextWrapping="Wrap" />
+          <TextBlock Text="Selected root" FontWeight="SemiBold" />
+          <TextBlock Text="{Binding Active.SelectedInventoryRoot.Display}" />
+          <TextBlock Text="Recorded root path" FontWeight="SemiBold" />
+          <TextBlock Text="{Binding Active.SelectedInventoryRoot.Root.Path}" TextWrapping="Wrap" />
+          <TextBlock Text="{Binding InventoryJobAvailability}" TextWrapping="Wrap" />
+        </StackPanel>
+      </Border>
+
+      <CheckBox Content="Force a full scan" IsChecked="{Binding Job.FullScan}"
+                IsEnabled="{Binding CanRunInventoryJob}" />
+      <StackPanel Orientation="Horizontal" Spacing="8">
+        <Button Content="Scan" Command="{Binding RunScanJobCommand}" />
+        <Button Content="Hash needed" Command="{Binding RunHashNeededJobCommand}" />
+        <Button Content="Scan then hash" Command="{Binding RunScanThenHashJobCommand}" />
+        <Button Content="Cancel job" Command="{Binding CancelInventoryJobCommand}" />
+      </StackPanel>
+
+      <Border Padding="12" CornerRadius="6">
+        <StackPanel Spacing="7">
+          <TextBlock Text="Current job" FontSize="17" FontWeight="SemiBold" />
+          <TextBlock Text="{Binding Job.CurrentJobTitle}" FontWeight="SemiBold" />
+          <TextBlock Text="{Binding Job.Context}" TextWrapping="Wrap" />
+          <TextBlock Text="Cancel requested. Waiting for the current filesystem operation to finish."
+                     IsVisible="{Binding Job.CancellationRequested}" TextWrapping="Wrap" />
+          <TextBlock Text="{Binding Job.ProgressText}" TextWrapping="Wrap" />
+          <ProgressBar IsIndeterminate="True" IsVisible="{Binding Job.IsRunning}" Height="6" />
+          <TextBlock Text="{Binding Job.CurrentPath}" TextWrapping="Wrap" />
+          <TextBlock Text="{Binding Job.BytesReadText}" />
+          <TextBlock Text="{Binding Job.RateAndElapsed}" />
+        </StackPanel>
+      </Border>
+
+      <Border Padding="12" CornerRadius="6">
+        <StackPanel Spacing="5">
+          <TextBlock Text="Last result" FontSize="17" FontWeight="SemiBold" />
+          <TextBlock Text="{Binding Job.LastResultText}" TextWrapping="Wrap" />
+          <TextBlock Text="{Binding Job.LastResultCounts}" />
+          <TextBlock Text="{Binding Job.LastResultElapsed}" />
+        </StackPanel>
+      </Border>
+    </StackPanel>
+  </ScrollViewer>
+</Window>
