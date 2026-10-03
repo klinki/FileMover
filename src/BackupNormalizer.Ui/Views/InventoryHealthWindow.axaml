@@ -1,0 +1,65 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:BackupNormalizer.Ui.ViewModels"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        mc:Ignorable="d" d:DesignWidth="760" d:DesignHeight="620"
+        x:Class="BackupNormalizer.Ui.Views.InventoryHealthWindow"
+        x:DataType="vm:InventoryHealthViewModel"
+        Title="Inventory health"
+        Width="760" Height="620" MinWidth="600" MinHeight="420"
+        WindowStartupLocation="CenterOwner">
+  <ScrollViewer>
+    <StackPanel Margin="20" Spacing="14">
+      <StackPanel Spacing="3">
+        <TextBlock Text="{Binding RootName}" FontSize="22" FontWeight="SemiBold" />
+        <TextBlock Text="{Binding RecordedPath}" TextWrapping="Wrap" />
+      </StackPanel>
+
+      <Border Padding="14" CornerRadius="6">
+        <StackPanel Spacing="8">
+          <TextBlock Text="Latest scan" FontSize="17" FontWeight="SemiBold" />
+          <StackPanel Orientation="Horizontal" Spacing="10"><TextBlock Text="Status" Width="150" FontWeight="SemiBold" /><TextBlock Text="{Binding ScanStatus}" /></StackPanel>
+          <StackPanel Orientation="Horizontal" Spacing="10"><TextBlock Text="Scan age" Width="150" FontWeight="SemiBold" /><TextBlock Text="{Binding ScanAge}" /></StackPanel>
+          <StackPanel Orientation="Horizontal" Spacing="10"><TextBlock Text="Started" Width="150" FontWeight="SemiBold" /><TextBlock Text="{Binding StartedAt}" /></StackPanel>
+          <StackPanel Orientation="Horizontal" Spacing="10"><TextBlock Text="Completed" Width="150" FontWeight="SemiBold" /><TextBlock Text="{Binding CompletedAt}" /></StackPanel>
+          <StackPanel Orientation="Horizontal" Spacing="10"><TextBlock Text="Mode" Width="150" FontWeight="SemiBold" /><TextBlock Text="{Binding ScanMode}" /></StackPanel>
+          <StackPanel Orientation="Horizontal" Spacing="10"><TextBlock Text="Fallback reason" Width="150" FontWeight="SemiBold" /><TextBlock Text="{Binding FallbackReason}" TextWrapping="Wrap" /></StackPanel>
+          <StackPanel Orientation="Horizontal" Spacing="10"><TextBlock Text="Scanned entries" Width="150" FontWeight="SemiBold" /><TextBlock Text="{Binding ScannedCount}" /></StackPanel>
+          <StackPanel Orientation="Horizontal" Spacing="10"><TextBlock Text="Scan error count" Width="150" FontWeight="SemiBold" /><TextBlock Text="{Binding ScanErrorCount}" /></StackPanel>
+        </StackPanel>
+      </Border>
+
+      <Border Padding="14" CornerRadius="6">
+        <StackPanel Spacing="8">
+          <TextBlock Text="Inventory and plan readiness" FontSize="17" FontWeight="SemiBold" />
+          <StackPanel Orientation="Horizontal" Spacing="10"><TextBlock Text="Regular files" Width="150" FontWeight="SemiBold" /><TextBlock Text="{Binding RegularFiles}" /></StackPanel>
+          <StackPanel Orientation="Horizontal" Spacing="10"><TextBlock Text="Links" Width="150" FontWeight="SemiBold" /><TextBlock Text="{Binding Links}" /></StackPanel>
+          <StackPanel Orientation="Horizontal" Spacing="10"><TextBlock Text="Entry errors" Width="150" FontWeight="SemiBold" /><TextBlock Text="{Binding EntryErrors}" /></StackPanel>
+          <StackPanel Orientation="Horizontal" Spacing="10"><TextBlock Text="Missing entries" Width="150" FontWeight="SemiBold" /><TextBlock Text="{Binding MissingEntries}" /></StackPanel>
+          <StackPanel Orientation="Horizontal" Spacing="10"><TextBlock Text="Hash readiness" Width="150" FontWeight="SemiBold" /><TextBlock Text="{Binding HashReadiness}" TextWrapping="Wrap" /></StackPanel>
+          <StackPanel Orientation="Horizontal" Spacing="10"><TextBlock Text="Planning" Width="150" FontWeight="SemiBold" /><TextBlock Text="{Binding PlanningReadiness}" /></StackPanel>
+          <StackPanel Orientation="Horizontal" Spacing="10"><TextBlock Text="Blocker" Width="150" FontWeight="SemiBold" /><TextBlock Text="{Binding PlanningBlocker}" TextWrapping="Wrap" /></StackPanel>
+        </StackPanel>
+      </Border>
+
+      <StackPanel Spacing="6">
+        <TextBlock Text="Scan diagnostics" FontSize="17" FontWeight="SemiBold" />
+        <TextBlock Text="{Binding DiagnosticsSummary}" />
+        <ItemsControl ItemsSource="{Binding Errors}">
+          <ItemsControl.ItemTemplate>
+            <DataTemplate x:DataType="vm:InventoryHealthErrorItem">
+              <Border Padding="8">
+                <StackPanel Spacing="3">
+                  <TextBlock Text="{Binding Path}" FontWeight="SemiBold" TextWrapping="Wrap" />
+                  <TextBlock Text="{Binding Message}" TextWrapping="Wrap" />
+                  <TextBlock Text="{Binding RecordedAt}" Opacity="0.75" />
+                </StackPanel>
+              </Border>
+            </DataTemplate>
+          </ItemsControl.ItemTemplate>
+        </ItemsControl>
+      </StackPanel>
+    </StackPanel>
+  </ScrollViewer>
+</Window>

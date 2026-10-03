@@ -491,6 +491,13 @@ public partial class MainWindow : Window
             Vm.UseLivePanel(button.Tag as string ?? "Left");
     }
 
+    private async void OnInventoryHealth(object? sender, RoutedEventArgs e)
+    {
+        if (Vm == null || sender is not Button button) return;
+        var report = Vm.CreateInventoryHealthViewModel(button.Tag as string ?? "Left");
+        if (report != null) await new InventoryHealthWindow(report).ShowDialog(this);
+    }
+
     // --- Double-click navigates (Left=activate left, etc.) ---
     private void OnLeftDoubleTapped(object? sender, TappedEventArgs e)
     {

@@ -48,6 +48,11 @@ missing by a rescan are excluded. The inventory schema stores files, so empty
 folders cannot appear in this view. This mode compares recorded snapshots and
 does not copy, delete, or synchronize files.
 
+Each database panel shows scan and SHA-256 readiness. Select **Inventory health / scan errors...**
+to inspect scan age, mode, fallback reason, entry counts, planning blockers, and recorded
+error paths and messages. Older inventories show unavailable diagnostic fields as unknown.
+See the [inventory health guide](../../docs/features/gui-inventory-health/README.md).
+
 Links show their kind in the size column. Hover over a name to see its target
 text, absolute immediate target path, and any metadata note. Linked folders
 cannot be opened. Links are excluded from content comparisons and scan-error
