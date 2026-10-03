@@ -11,14 +11,20 @@
 # build stage onto the target platform.
 FROM --platform=$BUILDPLATFORM mcr.microsoft.com/dotnet/sdk:10.0-alpine AS build
 WORKDIR /src
-COPY . .
-RUN dotnet publish src/BackupNormalizer/BackupNormalizer.csproj -c Release -r linux-musl-arm --self-contained true -o /publish
+COPY src/BackupNormalizer/BackupNormalizer.csproj src/BackupNormalizer/
+COPY src/BackupNormalizer.Core/BackupNormalizer.Core.csproj src/BackupNormalizer.Core/
+RUN dotnet restore src/BackupNormalizer/BackupNormalizer.csproj -r linux-musl-arm
+COPY src/BackupNormalizer/ src/BackupNormalizer/
+COPY src/BackupNormalizer.Core/ src/BackupNormalizer.Core/
+RUN dotnet publish src/BackupNormalizer/BackupNormalizer.csproj --no-restore -c Release -r linux-musl-arm --self-contained true -o /publish
 
 FROM alpine:3.17
-RUN apk add --no-cache libgcc libstdc++ icu-libs
+RUN apk add --no-cache libgcc libstdc++ icu-libs musl-utils
 
 WORKDIR /app
 COPY --from=build /publish/ .
 COPY qnap-check.sh .
-RUN chmod +x qnap-check.sh
+COPY qnap-inventory.sh .
+RUN chmod +x qnap-check.sh qnap-inventory.sh
 ENTRYPOINT ["./BackupNormalizer"]
+CMD ["--help"]

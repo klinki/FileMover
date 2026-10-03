@@ -164,6 +164,8 @@ Run `dotnet run --project src/BackupNormalizer.Ui` to stage manual copy, move, f
 
 ## QNAP
 
+Use the [NAS container guide](docs/features/nas-container/README.md) to build an ARMv7 image, import it into QNAP Container Station, and run a one-shot inventory with read-only data and persistent state. The repository targets the TS-431P3's 32 KiB kernel page size; actual NAS compatibility still requires its on-device checks.
+
 Publish for the NAS architecture you use. For a 32-bit ARM QNAP running musl Linux:
 
 ```bash

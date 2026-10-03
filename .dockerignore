@@ -1,9 +1,15 @@
-bin/
-obj/
-publish/
-.git/
-*.db
-*.db-wal
-*.db-shm
-.DS_Store
-backup-normalizer.json
+# Send only the CLI, core, and runtime scripts to the container builder.
+**
+!Dockerfile.qnap
+!qnap-check.sh
+!qnap-inventory.sh
+!src/
+!src/BackupNormalizer/
+!src/BackupNormalizer/**
+!src/BackupNormalizer.Core/
+!src/BackupNormalizer.Core/**
+**/bin/
+**/obj/
+**/*.db
+**/*.db-*
+**/backup-normalizer.json

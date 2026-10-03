@@ -5,7 +5,7 @@
 #   ./qnap-check.sh [./BackupNormalizer] [/data]
 #
 # Checks: ARMv7 CPU, 32 KiB page size, SQLite create/insert/read/txn roundtrip,
-# read-only scan smoke test. Exits non-zero on the first failure.
+# read-only scan smoke test. Exits non-zero if any check fails.
 set -eu
 
 BN="${1:-./BackupNormalizer}"
@@ -17,7 +17,8 @@ check() {
     if "$@" >/tmp/qnap-check.log 2>&1; then
         echo "PASS: $desc"
     else
-        echo "FAIL: $desc (see /tmp/qnap-check.log)"
+        echo "FAIL: $desc"
+        cat /tmp/qnap-check.log
         FAIL=1
     fi
 }

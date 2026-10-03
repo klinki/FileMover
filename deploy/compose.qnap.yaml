@@ -1,0 +1,21 @@
+services:
+  backup-normalizer:
+    image: backup-normalizer:qnap-arm32
+    platform: linux/arm/v7
+    entrypoint: ["/app/qnap-inventory.sh"]
+    command: []
+    environment:
+      BN_ROOT_ID: "${BN_ROOT_ID:-nas}"
+      BN_ROOT_PATH: /data
+      BN_DB: /state/nas.db
+      BN_HASH_PARALLELISM: "${BN_HASH_PARALLELISM:-1}"
+    volumes:
+      - type: bind
+        source: "${NAS_DATA_PATH:?Set NAS_DATA_PATH to an existing NAS directory}"
+        target: /data
+        read_only: true
+      - type: bind
+        source: "${NAS_STATE_PATH:?Set NAS_STATE_PATH to a separate persistent NAS directory}"
+        target: /state
+    tty: true
+    restart: "no"

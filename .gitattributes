@@ -1,1 +1,3 @@
 qnap-check.sh text eol=lf
+qnap-inventory.sh text eol=lf
+tests/qnap-inventory-test.sh text eol=lf
