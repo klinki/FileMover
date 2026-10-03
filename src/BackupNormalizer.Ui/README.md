@@ -48,7 +48,7 @@ missing by a rescan are excluded. The inventory schema stores files, so empty
 folders cannot appear in this view. This mode compares recorded snapshots and
 does not copy, delete, or synchronize files.
 
-Each database panel shows scan and SHA-256 readiness. Select **Inventory health / scan errors...**
+Each database panel shows scan and SHA-256 readiness. Select **Health / errors...**
 to inspect scan age, mode, fallback reason, entry counts, planning blockers, and recorded
 error paths and messages. Older inventories show unavailable diagnostic fields as unknown.
 See the [inventory health guide](../../docs/features/gui-inventory-health/README.md).
@@ -59,6 +59,13 @@ shows a subfolder. Review operation counts, copy bytes, conflicts, and skipped l
 exporting JSON. Inventory databases stay read-only; only an isolated planning snapshot is
 changed. File-versus-directory conflicts block export, while content mismatches remain
 guarded verification operations. See the [database planning guide](../../docs/features/gui-database-planning/README.md).
+
+Search names or recorded paths above each inventory list. The adjacent filter selects
+unverified files, conflicts, scan errors, or links. Matching descendants keep their parent
+folders visible, and filters combine with **Differences only**. Select an entry to inspect
+timestamps, its current SHA-256 digest, comparison state, and link metadata in the details
+pane. The pane starts collapsed in smaller windows and can be expanded manually.
+See the [inventory search guide](../../docs/features/gui-inventory-search/README.md).
 
 Links show their kind in the size column. Hover over a name to see its target
 text, absolute immediate target path, and any metadata note. Linked folders

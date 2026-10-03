@@ -1,0 +1,44 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:BackupNormalizer.Ui.ViewModels"
+             x:Class="BackupNormalizer.Ui.Views.InventoryDetailsControl"
+             x:DataType="vm:FilePanelViewModel">
+  <Expander x:Name="DetailsExpander" Header="Selected entry details" IsExpanded="True" IsVisible="{Binding IsDatabase}">
+    <ScrollViewer MaxHeight="150" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+      <Grid Margin="8,0,8,8">
+        <TextBlock Text="Select an inventory entry to see its recorded details."
+                   TextWrapping="Wrap" IsVisible="{Binding !HasSelectedInventoryEntry}" />
+        <Grid ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto"
+              ColumnSpacing="10" RowSpacing="3" IsVisible="{Binding HasSelectedInventoryEntry}">
+          <TextBlock Text="Name" FontWeight="Bold" />
+          <TextBlock Grid.Column="1" Text="{Binding SelectedDetailsName}" TextWrapping="Wrap" />
+          <TextBlock Grid.Row="1" Text="Path" FontWeight="Bold" />
+          <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding SelectedDetailsPath}" TextWrapping="Wrap" />
+          <TextBlock Grid.Row="2" Text="Size" FontWeight="Bold" />
+          <TextBlock Grid.Row="2" Grid.Column="1" Text="{Binding SelectedDetailsSize}" />
+          <TextBlock Grid.Row="3" Text="Created" FontWeight="Bold" />
+          <TextBlock Grid.Row="3" Grid.Column="1" Text="{Binding SelectedDetailsCreated}" />
+          <TextBlock Grid.Row="4" Text="Modified" FontWeight="Bold" />
+          <TextBlock Grid.Row="4" Grid.Column="1" Text="{Binding SelectedDetailsModified}" />
+          <TextBlock Grid.Row="5" Text="Hash availability" FontWeight="Bold" />
+          <TextBlock Grid.Row="5" Grid.Column="1" Text="{Binding SelectedDetailsHashAvailability}" />
+          <TextBlock Grid.Row="6" Text="SHA-256" FontWeight="Bold" />
+          <TextBlock Grid.Row="6" Grid.Column="1" Text="{Binding SelectedDetailsHash}" TextWrapping="Wrap" />
+          <TextBlock Grid.Row="7" Text="Comparison" FontWeight="Bold" />
+          <TextBlock Grid.Row="7" Grid.Column="1" Text="{Binding SelectedDetailsComparison}" />
+          <TextBlock Grid.Row="8" Text="Kind" FontWeight="Bold" />
+          <TextBlock Grid.Row="8" Grid.Column="1" Text="{Binding SelectedDetailsKind}" />
+          <TextBlock Grid.Row="9" Text="Link target" FontWeight="Bold" IsVisible="{Binding SelectedDetailsIsLink}" />
+          <TextBlock Grid.Row="9" Grid.Column="1" Text="{Binding SelectedDetailsLinkTarget}" TextWrapping="Wrap"
+                     IsVisible="{Binding SelectedDetailsIsLink}" />
+          <TextBlock Grid.Row="10" Text="Absolute target" FontWeight="Bold" IsVisible="{Binding SelectedDetailsIsLink}" />
+          <TextBlock Grid.Row="10" Grid.Column="1" Text="{Binding SelectedDetailsAbsoluteTarget}" TextWrapping="Wrap"
+                     IsVisible="{Binding SelectedDetailsIsLink}" />
+          <TextBlock Grid.Row="11" Text="Link notes" FontWeight="Bold" IsVisible="{Binding SelectedDetailsIsLink}" />
+          <TextBlock Grid.Row="11" Grid.Column="1" Text="{Binding SelectedDetailsLinkNote}" TextWrapping="Wrap"
+                     IsVisible="{Binding SelectedDetailsIsLink}" />
+        </Grid>
+      </Grid>
+    </ScrollViewer>
+  </Expander>
+</UserControl>

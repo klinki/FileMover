@@ -1,0 +1,12 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:BackupNormalizer.Ui.ViewModels"
+             x:Class="BackupNormalizer.Ui.Views.InventorySearchControl"
+             x:DataType="vm:FilePanelViewModel">
+  <Grid ColumnDefinitions="*,160" ColumnSpacing="6" IsVisible="{Binding IsDatabase}">
+    <TextBox Text="{Binding SearchText, UpdateSourceTrigger=PropertyChanged}"
+             PlaceholderText="Search inventory name or path" ToolTip.Tip="Search names and recorded paths" />
+    <ComboBox Grid.Column="1" ItemsSource="{Binding InventoryFilterOptions}"
+              SelectedItem="{Binding SelectedInventoryFilter}" ToolTip.Tip="Filter inventory entries" />
+  </Grid>
+</UserControl>

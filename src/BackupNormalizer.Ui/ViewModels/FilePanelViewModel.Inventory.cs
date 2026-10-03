@@ -108,6 +108,7 @@ public sealed partial class FilePanelViewModel
 
     private void RefreshInventory()
     {
+        string? selectedPath = SelectedEntry?.FullPath;
         Entries.Clear();
         SelectedEntry = null;
         MarkAnchor = null;
@@ -119,18 +120,22 @@ public sealed partial class FilePanelViewModel
             Status = "Folder not indexed on this side.";
             return;
         }
+        bool needsDescendantMatches = SearchText.Length > 0 || SelectedInventoryFilter != "All" || _differencesOnly;
+        var visiblePaths = needsDescendantMatches ? FindVisibleInventoryPaths(directory, root) : null;
         int folders = 0, files = 0, links = 0;
         foreach (var node in directory.Children.Values)
         {
+            if (visiblePaths != null && !visiblePaths.Contains(node.RelativePath)) continue;
             var state = _comparisonStates != null && _comparisonStates.TryGetValue(node.RelativePath, out var found)
                 ? found : ComparisonState.None;
-            if (_differencesOnly && state is ComparisonState.Equal or ComparisonState.Skipped) continue;
             Entries.Add(new FileEntryItem(node.Name, node.RelativePath, node.IsDirectory, node.Size, node.Modified)
                 { Comparison = state, EntryKind = node.EntryKind, LinkTarget = node.LinkTarget,
                     TargetPath = node.TargetPath, LinkNote = node.LinkNote });
             if (node.IsLink) links++; else if (node.IsDirectory) folders++; else files++;
         }
         SortEntries();
+        if (selectedPath != null)
+            SelectedEntry = Entries.FirstOrDefault(e => root.Comparer.Equals(e.FullPath, selectedPath));
         Status = $"{folders} dirs, {files} files, {links} links | Scan: {root.ScanStatus ?? "not scanned"}";
         DriveStatus = "";
     }

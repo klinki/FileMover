@@ -2,6 +2,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:vm="using:BackupNormalizer.Ui.ViewModels"
         xmlns:models="using:BackupNormalizer.Ui.Models"
+        xmlns:views="using:BackupNormalizer.Ui.Views"
         x:Class="BackupNormalizer.Ui.Views.MainWindow"
         x:DataType="vm:MainViewModel"
         Icon="/Assets/avalonia-logo.ico"
@@ -53,12 +54,14 @@
     </DataTemplate>
     <DataTemplate x:Key="PanelHeader" x:DataType="vm:FilePanelViewModel">
       <StackPanel Spacing="4" Margin="6">
-        <Grid ColumnDefinitions="*,Auto,Auto">
+        <Grid ColumnDefinitions="*,Auto,Auto,Auto">
           <TextBlock Text="{Binding Side}" FontWeight="Bold" VerticalAlignment="Center" />
           <Button Grid.Column="1" Content="Load database..." Tag="{Binding Side}" Click="OnLoadDatabase"
                   IsEnabled="{Binding CanChangeSource}" Padding="8,4" Margin="0,0,4,0" />
           <Button Grid.Column="2" Content="Live folders" Tag="{Binding Side}" Click="OnUseLive"
                   IsEnabled="{Binding CanChangeSource}" IsVisible="{Binding IsDatabase}" Padding="8,4" />
+          <Button Grid.Column="3" Content="Health / errors..." Tag="{Binding Side}" Click="OnInventoryHealth"
+                  IsVisible="{Binding IsDatabase}" Padding="8,4" Margin="4,0,0,0" />
         </Grid>
         <TextBlock Text="{Binding SourceLabel}" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding SourceLabel}" />
         <ComboBox ItemsSource="{Binding InventoryRoots}" SelectedItem="{Binding SelectedInventoryRoot}"
@@ -93,8 +96,7 @@
         <TextBlock Text="{Binding Status}" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Status}" />
         <TextBlock Text="{Binding SelectedInventoryRoot.HealthSummary}" IsVisible="{Binding IsDatabase}"
                    TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding SelectedInventoryRoot.HealthSummary}" />
-        <Button Content="Inventory health / scan errors..." Tag="{Binding Side}" Click="OnInventoryHealth"
-                IsVisible="{Binding IsDatabase}" HorizontalAlignment="Left" Padding="8,4" />
+        <views:InventorySearchControl />
       </StackPanel>
     </DataTemplate>
     <DataTemplate x:Key="NameCell" x:DataType="vm:FileEntryItem">
@@ -216,6 +218,7 @@
               Margin="0,4,0,4" CornerRadius="4">
         <DockPanel>
           <ContentControl DockPanel.Dock="Top" Content="{Binding Left}" ContentTemplate="{StaticResource PanelHeader}" />
+          <views:InventoryDetailsControl DockPanel.Dock="Bottom" DataContext="{Binding Left}" />
           <DataGrid x:Name="LeftList" Tag="Left" ItemsSource="{Binding Left.Entries}" SelectedItem="{Binding Left.SelectedEntry}"
                     AutoGenerateColumns="False" IsReadOnly="True" SelectionMode="Single"
                     CanUserResizeColumns="True" CanUserSortColumns="True" GridLinesVisibility="Horizontal" DoubleTapped="OnLeftDoubleTapped">
@@ -236,6 +239,7 @@
               Margin="0,4,0,4" CornerRadius="4">
         <DockPanel>
           <ContentControl DockPanel.Dock="Top" Content="{Binding Right}" ContentTemplate="{StaticResource PanelHeader}" />
+          <views:InventoryDetailsControl DockPanel.Dock="Bottom" DataContext="{Binding Right}" />
           <DataGrid x:Name="RightList" Tag="Right" ItemsSource="{Binding Right.Entries}" SelectedItem="{Binding Right.SelectedEntry}"
                     AutoGenerateColumns="False" IsReadOnly="True" SelectionMode="Single"
                     CanUserResizeColumns="True" CanUserSortColumns="True" GridLinesVisibility="Horizontal" DoubleTapped="OnRightDoubleTapped">
