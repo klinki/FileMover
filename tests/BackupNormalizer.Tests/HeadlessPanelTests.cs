@@ -17,7 +17,10 @@ namespace BackupNormalizer.Tests;
 [Collection("UI")]
 public sealed class HeadlessPanelTests : IDisposable
 {
-    private readonly string _dir = Path.Combine(Path.GetTempPath(), "bn-headless-" + Guid.NewGuid().ToString("N"));
+    private readonly string _dir = Path.Combine(
+        Path.GetTempPath(),
+        "bn-headless-" + Guid.NewGuid().ToString("N")
+    );
     private readonly Xunit.Abstractions.ITestOutputHelper _out;
 
     public HeadlessPanelTests(Xunit.Abstractions.ITestOutputHelper output)
@@ -29,7 +32,14 @@ public sealed class HeadlessPanelTests : IDisposable
         File.WriteAllText(Path.Combine(_dir, "b.jpg"), "b");
     }
 
-    public void Dispose() { try { Directory.Delete(_dir, true); } catch { } }
+    public void Dispose()
+    {
+        try
+        {
+            Directory.Delete(_dir, true);
+        }
+        catch { }
+    }
 
     [Fact]
     public void Panels_List_Files()
@@ -53,7 +63,11 @@ public sealed class HeadlessPanelTests : IDisposable
             }
             window.Close();
         });
-        foreach (var l in report) _out.WriteLine(l);
+        foreach (var l in report)
+        {
+            _out.WriteLine(l);
+        }
+
         Assert.DoesNotContain(report, l => l.Contains("items=0"));
     }
 
@@ -64,29 +78,55 @@ public sealed class HeadlessPanelTests : IDisposable
         UiTestHost.Run(() =>
         {
             var vm = new MainViewModel(); // exactly what App creates at startup
-            report.Add($"base='{vm.BasePath}' left='{vm.Left.CurrentPath}' entries={vm.Left.Entries.Count} status='{vm.Left.Status}'");
-            var window = new MainWindow { DataContext = vm, Width = 1100, Height = 700 };
+            report.Add(
+                $"base='{vm.BasePath}' left='{vm.Left.CurrentPath}' entries={vm.Left.Entries.Count} status='{vm.Left.Status}'"
+            );
+            var window = new MainWindow
+            {
+                DataContext = vm,
+                Width = 1100,
+                Height = 700,
+            };
             window.Show();
             Dispatcher.UIThread.RunJobs();
             System.Threading.Thread.Sleep(200);
             Dispatcher.UIThread.RunJobs();
-            int visibleBorders = window.GetLogicalDescendants().OfType<Border>()
+            int visibleBorders = window
+                .GetLogicalDescendants()
+                .OfType<Border>()
                 .Count(b => b.IsEffectivelyVisible && b.Child is DockPanel);
             report.Add($"visible panel borders={visibleBorders}");
             Assert.Equal(2, visibleBorders); // exactly one border per side; staged lives in its own window
-            foreach (var g in window.GetLogicalDescendants().OfType<DataGrid>().Where(g => g.IsEffectivelyVisible))
+            foreach (
+                var g in window
+                    .GetLogicalDescendants()
+                    .OfType<DataGrid>()
+                    .Where(g => g.IsEffectivelyVisible)
+            )
             {
                 int items = (g.ItemsSource as IList)?.Count ?? -1;
                 int rows = g.GetVisualDescendants().OfType<DataGridRow>().Count();
-                var texts = g.GetVisualDescendants().OfType<DataGridRow>()
+                var texts = g.GetVisualDescendants()
+                    .OfType<DataGridRow>()
                     .Take(3)
-                    .Select(r => string.Join("|", r.GetVisualDescendants().OfType<TextBlock>().Select(t => t.Text ?? "")))
+                    .Select(r =>
+                        string.Join(
+                            "|",
+                            r.GetVisualDescendants().OfType<TextBlock>().Select(t => t.Text ?? "")
+                        )
+                    )
                     .ToList();
-                report.Add($"VISIBLE grid tag={g.Tag} items={items} rows={rows} sample=[{string.Join(" ;; ", texts)}]");
+                report.Add(
+                    $"VISIBLE grid tag={g.Tag} items={items} rows={rows} sample=[{string.Join(" ;; ", texts)}]"
+                );
             }
             window.Close();
         });
-        foreach (var l in report) _out.WriteLine(l);
+        foreach (var l in report)
+        {
+            _out.WriteLine(l);
+        }
+
         Assert.DoesNotContain(report, l => l.Contains("items=0"));
     }
 
@@ -98,16 +138,26 @@ public sealed class HeadlessPanelTests : IDisposable
             var vm = new MainViewModel { BasePath = _dir };
             vm.ApplyBase();
             vm.Left.Entries.First(e => e.Name == "a.txt").IsMarked = true;
-            var window = new MainWindow { DataContext = vm, Width = 1100, Height = 700 };
+            var window = new MainWindow
+            {
+                DataContext = vm,
+                Width = 1100,
+                Height = 700,
+            };
             window.Show();
             Pump4();
-            var grid = window.GetLogicalDescendants().OfType<DataGrid>()
+            var grid = window
+                .GetLogicalDescendants()
+                .OfType<DataGrid>()
                 .First(g => (g.Tag as string) == "Left" && g.IsEffectivelyVisible);
             var item = vm.Left.Entries.First(e => e.Name == "a.txt");
             grid.ScrollIntoView(item, null);
             Pump4();
-            var row = grid.GetVisualDescendants().OfType<DataGridRow>()
-                .FirstOrDefault(r => ((BackupNormalizer.Ui.ViewModels.FileEntryItem)r.DataContext!).Name == "a.txt");
+            var row = grid.GetVisualDescendants()
+                .OfType<DataGridRow>()
+                .FirstOrDefault(r =>
+                    ((BackupNormalizer.Ui.ViewModels.FileEntryItem)r.DataContext!).Name == "a.txt"
+                );
             Assert.NotNull(row);
             var cells = row.GetVisualDescendants().OfType<TextBlock>().ToList();
             Assert.True(cells.Count >= 4);
@@ -129,14 +179,27 @@ public sealed class HeadlessPanelTests : IDisposable
             var vm = new MainViewModel { BasePath = _dir };
             vm.ApplyBase();
             vm.Left.Entries.First(e => e.Name == "b.jpg").IsMarked = true;
-            var window = new MainWindow { DataContext = vm, Width = 1100, Height = 700 };
+            var window = new MainWindow
+            {
+                DataContext = vm,
+                Width = 1100,
+                Height = 700,
+            };
             window.Show();
 
-            void Check(ThemeVariant theme, string background, string text, string marked, string selected)
+            void Check(
+                ThemeVariant theme,
+                string background,
+                string text,
+                string marked,
+                string selected
+            )
             {
                 window.RequestedThemeVariant = theme;
                 Pump4();
-                var grid = window.GetLogicalDescendants().OfType<DataGrid>()
+                var grid = window
+                    .GetLogicalDescendants()
+                    .OfType<DataGrid>()
                     .First(g => (g.Tag as string) == "Left" && g.IsEffectivelyVisible);
 
                 Color RowText(string name)
@@ -144,25 +207,36 @@ public sealed class HeadlessPanelTests : IDisposable
                     var item = vm.Left.Entries.First(e => e.Name == name);
                     grid.ScrollIntoView(item, null);
                     Pump4();
-                    var row = grid.GetVisualDescendants().OfType<DataGridRow>()
+                    var row = grid.GetVisualDescendants()
+                        .OfType<DataGridRow>()
                         .First(r => ((FileEntryItem)r.DataContext!).Name == name);
-                    var label = row.GetVisualDescendants().OfType<TextBlock>()
+                    var label = row.GetVisualDescendants()
+                        .OfType<TextBlock>()
                         .First(t => t.Text == item.BaseName);
                     return Assert.IsType<SolidColorBrush>(label.Foreground).Color;
                 }
 
-                Assert.Equal(Color.Parse(background), Assert.IsType<SolidColorBrush>(grid.Background).Color);
+                Assert.Equal(
+                    Color.Parse(background),
+                    Assert.IsType<SolidColorBrush>(grid.Background).Color
+                );
                 var header = grid.GetVisualDescendants().OfType<DataGridColumnHeader>().First();
-                Assert.Equal(Color.Parse(theme == ThemeVariant.Dark ? "#2B3743" : "#FFFFFF"),
-                    Assert.IsType<SolidColorBrush>(header.Background).Color);
+                Assert.Equal(
+                    Color.Parse(theme == ThemeVariant.Dark ? "#2B3743" : "#FFFFFF"),
+                    Assert.IsType<SolidColorBrush>(header.Background).Color
+                );
                 Assert.Equal(Color.Parse(text), RowText("a.txt"));
                 Assert.Equal(Color.Parse(marked), RowText("b.jpg"));
                 grid.SelectedItem = vm.Left.Entries.First(e => e.Name == "a.txt");
                 grid.ScrollIntoView(vm.Left.Entries.First(e => e.Name == "a.txt"), null);
                 Pump4();
-                var selectedRow = grid.GetVisualDescendants().OfType<DataGridRow>()
+                var selectedRow = grid.GetVisualDescendants()
+                    .OfType<DataGridRow>()
                     .First(r => ((FileEntryItem)r.DataContext!).Name == "a.txt");
-                Assert.Equal(Color.Parse(selected), Assert.IsType<SolidColorBrush>(selectedRow.Background).Color);
+                Assert.Equal(
+                    Color.Parse(selected),
+                    Assert.IsType<SolidColorBrush>(selectedRow.Background).Color
+                );
             }
 
             Check(ThemeVariant.Dark, "#26323D", "#EEF2F6", "#FF9E98", "#365A79");
@@ -191,18 +265,29 @@ public sealed class DataGridThemeOverrideTests
             window.RequestedThemeVariant = ThemeVariant.Light;
             window.Show();
             Dispatcher.UIThread.RunJobs();
-            SolidColorBrush Res(string key)
-                => Assert.IsType<SolidColorBrush>(window.FindResource(key));
-            Assert.Equal(Avalonia.Media.Colors.Transparent, Res("DataGridCellFocusVisualPrimaryBrush").Color);
-            Assert.Equal(Avalonia.Media.Colors.Transparent, Res("DataGridCellFocusVisualSecondaryBrush").Color);
-            foreach (var key in new[]
+            SolidColorBrush Res(string key) =>
+                Assert.IsType<SolidColorBrush>(window.FindResource(key));
+            Assert.Equal(
+                Avalonia.Media.Colors.Transparent,
+                Res("DataGridCellFocusVisualPrimaryBrush").Color
+            );
+            Assert.Equal(
+                Avalonia.Media.Colors.Transparent,
+                Res("DataGridCellFocusVisualSecondaryBrush").Color
+            );
+            foreach (
+                var key in new[]
+                {
+                    "DataGridRowSelectedBackgroundOpacity",
+                    "DataGridRowSelectedHoveredBackgroundOpacity",
+                    "DataGridRowSelectedUnfocusedBackgroundOpacity",
+                    "DataGridRowSelectedHoveredUnfocusedBackgroundOpacity",
+                }
+            )
             {
-                "DataGridRowSelectedBackgroundOpacity",
-                "DataGridRowSelectedHoveredBackgroundOpacity",
-                "DataGridRowSelectedUnfocusedBackgroundOpacity",
-                "DataGridRowSelectedHoveredUnfocusedBackgroundOpacity",
-            })
                 Assert.Equal(1.0, Assert.IsType<double>(window.FindResource(key)));
+            }
+
             window.Close();
         });
     }
@@ -216,7 +301,10 @@ public sealed class StagedWindowTests
     {
         UiTestHost.Run(() =>
         {
-            var dir = Path.Combine(Path.GetTempPath(), "bn-stagedwin-" + Guid.NewGuid().ToString("N"));
+            var dir = Path.Combine(
+                Path.GetTempPath(),
+                "bn-stagedwin-" + Guid.NewGuid().ToString("N")
+            );
             Directory.CreateDirectory(Path.Combine(dir, "src"));
             Directory.CreateDirectory(Path.Combine(dir, "dst"));
             File.WriteAllText(Path.Combine(dir, "src", "f.txt"), "data");
@@ -231,16 +319,31 @@ public sealed class StagedWindowTests
                 vm.Left.SelectedEntry = vm.Left.Entries.First(e => e.Name == "f.txt");
                 vm.StageMove();
                 Assert.NotEmpty(vm.Staged);
-                var window = new StagedOperationsWindow { DataContext = vm, Width = 800, Height = 400 };
+                var window = new StagedOperationsWindow
+                {
+                    DataContext = vm,
+                    Width = 800,
+                    Height = 400,
+                };
                 window.Show();
                 Dispatcher.UIThread.RunJobs();
                 var list = window.GetLogicalDescendants().OfType<DataGrid>().First();
                 Assert.False(list.CanUserSortColumns);
                 Assert.True(list.CanUserResizeColumns);
-                Assert.Equal(vm.Staged.Count, (list.ItemsSource as System.Collections.IList)?.Count ?? -1);
+                Assert.Equal(
+                    vm.Staged.Count,
+                    (list.ItemsSource as System.Collections.IList)?.Count ?? -1
+                );
                 window.Close();
             }
-            finally { try { Directory.Delete(dir, true); } catch { } }
+            finally
+            {
+                try
+                {
+                    Directory.Delete(dir, true);
+                }
+                catch { }
+            }
         });
     }
 }

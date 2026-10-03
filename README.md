@@ -11,6 +11,22 @@ dotnet build BackupNormalizer.slnx -c Release
 dotnet test BackupNormalizer.slnx -c Release
 ```
 
+### Formatting
+
+The repository pins [CSharpier](https://csharpier.com/) as a local .NET tool.
+It uses [.editorconfig](.editorconfig) for four-space indentation, LF line endings,
+and a 100-column wrapping target. From the repository root:
+
+```bash
+dotnet tool restore
+dotnet csharpier format .
+dotnet csharpier check .
+```
+
+Use `format` to apply the layout and `check` to verify it without changing files.
+Formatting covers handwritten C# in the application and tests. Generated EF Core
+migrations and XML files are excluded.
+
 The examples use `bn` as shorthand for `dotnet run --project src/BackupNormalizer --` or a published `BackupNormalizer` binary.
 
 Build identity and self-contained CLI/UI release ZIPs are documented in the

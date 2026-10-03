@@ -55,39 +55,48 @@ public sealed class InventoryHealthViewModel
         var scanTime = ParseTime(latest?.Scan.CompletedUtc) ?? ParseTime(latest?.Scan.StartedUtc);
         ScanAge = FormatAge(scanTime, now ?? DateTimeOffset.Now);
         ScanMode = FormatMode(latest?.Mode);
-        FallbackReason = latest?.FallbackReason ?? (latest?.Mode == null
-            ? "Not recorded by this inventory version"
-            : "None recorded");
+        FallbackReason =
+            latest?.FallbackReason
+            ?? (latest?.Mode == null ? "Not recorded by this inventory version" : "None recorded");
         ScannedCount = FormatLegacyCount(latest?.ScannedCount);
         ScanErrorCount = FormatLegacyCount(latest?.ErrorCount);
         RegularFiles = health.RegularFiles.ToString("N0", CultureInfo.CurrentCulture);
         Links = health.Links.ToString("N0", CultureInfo.CurrentCulture);
         EntryErrors = health.EntryErrors.ToString("N0", CultureInfo.CurrentCulture);
         MissingEntries = health.MissingEntries.ToString("N0", CultureInfo.CurrentCulture);
-        HashReadiness = $"{health.UsableHashes.ToString("N0", CultureInfo.CurrentCulture)} of " +
-            $"{health.RegularFiles.ToString("N0", CultureInfo.CurrentCulture)} regular files have a current SHA-256 hash";
+        HashReadiness =
+            $"{health.UsableHashes.ToString("N0", CultureInfo.CurrentCulture)} of "
+            + $"{health.RegularFiles.ToString("N0", CultureInfo.CurrentCulture)} regular files have a current SHA-256 hash";
         PlanningReadiness = health.PlanningReady ? "Ready" : "Blocked";
         PlanningBlocker = health.BlockingReason ?? "No planning blockers.";
-        DiagnosticsSummary = latest == null ? "No scan diagnostics." : latest.ErrorCount == null
-            ? "Diagnostic count was not recorded by this inventory version."
+        DiagnosticsSummary =
+            latest == null ? "No scan diagnostics."
+            : latest.ErrorCount == null
+                ? "Diagnostic count was not recorded by this inventory version."
             : latest.ErrorCount == 0 ? "No scan errors recorded."
             : $"{latest.ErrorCount.Value.ToString("N0", CultureInfo.CurrentCulture)} scan error(s) recorded.";
-        Errors = new ObservableCollection<InventoryHealthErrorItem>(health.Errors.Select(error =>
-            new InventoryHealthErrorItem(error.Path, error.Message, FormatTime(error.RecordedUtc))));
+        Errors = new ObservableCollection<InventoryHealthErrorItem>(
+            health.Errors.Select(error => new InventoryHealthErrorItem(
+                error.Path,
+                error.Message,
+                FormatTime(error.RecordedUtc)
+            ))
+        );
     }
 
-    private static string FormatLegacyCount(int? count) => count?.ToString("N0", CultureInfo.CurrentCulture)
-        ?? "Unknown (older inventory)";
+    private static string FormatLegacyCount(int? count) =>
+        count?.ToString("N0", CultureInfo.CurrentCulture) ?? "Unknown (older inventory)";
 
-    private static string FormatMode(string? mode) => mode switch
-    {
-        "USN" => "USN incremental scan",
-        "Recursive" => "Full scan (recursive)",
-        "MFT" => "Full scan (MFT)",
-        "NotStarted" => "Not started",
-        null or "" => "Unknown (older inventory)",
-        _ => mode
-    };
+    private static string FormatMode(string? mode) =>
+        mode switch
+        {
+            "USN" => "USN incremental scan",
+            "Recursive" => "Full scan (recursive)",
+            "MFT" => "Full scan (MFT)",
+            "NotStarted" => "Not started",
+            null or "" => "Unknown (older inventory)",
+            _ => mode,
+        };
 
     private static string FormatTime(string? value)
     {
@@ -96,19 +105,43 @@ public sealed class InventoryHealthViewModel
     }
 
     private static DateTimeOffset? ParseTime(string? value) =>
-        DateTimeOffset.TryParse(value, CultureInfo.InvariantCulture,
-            DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal, out var parsed)
+        DateTimeOffset.TryParse(
+            value,
+            CultureInfo.InvariantCulture,
+            DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal,
+            out var parsed
+        )
             ? parsed
             : null;
 
     private static string FormatAge(DateTimeOffset? scanTime, DateTimeOffset now)
     {
-        if (scanTime == null) return "Unavailable";
+        if (scanTime == null)
+        {
+            return "Unavailable";
+        }
+
         var age = now - scanTime.Value;
-        if (age < TimeSpan.Zero) return "Scan time is in the future";
-        if (age < TimeSpan.FromMinutes(1)) return "Under a minute ago";
-        if (age < TimeSpan.FromHours(1)) return $"{(int)age.TotalMinutes:N0} minutes ago";
-        if (age < TimeSpan.FromDays(1)) return $"{(int)age.TotalHours:N0} hours ago";
+        if (age < TimeSpan.Zero)
+        {
+            return "Scan time is in the future";
+        }
+
+        if (age < TimeSpan.FromMinutes(1))
+        {
+            return "Under a minute ago";
+        }
+
+        if (age < TimeSpan.FromHours(1))
+        {
+            return $"{(int)age.TotalMinutes:N0} minutes ago";
+        }
+
+        if (age < TimeSpan.FromDays(1))
+        {
+            return $"{(int)age.TotalHours:N0} hours ago";
+        }
+
         return $"{(int)age.TotalDays:N0} days ago";
     }
 }

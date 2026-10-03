@@ -1,16 +1,19 @@
+using System.Text.Json;
 using BackupNormalizer;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Migrations;
-using System.Text.Json;
 
 namespace BackupNormalizer.Tests;
 
 [Collection("Console")]
 public sealed class InventoryStatusTests : IDisposable
 {
-    private readonly string _fixture = Path.Combine(AppContext.BaseDirectory, "bn-status-" + Guid.NewGuid().ToString("N"));
+    private readonly string _fixture = Path.Combine(
+        AppContext.BaseDirectory,
+        "bn-status-" + Guid.NewGuid().ToString("N")
+    );
     private string Root => Path.Combine(_fixture, "data");
     private string DbPath => Path.Combine(_fixture, "inventory.db");
 
@@ -39,7 +42,11 @@ public sealed class InventoryStatusTests : IDisposable
         using (var db = Open())
         {
             new Scanner(db, usnMode: "off").ScanRoot("r");
-            var scanner = new Scanner(db, _ => [new FsEntry(denied, true, 0, default, default, false, false, "Access denied.")]);
+            var scanner = new Scanner(
+                db,
+                _ =>
+                    [new FsEntry(denied, true, 0, default, default, false, false, "Access denied.")]
+            );
             Assert.Equal((0, 1), scanner.ScanRoot("r"));
             var failed = db.GetScanDetails("r")!;
             failedId = failed.Scan.Id;
@@ -77,8 +84,22 @@ public sealed class InventoryStatusTests : IDisposable
         Assert.False(db.GetInventoryStatus("r").PlanningReady);
         scanner.HashNeeded("r");
         long scanId = db.LatestScan("r")!.Id;
-        db.UpsertFileEntry(new FileEntryRow(0, "r", "link", "link", 0, Database.UtcNow(), null, null,
-            scanId, FileStatus.Ok, null, EntryKind.FileLink));
+        db.UpsertFileEntry(
+            new FileEntryRow(
+                0,
+                "r",
+                "link",
+                "link",
+                0,
+                Database.UtcNow(),
+                null,
+                null,
+                scanId,
+                FileStatus.Ok,
+                null,
+                EntryKind.FileLink
+            )
+        );
         var ready = db.GetInventoryStatus("r");
         Assert.True(ready.PlanningReady);
         Assert.Equal(1, ready.Links);
@@ -105,12 +126,23 @@ public sealed class InventoryStatusTests : IDisposable
     public void Historical_ReadOnly_Diagnostics_Are_Unknown_Without_Migration()
     {
         var options = new DbContextOptionsBuilder<BackupNormalizerDbContext>()
-            .UseSqlite(new SqliteConnectionStringBuilder { DataSource = DbPath, Pooling = false }.ToString()).Options;
+            .UseSqlite(
+                new SqliteConnectionStringBuilder
+                {
+                    DataSource = DbPath,
+                    Pooling = false,
+                }.ToString()
+            )
+            .Options;
         using (var old = new BackupNormalizerDbContext(options))
         {
             old.GetService<IMigrator>().Migrate("20261002173131_TrackUsnCheckpoints");
-            old.Database.ExecuteSqlRaw("INSERT INTO StorageRoot (Id,Name,Path,CreatedUtc) VALUES ('r','r','unavailable','before')");
-            old.Database.ExecuteSqlRaw("INSERT INTO Scan (StorageRootId,StartedUtc,Status) VALUES ('r','before','Incomplete')");
+            old.Database.ExecuteSqlRaw(
+                "INSERT INTO StorageRoot (Id,Name,Path,CreatedUtc) VALUES ('r','r','unavailable','before')"
+            );
+            old.Database.ExecuteSqlRaw(
+                "INSERT INTO Scan (StorageRootId,StartedUtc,Status) VALUES ('r','before','Incomplete')"
+            );
         }
         byte[] before = File.ReadAllBytes(DbPath);
         using (var db = Database.OpenReadOnly(DbPath, pooling: false))
@@ -132,7 +164,22 @@ public sealed class InventoryStatusTests : IDisposable
     {
         using (var db = Open())
         {
-            var scanner = new Scanner(db, _ => [new FsEntry(Path.Combine(Root, "denied"), true, 0, default, default, false, false, "Access denied.")]);
+            var scanner = new Scanner(
+                db,
+                _ =>
+                    [
+                        new FsEntry(
+                            Path.Combine(Root, "denied"),
+                            true,
+                            0,
+                            default,
+                            default,
+                            false,
+                            false,
+                            "Access denied."
+                        ),
+                    ]
+            );
             scanner.ScanRoot("r");
         }
         var original = Console.Out;
@@ -144,15 +191,25 @@ public sealed class InventoryStatusTests : IDisposable
             Assert.Equal(3, Cli.Run(["status", "r", "--db", DbPath, "--json"]));
             using var status = JsonDocument.Parse(output.ToString());
             Assert.False(status.RootElement[0].GetProperty("planningReady").GetBoolean());
-            Assert.Equal(1, status.RootElement[0].GetProperty("latestScan").GetProperty("errorCount").GetInt32());
+            Assert.Equal(
+                1,
+                status.RootElement[0].GetProperty("latestScan").GetProperty("errorCount").GetInt32()
+            );
             output.GetStringBuilder().Clear();
             Assert.Equal(0, Cli.Run(["scan", "errors", "r", "--db", DbPath, "--json"]));
             using var errors = JsonDocument.Parse(output.ToString());
-            Assert.Equal("Access denied.", errors.RootElement.GetProperty("errors")[0].GetProperty("message").GetString());
+            Assert.Equal(
+                "Access denied.",
+                errors.RootElement.GetProperty("errors")[0].GetProperty("message").GetString()
+            );
             output.GetStringBuilder().Clear();
             Assert.Equal(0, Cli.Run(["scan", "errors", "r", "--db", DbPath]));
             Assert.Contains("Access denied.", output.ToString());
         }
-        finally { Console.SetOut(original); Log.Json = originalJson; }
+        finally
+        {
+            Console.SetOut(original);
+            Log.Json = originalJson;
+        }
     }
 }

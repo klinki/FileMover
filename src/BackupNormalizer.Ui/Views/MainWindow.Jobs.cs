@@ -10,14 +10,25 @@ public partial class MainWindow
 
     private async void OnShowInventoryJobs(object? sender, RoutedEventArgs args)
     {
-        if (Vm != null) await new InventoryJobsWindow(Vm).ShowDialog(this);
+        if (Vm != null)
+        {
+            await new InventoryJobsWindow(Vm).ShowDialog(this);
+        }
     }
 
     private async void OnClosingWithInventoryJob(object? sender, WindowClosingEventArgs args)
     {
-        if (_jobShutdownAllowed || Vm?.Job.IsRunning != true) return;
+        if (_jobShutdownAllowed || Vm?.Job.IsRunning != true)
+        {
+            return;
+        }
+
         args.Cancel = true;
-        if (_waitingForJobShutdown) return;
+        if (_waitingForJobShutdown)
+        {
+            return;
+        }
+
         _waitingForJobShutdown = true;
         await Vm.CancelAndWaitForJobAsync();
         _jobShutdownAllowed = true;

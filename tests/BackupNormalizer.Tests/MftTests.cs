@@ -8,16 +8,36 @@ public sealed class MftParserTests
 {
     private static readonly DateTime SampleTime = new(2024, 1, 2, 3, 4, 5, DateTimeKind.Utc);
 
-    private static byte[] BuildRecord(string name, int nameSpace, ulong parent, long size,
-        uint nameFlags = 0, ushort headerFlags = 0x01, ushort usn = 0x1234)
+    private static byte[] BuildRecord(
+        string name,
+        int nameSpace,
+        ulong parent,
+        long size,
+        uint nameFlags = 0,
+        ushort headerFlags = 0x01,
+        ushort usn = 0x1234
+    )
     {
         const int recordSize = 1024;
         const int sector = 512;
         var buf = new byte[recordSize];
-        void U16(int off, ushort v) { buf[off] = (byte)v; buf[off + 1] = (byte)(v >> 8); }
-        void U32(int off, uint v) { BitConverter.GetBytes(v).CopyTo(buf, off); }
-        void U64(int off, ulong v) { BitConverter.GetBytes(v).CopyTo(buf, off); }
-        void I64(int off, long v) { BitConverter.GetBytes(v).CopyTo(buf, off); }
+        void U16(int off, ushort v)
+        {
+            buf[off] = (byte)v;
+            buf[off + 1] = (byte)(v >> 8);
+        }
+        void U32(int off, uint v)
+        {
+            BitConverter.GetBytes(v).CopyTo(buf, off);
+        }
+        void U64(int off, ulong v)
+        {
+            BitConverter.GetBytes(v).CopyTo(buf, off);
+        }
+        void I64(int off, long v)
+        {
+            BitConverter.GetBytes(v).CopyTo(buf, off);
+        }
 
         U32(0, 0x454C4946); // "FILE"
         U16(4, 42); // USA offset
@@ -108,12 +128,18 @@ public sealed class MftParserTests
     {
         var requested = new List<ulong>();
         var returned = new Queue<ulong>([9, 5, 0]);
-        var records = NtfsMftEnumerator.EnumerateRecords(16, 512, number =>
-        {
-            requested.Add(number);
-            var output = WrapRecord(returned.Dequeue(), BuildRecord("a.txt", 1, 5, 7));
-            return (output, output.Length);
-        }).ToList();
+        var records = NtfsMftEnumerator
+            .EnumerateRecords(
+                16,
+                512,
+                number =>
+                {
+                    requested.Add(number);
+                    var output = WrapRecord(returned.Dequeue(), BuildRecord("a.txt", 1, 5, 7));
+                    return (output, output.Length);
+                }
+            )
+            .ToList();
         Assert.Equal(new ulong[] { 15, 8, 4 }, requested);
         Assert.Equal(new ulong[] { 9, 5, 0 }, records.Select(r => r.Frn));
     }
@@ -121,27 +147,46 @@ public sealed class MftParserTests
     [Fact]
     public void Native_Walk_Propagates_Read_Failures_And_Rejects_Forward_Results()
     {
-        Assert.Throws<IOException>(() => NtfsMftEnumerator.EnumerateRecords(16, 512,
-            _ => throw new IOException("read failed")).ToList());
-        Assert.Throws<IOException>(() => NtfsMftEnumerator.EnumerateRecords(16, 512, _ =>
-        {
-            var output = WrapRecord(16, BuildRecord("a.txt", 1, 5, 7));
-            return (output, output.Length);
-        }).ToList());
+        Assert.Throws<IOException>(() =>
+            NtfsMftEnumerator
+                .EnumerateRecords(16, 512, _ => throw new IOException("read failed"))
+                .ToList()
+        );
+        Assert.Throws<IOException>(() =>
+            NtfsMftEnumerator
+                .EnumerateRecords(
+                    16,
+                    512,
+                    _ =>
+                    {
+                        var output = WrapRecord(16, BuildRecord("a.txt", 1, 5, 7));
+                        return (output, output.Length);
+                    }
+                )
+                .ToList()
+        );
     }
 
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public void Valid_Extension_Record_Is_An_Intentional_Skip_And_Malformed_Record_Fails(bool containsName)
+    public void Valid_Extension_Record_Is_An_Intentional_Skip_And_Malformed_Record_Fails(
+        bool containsName
+    )
     {
         var extension = BuildRecord("unused", 1, 5, 7);
         BitConverter.GetBytes(42UL).CopyTo(extension, 0x20);
-        if (!containsName) BitConverter.GetBytes(0xFFFFFFFFU).CopyTo(extension, 48);
+        if (!containsName)
+        {
+            BitConverter.GetBytes(0xFFFFFFFFU).CopyTo(extension, 48);
+        }
+
         var output = WrapRecord(100, extension);
         Assert.Null(NtfsMftEnumerator.DecodeOutput(output, output.Length, 512).Parsed);
         var malformed = WrapRecord(101, new byte[1024]);
-        Assert.Throws<IOException>(() => NtfsMftEnumerator.DecodeOutput(malformed, malformed.Length, 512));
+        Assert.Throws<IOException>(() =>
+            NtfsMftEnumerator.DecodeOutput(malformed, malformed.Length, 512)
+        );
     }
 
     [Fact]
@@ -191,10 +236,14 @@ public sealed class MftParserTests
         BitConverter.GetBytes(0xFFFFFFFFu).CopyTo(buf, off + attrLen);
         // Recompute sector trailers/USA (content changed after BuildRecord sealed them).
         ushort usn = (ushort)(buf[42] | (buf[43] << 8));
-        buf[44] = buf[510]; buf[45] = buf[511];
-        buf[46] = buf[1022]; buf[47] = buf[1023];
-        buf[510] = (byte)usn; buf[511] = (byte)(usn >> 8);
-        buf[1022] = (byte)usn; buf[1023] = (byte)(usn >> 8);
+        buf[44] = buf[510];
+        buf[45] = buf[511];
+        buf[46] = buf[1022];
+        buf[47] = buf[1023];
+        buf[510] = (byte)usn;
+        buf[511] = (byte)(usn >> 8);
+        buf[1022] = (byte)usn;
+        buf[1023] = (byte)(usn >> 8);
         _ = recordSize;
         Assert.True(NtfsMftEnumerator.TryParseFileRecord(buf, buf.Length, 512, out var parsed));
         Assert.Equal("longname.txt", parsed!.Name);
@@ -212,7 +261,8 @@ public sealed class MftParserTests
         torn[510] = unchecked((byte)~torn[510]);
         Assert.False(NtfsMftEnumerator.TryParseFileRecord(torn, torn.Length, 512, out _));
         var free = (byte[])buf.Clone();
-        free[0x16] = 0x00; free[0x17] = 0x00; // not in-use
+        free[0x16] = 0x00;
+        free[0x17] = 0x00; // not in-use
         Assert.False(NtfsMftEnumerator.TryParseFileRecord(free, free.Length, 512, out _));
     }
 
@@ -236,7 +286,9 @@ public sealed class MftParserTests
     [Fact]
     public void Mode_Selection_Is_Safe_Off_Platform()
     {
-        Assert.False(NtfsMftEnumerator.TryCreate("/tmp", "off", out var volume, out string? message));
+        Assert.False(
+            NtfsMftEnumerator.TryCreate("/tmp", "off", out var volume, out string? message)
+        );
         Assert.Null(volume);
         Assert.Null(message);
         Assert.False(NtfsMftEnumerator.TryCreate("/tmp", "bogus-mode", out _, out _));
@@ -244,7 +296,9 @@ public sealed class MftParserTests
         {
             Assert.False(NtfsMftEnumerator.TryCreate("/tmp", "auto", out _, out string? auto));
             Assert.NotNull(auto);
-            Assert.Throws<InvalidOperationException>(() => NtfsMftEnumerator.TryCreate("/tmp", "require", out _, out _));
+            Assert.Throws<InvalidOperationException>(() =>
+                NtfsMftEnumerator.TryCreate("/tmp", "require", out _, out _)
+            );
         }
     }
 

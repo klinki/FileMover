@@ -9,7 +9,10 @@ namespace BackupNormalizer.Tests;
 public sealed class UiDatabasePlanTests : IDisposable
 {
     private const string Modified = "2026-10-01T12:00:00.0000000Z";
-    private readonly string _dir = Path.Combine(Path.GetTempPath(), "bn-ui-database-plan-" + Guid.NewGuid().ToString("N"));
+    private readonly string _dir = Path.Combine(
+        Path.GetTempPath(),
+        "bn-ui-database-plan-" + Guid.NewGuid().ToString("N")
+    );
 
     public UiDatabasePlanTests() => Directory.CreateDirectory(_dir);
 
@@ -35,18 +38,35 @@ public sealed class UiDatabasePlanTests : IDisposable
         vm.PlanId = "whole-root-plan";
         vm.Left.NavigateInventory("nested");
         var review = await vm.PreparePlanAsync(DatabasePlanDirection.LeftToRight);
-        if (review is null) throw new Xunit.Sdk.XunitException(vm.StatusMessage);
+        if (review is null)
+        {
+            throw new Xunit.Sdk.XunitException(vm.StatusMessage);
+        }
+
         Assert.Equal(Path.GetFullPath(sourceDb), review.Document.SourceDatabasePath);
         Assert.Equal(Path.GetFullPath(sourceRoot), review.Document.SourcePath);
         Assert.Equal(Path.GetFullPath(targetRoot), review.Document.TargetPath);
         Assert.Equal(DatabasePlanDirection.LeftToRight, review.Direction);
         Assert.Equal(2, review.CopyCount);
         Assert.Equal(6, review.EstimatedBytesCopied);
-        Assert.Contains(review.Operations, operation => operation.Source.EndsWith("root.txt", StringComparison.Ordinal));
-        Assert.Contains(review.Operations, operation => operation.Source.EndsWith("nested" + Path.DirectorySeparatorChar + "child.txt", StringComparison.Ordinal));
+        Assert.Contains(
+            review.Operations,
+            operation => operation.Source.EndsWith("root.txt", StringComparison.Ordinal)
+        );
+        Assert.Contains(
+            review.Operations,
+            operation =>
+                operation.Source.EndsWith(
+                    "nested" + Path.DirectorySeparatorChar + "child.txt",
+                    StringComparison.Ordinal
+                )
+        );
         AssertDatabaseUnchanged(sourceBefore, sourceDb);
         AssertDatabaseUnchanged(targetBefore, targetDb);
-        Assert.Equal(tempPlansBefore.OrderBy(path => path), TemporaryPlanDirectories().OrderBy(path => path));
+        Assert.Equal(
+            tempPlansBefore.OrderBy(path => path),
+            TemporaryPlanDirectories().OrderBy(path => path)
+        );
         Assert.True(File.Exists(Path.Combine(sourceRoot, "root.txt")));
         Assert.False(File.Exists(Path.Combine(targetRoot, "root.txt")));
     }
@@ -66,12 +86,19 @@ public sealed class UiDatabasePlanTests : IDisposable
         vm.PlanId = "reverse-plan";
 
         var review = await vm.PreparePlanAsync(DatabasePlanDirection.RightToLeft);
-        if (review is null) throw new Xunit.Sdk.XunitException(vm.StatusMessage);
+        if (review is null)
+        {
+            throw new Xunit.Sdk.XunitException(vm.StatusMessage);
+        }
+
         Assert.Equal("Right → Left", review.DirectionLabel);
         Assert.Equal(Path.GetFullPath(rightDb), review.Document.SourceDatabasePath);
         Assert.Equal(Path.GetFullPath(rightRoot), review.Document.SourcePath);
         Assert.Equal(Path.GetFullPath(leftRoot), review.Document.TargetPath);
-        var copy = Assert.Single(review.Document.Operations, operation => operation.Type == OpType.Copy);
+        var copy = Assert.Single(
+            review.Document.Operations,
+            operation => operation.Type == OpType.Copy
+        );
         Assert.Equal(SourceScope.Source, copy.SourceKind);
         Assert.Equal("right-only.txt", copy.SourcePath);
 
@@ -90,7 +117,10 @@ public sealed class UiDatabasePlanTests : IDisposable
 
         string importedDb = Path.Combine(_dir, "imported.db");
         using (var db = Database.OpenWritable(importedDb, pooling: false))
+        {
             PlanStaging.WriteToDatabase(db, imported, imported.TargetRoot, imported.TargetPath);
+        }
+
         using (var db = Database.OpenReadOnly(importedDb, pooling: false))
         {
             var plan = Assert.IsType<Database.PlanInfo>(db.GetPlan("reverse-plan"));
@@ -108,12 +138,20 @@ public sealed class UiDatabasePlanTests : IDisposable
     [InlineData(ScanStatus.Incomplete, true)]
     [InlineData(ScanStatus.Completed, false)]
     public async Task Planner_Readiness_Failures_Leave_Inventories_And_Temporary_Directory_Clean(
-        string sourceScanStatus, bool hashSource)
+        string sourceScanStatus,
+        bool hashSource
+    )
     {
         string sourceRoot = NewRoot("not-ready-source");
         string targetRoot = NewRoot("not-ready-target");
         Write(sourceRoot, "file.txt", "contents");
-        string sourceDb = CreateDatabase("not-ready-source", "s", sourceRoot, hash: hashSource, scanStatus: sourceScanStatus);
+        string sourceDb = CreateDatabase(
+            "not-ready-source",
+            "s",
+            sourceRoot,
+            hash: hashSource,
+            scanStatus: sourceScanStatus
+        );
         string targetDb = CreateDatabase("not-ready-target", "t", targetRoot);
         var sourceBefore = DatabaseBytes(sourceDb);
         var targetBefore = DatabaseBytes(targetDb);
@@ -124,10 +162,18 @@ public sealed class UiDatabasePlanTests : IDisposable
         var review = await vm.PreparePlanAsync(DatabasePlanDirection.LeftToRight);
 
         Assert.Null(review);
-        Assert.Contains(sourceScanStatus == ScanStatus.Incomplete ? "complete successful scan" : "not fully hashed", vm.StatusMessage);
+        Assert.Contains(
+            sourceScanStatus == ScanStatus.Incomplete
+                ? "complete successful scan"
+                : "not fully hashed",
+            vm.StatusMessage
+        );
         AssertDatabaseUnchanged(sourceBefore, sourceDb);
         AssertDatabaseUnchanged(targetBefore, targetDb);
-        Assert.Equal(tempPlansBefore.OrderBy(path => path).ToArray(), TemporaryPlanDirectories().OrderBy(path => path).ToArray());
+        Assert.Equal(
+            tempPlansBefore.OrderBy(path => path).ToArray(),
+            TemporaryPlanDirectories().OrderBy(path => path).ToArray()
+        );
     }
 
     [Fact]
@@ -142,17 +188,46 @@ public sealed class UiDatabasePlanTests : IDisposable
         using (var db = Database.OpenWritable(targetDb, pooling: false))
         {
             var scan = db.LatestScan("t")!;
-            db.UpsertFileEntry(new FileEntryRow(0, "t", "linked.txt", "linked.txt", 0, Modified, null,
-                null, scan.Id, FileStatus.Ok, null, EntryKind.FileLink, "elsewhere", null, "fixture link"));
+            db.UpsertFileEntry(
+                new FileEntryRow(
+                    0,
+                    "t",
+                    "linked.txt",
+                    "linked.txt",
+                    0,
+                    Modified,
+                    null,
+                    null,
+                    scan.Id,
+                    FileStatus.Ok,
+                    null,
+                    EntryKind.FileLink,
+                    "elsewhere",
+                    null,
+                    "fixture link"
+                )
+            );
         }
         var vm = LoadPanels(sourceDb, targetDb);
         vm.PlanId = "link-plan";
 
         var review = await vm.PreparePlanAsync(DatabasePlanDirection.LeftToRight);
-        if (review is null) throw new Xunit.Sdk.XunitException(vm.StatusMessage);
+        if (review is null)
+        {
+            throw new Xunit.Sdk.XunitException(vm.StatusMessage);
+        }
+
         Assert.True(review.SkippedLinkCount > 0);
-        Assert.Contains(review.Issues, issue => issue.Kind == "Skipped link" && !issue.BlocksExport);
-        Assert.Contains(review.Operations, operation => operation.Type == OpType.Copy && operation.Source.EndsWith("copy.txt", StringComparison.Ordinal));
+        Assert.Contains(
+            review.Issues,
+            issue => issue.Kind == "Skipped link" && !issue.BlocksExport
+        );
+        Assert.Contains(
+            review.Operations,
+            operation =>
+                operation.Type == OpType.Copy
+                && operation.Source.EndsWith("copy.txt", StringComparison.Ordinal)
+        );
         Assert.True(review.CanExportJson);
         string jsonPath = Path.Combine(_dir, "links.json");
         review.ExportJson(jsonPath);
@@ -174,13 +249,20 @@ public sealed class UiDatabasePlanTests : IDisposable
         var vm = LoadPanels(sourceDb, targetDb);
         vm.PlanId = "content-conflict-plan";
         var review = await vm.PreparePlanAsync(DatabasePlanDirection.LeftToRight);
-        if (review is null) throw new Xunit.Sdk.XunitException(vm.StatusMessage);
+        if (review is null)
+        {
+            throw new Xunit.Sdk.XunitException(vm.StatusMessage);
+        }
 
         Assert.Equal(1, review.ContentConflictCount);
         Assert.Equal(1, review.VerifyCount);
         Assert.True(review.CanExportJson);
-        Assert.Contains(review.Issues, issue => issue.Kind == "Content conflict"
-            && issue.Message.Contains("without overwriting", StringComparison.Ordinal));
+        Assert.Contains(
+            review.Issues,
+            issue =>
+                issue.Kind == "Content conflict"
+                && issue.Message.Contains("without overwriting", StringComparison.Ordinal)
+        );
         AssertDatabaseUnchanged(sourceBefore, sourceDb);
         AssertDatabaseUnchanged(targetBefore, targetDb);
         string jsonPath = Path.Combine(_dir, "content-conflict.json");
@@ -199,13 +281,25 @@ public sealed class UiDatabasePlanTests : IDisposable
         Write(targetRoot, "node/child.txt", "target file");
         string sourceDb = CreateDatabase("type-source", "s", sourceRoot);
         string targetDb = CreateDatabase("type-target", "t", targetRoot);
-        var review = await LoadPanels(sourceDb, targetDb).PreparePlanAsync(DatabasePlanDirection.LeftToRight);
-        if (review is null) throw new Xunit.Sdk.XunitException("Type-conflict plan unexpectedly failed during build.");
+        var review = await LoadPanels(sourceDb, targetDb)
+            .PreparePlanAsync(DatabasePlanDirection.LeftToRight);
+        if (review is null)
+        {
+            throw new Xunit.Sdk.XunitException(
+                "Type-conflict plan unexpectedly failed during build."
+            );
+        }
+
         Assert.True(review.TypeConflictCount > 0);
         Assert.True(review.HasBlockingIssues);
         Assert.False(review.CanExportJson);
-        Assert.Contains(review.Issues, issue => issue.Kind == "Type conflict" && issue.BlocksExport
-            && issue.Message.Contains("file-versus-directory", StringComparison.Ordinal));
+        Assert.Contains(
+            review.Issues,
+            issue =>
+                issue.Kind == "Type conflict"
+                && issue.BlocksExport
+                && issue.Message.Contains("file-versus-directory", StringComparison.Ordinal)
+        );
     }
 
     private MainViewModel LoadPanels(string leftDatabase, string rightDatabase)
@@ -216,15 +310,26 @@ public sealed class UiDatabasePlanTests : IDisposable
         return vm;
     }
 
-    private string CreateDatabase(string name, string rootId, string rootPath,
-        bool hash = true, string scanStatus = ScanStatus.Completed)
+    private string CreateDatabase(
+        string name,
+        string rootId,
+        string rootPath,
+        bool hash = true,
+        string scanStatus = ScanStatus.Completed
+    )
     {
         string path = Path.Combine(_dir, name + ".db");
         using (var db = Database.OpenWritable(path, pooling: false))
         {
-            db.UpsertRoot(new StorageRootRow(rootId, name, rootPath, true, "fs", "sensitive", Modified));
+            db.UpsertRoot(
+                new StorageRootRow(rootId, name, rootPath, true, "fs", "sensitive", Modified)
+            );
             Assert.Equal(0, new Scanner(db).ScanRoot(rootId).errors);
-            if (hash) new Scanner(db).HashNeeded(rootId, true, 1);
+            if (hash)
+            {
+                new Scanner(db).HashNeeded(rootId, true, 1);
+            }
+
             if (scanStatus != ScanStatus.Completed)
             {
                 long scanId = db.BeginScan(rootId);
@@ -256,16 +361,27 @@ public sealed class UiDatabasePlanTests : IDisposable
         foreach (string suffix in new[] { "", "-wal", "-journal" })
         {
             string companion = path + suffix;
-            if (File.Exists(companion) && (suffix.Length == 0 || new FileInfo(companion).Length > 0))
+            if (
+                File.Exists(companion) && (suffix.Length == 0 || new FileInfo(companion).Length > 0)
+            )
+            {
                 bytes[companion] = Convert.ToBase64String(File.ReadAllBytes(companion));
+            }
         }
         return bytes;
     }
 
-    private static void AssertDatabaseUnchanged(SortedDictionary<string, string> before, string path) =>
-        Assert.Equal(before.ToArray(), DatabaseBytes(path).ToArray());
+    private static void AssertDatabaseUnchanged(
+        SortedDictionary<string, string> before,
+        string path
+    ) => Assert.Equal(before.ToArray(), DatabaseBytes(path).ToArray());
 
-    private static HashSet<string> TemporaryPlanDirectories() => Directory
-        .EnumerateDirectories(Path.GetTempPath(), "backup-normalizer-ui-plan-*", SearchOption.TopDirectoryOnly)
-        .ToHashSet(StringComparer.OrdinalIgnoreCase);
+    private static HashSet<string> TemporaryPlanDirectories() =>
+        Directory
+            .EnumerateDirectories(
+                Path.GetTempPath(),
+                "backup-normalizer-ui-plan-*",
+                SearchOption.TopDirectoryOnly
+            )
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
 }

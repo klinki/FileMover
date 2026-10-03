@@ -17,10 +17,22 @@ public sealed class GuiWorkflowLayoutTests
     {
         UiTestHost.Run(() =>
         {
-            var rootRow = new StorageRootRow("r", "Recorded", "/offline", false, "unknown", "sensitive", Database.UtcNow());
+            var rootRow = new StorageRootRow(
+                "r",
+                "Recorded",
+                "/offline",
+                false,
+                "unknown",
+                "sensitive",
+                Database.UtcNow()
+            );
             var root = new InventoryRoot(rootRow, ScanStatus.Completed);
             var directory = new InventoryNode("", "", true, root.Comparer);
-            var file = new InventoryNode("file.txt", "file.txt", false, root.Comparer) { Size = 1, Digest = "abc" };
+            var file = new InventoryNode("file.txt", "file.txt", false, root.Comparer)
+            {
+                Size = 1,
+                Digest = "abc",
+            };
             directory.Children.Add(file.Name, file);
             root.Nodes.Add("", directory);
             root.Nodes.Add(file.RelativePath, file);
@@ -30,7 +42,12 @@ public sealed class GuiWorkflowLayoutTests
             vm.Right.LoadSnapshot(snapshot);
             vm.Left.SelectedEntry = vm.Left.Entries.Single();
             vm.Right.SelectedEntry = vm.Right.Entries.Single();
-            var window = new MainWindow { DataContext = vm, Width = width, Height = height };
+            var window = new MainWindow
+            {
+                DataContext = vm,
+                Width = width,
+                Height = height,
+            };
             try
             {
                 window.Show();
@@ -38,11 +55,17 @@ public sealed class GuiWorkflowLayoutTests
                 Dispatcher.UIThread.RunJobs();
                 foreach (var grid in window.GetLogicalDescendants().OfType<DataGrid>())
                 {
-                    Assert.True(grid.Bounds.Height >= 80, $"File list height {grid.Bounds.Height} at {width}x{height}.");
+                    Assert.True(
+                        grid.Bounds.Height >= 80,
+                        $"File list height {grid.Bounds.Height} at {width}x{height}."
+                    );
                     Assert.True(grid.Bounds.Width >= 250);
                 }
             }
-            finally { window.Close(); }
+            finally
+            {
+                window.Close();
+            }
         });
     }
 }

@@ -1,6 +1,6 @@
-using BackupNormalizer;
 using System.Diagnostics;
 using System.Runtime.InteropServices;
+using BackupNormalizer;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
@@ -10,7 +10,10 @@ namespace BackupNormalizer.Tests;
 
 public sealed class UsnScanTests : IDisposable
 {
-    private readonly string _directory = Path.Combine(AppContext.BaseDirectory, "bn-usn-" + Guid.NewGuid().ToString("N"));
+    private readonly string _directory = Path.Combine(
+        AppContext.BaseDirectory,
+        "bn-usn-" + Guid.NewGuid().ToString("N")
+    );
     private readonly FakeJournal _journal = new();
     private readonly string _root;
     private readonly string _databasePath;
@@ -18,7 +21,12 @@ public sealed class UsnScanTests : IDisposable
     private Func<IEnumerable<FsEntry>>? _enumerate;
     private readonly List<string> _junctions = [];
 
-    [DllImport("kernel32.dll", EntryPoint = "RemoveDirectoryW", CharSet = CharSet.Unicode, SetLastError = true)]
+    [DllImport(
+        "kernel32.dll",
+        EntryPoint = "RemoveDirectoryW",
+        CharSet = CharSet.Unicode,
+        SetLastError = true
+    )]
     [return: MarshalAs(UnmanagedType.Bool)]
     private static extern bool RemoveJunction(string path);
 
@@ -37,7 +45,10 @@ public sealed class UsnScanTests : IDisposable
         foreach (string link in _junctions)
         {
             Assert.StartsWith(_directory + Path.DirectorySeparatorChar, Path.GetFullPath(link));
-            Assert.True(RemoveJunction(link), $"Cannot unlink test junction: {Marshal.GetLastWin32Error()}");
+            Assert.True(
+                RemoveJunction(link),
+                $"Cannot unlink test junction: {Marshal.GetLastWin32Error()}"
+            );
         }
         Directory.Delete(_directory, true);
     }
@@ -45,15 +56,22 @@ public sealed class UsnScanTests : IDisposable
     private Database Open()
     {
         var db = new Database(_databasePath);
-        db.UpsertRoot(new StorageRootRow("r", "r", _root, true, "fs", "insensitive", Database.UtcNow()));
+        db.UpsertRoot(
+            new StorageRootRow("r", "r", _root, true, "fs", "insensitive", Database.UtcNow())
+        );
         return db;
     }
 
-    private Scanner Scanner(Database db) => new(db, _ =>
-    {
-        _fullScans++;
-        return _enumerate?.Invoke() ?? BackupNormalizer.Scanner.EnumerateRecursive(_root);
-    }, _ => _journal);
+    private Scanner Scanner(Database db) =>
+        new(
+            db,
+            _ =>
+            {
+                _fullScans++;
+                return _enumerate?.Invoke() ?? BackupNormalizer.Scanner.EnumerateRecursive(_root);
+            },
+            _ => _journal
+        );
 
     private string Write(string name, string content = "before")
     {
@@ -69,21 +87,49 @@ public sealed class UsnScanTests : IDisposable
         _journal.Records = records;
     }
 
-    private static UsnRecord Change(string name, long usn = 110, uint reason = 1 | UsnReplay.Close,
-        FileAttributes attributes = FileAttributes.Normal, ulong parent = 1, ulong file = 20)
-        => new(file, parent, usn, reason, attributes, name);
+    private static UsnRecord Change(
+        string name,
+        long usn = 110,
+        uint reason = 1 | UsnReplay.Close,
+        FileAttributes attributes = FileAttributes.Normal,
+        ulong parent = 1,
+        ulong file = 20
+    ) => new(file, parent, usn, reason, attributes, name);
 
     private void Junction(string path, string target)
     {
         var script = Path.Combine(_directory, "junction.ps1");
-        File.WriteAllText(script, "param([string]$LinkPath, [string]$TargetPath)\n$ErrorActionPreference = 'Stop'\nNew-Item -ItemType Junction -Path $LinkPath -Target $TargetPath | Out-Null\n");
+        File.WriteAllText(
+            script,
+            "param([string]$LinkPath, [string]$TargetPath)\n$ErrorActionPreference = 'Stop'\nNew-Item -ItemType Junction -Path $LinkPath -Target $TargetPath | Out-Null\n"
+        );
         var start = new ProcessStartInfo("powershell.exe")
         {
-            UseShellExecute = false, CreateNoWindow = true, WindowStyle = ProcessWindowStyle.Hidden,
-            RedirectStandardError = true, RedirectStandardOutput = true
+            UseShellExecute = false,
+            CreateNoWindow = true,
+            WindowStyle = ProcessWindowStyle.Hidden,
+            RedirectStandardError = true,
+            RedirectStandardOutput = true,
         };
-        foreach (string argument in new[] { "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass",
-            "-File", script, "-LinkPath", path, "-TargetPath", target }) start.ArgumentList.Add(argument);
+        foreach (
+            string argument in new[]
+            {
+                "-NoProfile",
+                "-NonInteractive",
+                "-ExecutionPolicy",
+                "Bypass",
+                "-File",
+                script,
+                "-LinkPath",
+                path,
+                "-TargetPath",
+                target,
+            }
+        )
+        {
+            start.ArgumentList.Add(argument);
+        }
+
         using var process = Process.Start(start)!;
         string error = process.StandardError.ReadToEnd();
         Assert.True(process.WaitForExit(30000), "Junction creation timed out.");
@@ -123,10 +169,34 @@ public sealed class UsnScanTests : IDisposable
     public void Database_Exclusion_Retires_Historical_Rows_With_Case_Insensitive_Paths()
     {
         using var db = Open();
-        db.UpsertRoot(new StorageRootRow("all", "all", _directory, true, "fs", "insensitive", Database.UtcNow()));
+        db.UpsertRoot(
+            new StorageRootRow(
+                "all",
+                "all",
+                _directory,
+                true,
+                "fs",
+                "insensitive",
+                Database.UtcNow()
+            )
+        );
         long scan = db.BeginScan("all");
         string name = OperatingSystem.IsWindows() ? "INVENTORY.DB" : "inventory.db";
-        db.UpsertFileEntry(new FileEntryRow(0, "all", name, name, 1, Database.UtcNow(), null, null, scan, FileStatus.Ok, null));
+        db.UpsertFileEntry(
+            new FileEntryRow(
+                0,
+                "all",
+                name,
+                name,
+                1,
+                Database.UtcNow(),
+                null,
+                null,
+                scan,
+                FileStatus.Ok,
+                null
+            )
+        );
         db.FinishScan(scan, ScanStatus.Completed);
         new Scanner(db, usnMode: "off").ScanRoot("all");
         Assert.Equal(FileStatus.Missing, db.GetFileEntry("all", name)!.Status);
@@ -168,15 +238,29 @@ public sealed class UsnScanTests : IDisposable
         scanner.HashNeeded("r", parallelism: 1);
         var before = db.GetFileEntry("r", "changed.txt")!;
         var unchanged = db.GetFileEntry("r", "keep.txt")!;
-        db.UpsertHash(new FileHashRow(before.Id, "other", "old", before.Size, before.ModifiedUtc, Database.UtcNow(), HashState.Ok));
+        db.UpsertHash(
+            new FileHashRow(
+                before.Id,
+                "other",
+                "old",
+                before.Size,
+                before.ModifiedUtc,
+                Database.UtcNow(),
+                HashState.Ok
+            )
+        );
         File.WriteAllText(changed, "after!");
         File.SetLastWriteTimeUtc(changed, DateTime.Parse(before.ModifiedUtc).ToUniversalTime());
         File.Delete(deleted);
         File.Move(renamed, Path.Combine(_root, "new.txt"));
         Write("created.txt");
-        Changes(Change("changed.txt"), Change("deleted.txt", 120, UsnReplay.Delete | UsnReplay.Close, file: 21),
-            Change("old.txt", 130, 0x1000, file: 22), Change("new.txt", 140, 0x2000 | UsnReplay.Close, file: 22),
-            Change("created.txt", 150, 0x100 | UsnReplay.Close, file: 23));
+        Changes(
+            Change("changed.txt"),
+            Change("deleted.txt", 120, UsnReplay.Delete | UsnReplay.Close, file: 21),
+            Change("old.txt", 130, 0x1000, file: 22),
+            Change("new.txt", 140, 0x2000 | UsnReplay.Close, file: 22),
+            Change("created.txt", 150, 0x100 | UsnReplay.Close, file: 23)
+        );
 
         Assert.Equal((5, 0), scanner.ScanRoot("r"));
 
@@ -202,7 +286,9 @@ public sealed class UsnScanTests : IDisposable
     [InlineData("root")]
     [InlineData("incomplete")]
     [InlineData("started")]
-    public void Invalid_Checkpoints_Force_Full_Scans_And_Invalidate_Cached_Hashes(string invalidation)
+    public void Invalid_Checkpoints_Force_Full_Scans_And_Invalidate_Cached_Hashes(
+        string invalidation
+    )
     {
         Write("keep.txt");
         using var db = Open();
@@ -212,15 +298,23 @@ public sealed class UsnScanTests : IDisposable
         _journal.State = invalidation switch
         {
             "journal" => _journal.State with { JournalId = "new" },
-            "history" => _journal.State with { FirstUsn = 101, LowestValidUsn = 101, NextUsn = 200 },
+            "history" => _journal.State with
+            {
+                FirstUsn = 101,
+                LowestValidUsn = 101,
+                NextUsn = 200,
+            },
             "volume" => _journal.State with { VolumeIdentity = "new" },
             "root" => _journal.State with { RootIdentity = "new" },
-            _ => _journal.State
+            _ => _journal.State,
         };
         if (invalidation is "incomplete" or "started")
         {
             long scan = db.BeginScan("r");
-            if (invalidation == "incomplete") db.FinishScan(scan, ScanStatus.Incomplete);
+            if (invalidation == "incomplete")
+            {
+                db.FinishScan(scan, ScanStatus.Incomplete);
+            }
         }
 
         Assert.Equal((1, 0), scanner.ScanRoot("r"));
@@ -228,7 +322,10 @@ public sealed class UsnScanTests : IDisposable
         Assert.False(scanner.LastScanWasIncremental);
         Assert.NotNull(scanner.LastScanFallbackReason);
         Assert.Equal(2, _fullScans);
-        Assert.Equal(HashState.Stale, db.GetHash(db.GetFileEntry("r", "keep.txt")!.Id, "sha256")!.State);
+        Assert.Equal(
+            HashState.Stale,
+            db.GetHash(db.GetFileEntry("r", "keep.txt")!.Id, "sha256")!.State
+        );
         Assert.Equal(ScanStatus.Completed, db.LatestScanStatus("r"));
         Assert.Equal(_journal.State.JournalId, db.GetScanCheckpoint("r")!.JournalId);
     }
@@ -246,8 +343,13 @@ public sealed class UsnScanTests : IDisposable
         using var db = Open();
         var scanner = Scanner(db);
         scanner.ScanRoot("r");
-        Changes(Change("changed", reason: reason | UsnReplay.Close,
-            attributes: directory ? FileAttributes.Directory : FileAttributes.Normal));
+        Changes(
+            Change(
+                "changed",
+                reason: reason | UsnReplay.Close,
+                attributes: directory ? FileAttributes.Directory : FileAttributes.Normal
+            )
+        );
 
         Assert.Equal((1, 0), scanner.ScanRoot("r"));
 
@@ -285,7 +387,10 @@ public sealed class UsnScanTests : IDisposable
         scanner.ScanRoot("r");
 
         Assert.False(scanner.LastScanWasIncremental);
-        Assert.Equal(HashState.Stale, db.GetHash(db.GetFileEntry("r", "inside.txt")!.Id, "sha256")!.State);
+        Assert.Equal(
+            HashState.Stale,
+            db.GetHash(db.GetFileEntry("r", "inside.txt")!.Id, "sha256")!.State
+        );
         Assert.Equal(2, _fullScans);
     }
 
@@ -299,7 +404,10 @@ public sealed class UsnScanTests : IDisposable
         string temporary = Path.Combine(_directory, "temporary");
         File.Move(original, temporary);
         File.Move(temporary, Path.Combine(_root, "OLD.txt"));
-        Changes(Change("old.txt", reason: 0x1000), Change("OLD.txt", 120, 0x2000 | UsnReplay.Close));
+        Changes(
+            Change("old.txt", reason: 0x1000),
+            Change("OLD.txt", 120, 0x2000 | UsnReplay.Close)
+        );
 
         scanner.ScanRoot("r");
 
@@ -315,12 +423,30 @@ public sealed class UsnScanTests : IDisposable
         Write("keep.txt");
         using var db = Open();
         // A second root covers the active database and its companions.
-        db.UpsertRoot(new StorageRootRow("all", "all", _directory, true, "fs", "insensitive", Database.UtcNow()));
+        db.UpsertRoot(
+            new StorageRootRow(
+                "all",
+                "all",
+                _directory,
+                true,
+                "fs",
+                "insensitive",
+                Database.UtcNow()
+            )
+        );
         _journal.Parents[2] = _directory;
-        var scanner = new Scanner(db, root => BackupNormalizer.Scanner.EnumerateRecursive(root), _ => _journal);
+        var scanner = new Scanner(
+            db,
+            root => BackupNormalizer.Scanner.EnumerateRecursive(root),
+            _ => _journal
+        );
         scanner.ScanRoot("all");
-        Changes(Change("inventory.db", parent: 2), Change("inventory.db-wal", 120, parent: 2),
-            Change("inventory.db-shm", 130, parent: 2), Change("outside", 140, parent: 3));
+        Changes(
+            Change("inventory.db", parent: 2),
+            Change("inventory.db-wal", 120, parent: 2),
+            Change("inventory.db-shm", 130, parent: 2),
+            Change("outside", 140, parent: 3)
+        );
         _journal.Parents[3] = Path.GetTempPath();
 
         Assert.Equal((0, 0), scanner.ScanRoot("all"));
@@ -342,7 +468,8 @@ public sealed class UsnScanTests : IDisposable
         Assert.False(scanner.LastScanWasIncremental);
         _journal.ReadFailure = new IOException("Journal history disappeared.");
         _journal.State = _journal.State with { NextUsn = 300 };
-        _enumerate = () => [new FsEntry(_root, true, 0, default, default, false, false, "Access denied.")];
+        _enumerate = () =>
+            [new FsEntry(_root, true, 0, default, default, false, false, "Access denied.")];
 
         Assert.Equal((0, 1), scanner.ScanRoot("r"));
 
@@ -407,7 +534,10 @@ public sealed class UsnScanTests : IDisposable
 
         Assert.False(scanner.LastScanWasIncremental);
         Assert.Equal(2, _fullScans);
-        Assert.Equal(HashState.Stale, db.GetHash(db.GetFileEntry("r", "keep.txt")!.Id, "sha256")!.State);
+        Assert.Equal(
+            HashState.Stale,
+            db.GetHash(db.GetFileEntry("r", "keep.txt")!.Id, "sha256")!.State
+        );
     }
 
     [Fact]
@@ -439,7 +569,10 @@ public sealed class UsnScanTests : IDisposable
         Changes(Change("keep.txt"));
         _journal.OnQuery = query =>
         {
-            if (query != 4) return;
+            if (query != 4)
+            {
+                return;
+            }
             // Observe the provisional update, then fail journal validation.
             Assert.Equal(12, db.GetFileEntry("r", "keep.txt")!.Size);
             _enumerate = () => throw new IOException("Full retry cannot enumerate the root.");
@@ -454,15 +587,23 @@ public sealed class UsnScanTests : IDisposable
         Assert.Equal(2, _fullScans);
         var scanDetails = db.GetScanDetails("r")!;
         Assert.Equal(1, scanDetails.ErrorCount);
-        Assert.Equal("Full retry cannot enumerate the root.", Assert.Single(db.ListScanDiagnostics(scanDetails.Scan.Id)).Message);
+        Assert.Equal(
+            "Full retry cannot enumerate the root.",
+            Assert.Single(db.ListScanDiagnostics(scanDetails.Scan.Id)).Message
+        );
     }
 
     [Fact]
     public void Legacy_Read_Only_Inventories_Load_Without_Checkpoints_Or_Migration()
     {
-        var options = new DbContextOptionsBuilder<BackupNormalizerDbContext>().UseSqlite($"Data Source={_databasePath}").Options;
+        var options = new DbContextOptionsBuilder<BackupNormalizerDbContext>()
+            .UseSqlite($"Data Source={_databasePath}")
+            .Options;
         using (var context = new BackupNormalizerDbContext(options))
+        {
             context.GetService<IMigrator>().Migrate("20261002075521_RecordLinks");
+        }
+
         using (var readOnly = Database.OpenReadOnly(_databasePath, pooling: false))
         {
             Assert.Null(readOnly.GetScanCheckpoint("r"));
@@ -487,7 +628,13 @@ public sealed class UsnScanTests : IDisposable
         long id = db.GetFileEntry("r", "entry")!.Id;
         File.Delete(path);
         File.CreateSymbolicLink(path, "missing");
-        Changes(Change("entry", reason: UsnReplay.ReparseChange | UsnReplay.Close, attributes: FileAttributes.ReparsePoint));
+        Changes(
+            Change(
+                "entry",
+                reason: UsnReplay.ReparseChange | UsnReplay.Close,
+                attributes: FileAttributes.ReparsePoint
+            )
+        );
         Assert.Equal((1, 0), scanner.ScanRoot("r"));
         Assert.Equal(EntryKind.FileLink, db.GetFileEntry("r", "entry")!.EntryKind);
         Assert.Equal("missing", db.GetFileEntry("r", "entry")!.LinkTarget);
@@ -495,7 +642,15 @@ public sealed class UsnScanTests : IDisposable
         File.Delete(path);
         File.CreateSymbolicLink(path, "different");
         _journal.State = _journal.State with { NextUsn = 300 };
-        _journal.Records = [Change("entry", 210, UsnReplay.ReparseChange | UsnReplay.Close, FileAttributes.ReparsePoint)];
+        _journal.Records =
+        [
+            Change(
+                "entry",
+                210,
+                UsnReplay.ReparseChange | UsnReplay.Close,
+                FileAttributes.ReparsePoint
+            ),
+        ];
         Assert.Equal((1, 0), scanner.ScanRoot("r"));
         Assert.Equal("different", db.GetFileEntry("r", "entry")!.LinkTarget);
         File.Delete(path);
@@ -516,12 +671,26 @@ public sealed class UsnScanTests : IDisposable
         internal IOException? ReadFailure;
         internal Action<int>? OnQuery;
         private int _queries;
-        public UsnState Query() { _queries++; OnQuery?.Invoke(_queries); return State; }
-        public IEnumerable<UsnRecord> ReadChanges(long startUsn, long endUsn, string journalId)
-            => ReadFailure != null ? throw ReadFailure : Records.Where(r => r.Usn >= startUsn && r.Usn < endUsn);
-        public string ResolveParent(ulong fileId)
-            => Parents.TryGetValue(fileId, out var path) ? path : throw new IOException("Parent directory disappeared.");
+
+        public UsnState Query()
+        {
+            _queries++;
+            OnQuery?.Invoke(_queries);
+            return State;
+        }
+
+        public IEnumerable<UsnRecord> ReadChanges(long startUsn, long endUsn, string journalId) =>
+            ReadFailure != null
+                ? throw ReadFailure
+                : Records.Where(r => r.Usn >= startUsn && r.Usn < endUsn);
+
+        public string ResolveParent(ulong fileId) =>
+            Parents.TryGetValue(fileId, out var path)
+                ? path
+                : throw new IOException("Parent directory disappeared.");
+
         public uint GetLinkCount(ulong fileId) => LinkCounts.GetValueOrDefault(fileId, 1U);
+
         public void Dispose() { }
     }
 }

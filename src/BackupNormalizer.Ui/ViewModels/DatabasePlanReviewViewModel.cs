@@ -11,14 +11,17 @@ namespace BackupNormalizer.Ui.ViewModels;
 public sealed class DatabasePlanReviewViewModel : ObservableObject
 {
     private readonly string _targetDatabasePath;
-    private string _statusMessage = "Review the complete selected roots before exporting this plan.";
+    private string _statusMessage =
+        "Review the complete selected roots before exporting this plan.";
 
     public PlanDoc Document { get; }
     public IReadOnlyList<DatabasePlanOperation> Operations { get; }
     public IReadOnlyList<DatabasePlanIssue> Issues { get; }
     public DatabasePlanDirection Direction { get; }
-    public string DirectionLabel => Direction == DatabasePlanDirection.LeftToRight ? "Left → Right" : "Right → Left";
-    public string ScopeLabel => "Complete selected inventory roots; panel folder navigation is ignored.";
+    public string DirectionLabel =>
+        Direction == DatabasePlanDirection.LeftToRight ? "Left → Right" : "Right → Left";
+    public string ScopeLabel =>
+        "Complete selected inventory roots; panel folder navigation is ignored.";
     public string PlanId => Document.PlanId;
     public string SourceDatabasePath => Document.SourceDatabasePath ?? "";
     public string SourceRoot => $"{Document.SourceRoot} - {Document.SourcePath}";
@@ -40,9 +43,10 @@ public sealed class DatabasePlanReviewViewModel : ObservableObject
     public bool CanExportJson => !HasBlockingIssues;
     public string PlanSummary =>
         $"Plan {PlanId} | KEEP {KeepCount} | MOVE {MoveCount} | COPY {CopyCount} | MKDIR {DirectoryCount} | TRASH {TrashCount} | VERIFY {VerifyCount} | SKIP_LINK {SkippedLinkCount} | bytes to copy: {EstimatedBytesCopiedText}";
-    public string IssueSummary => Issues.Count == 0
-        ? "No path or content conflicts were found. Review skipped links and operations before exporting."
-        : $"Issues: type conflicts {TypeConflictCount}, content conflicts {ContentConflictCount}, unverified target files {UnverifiedTargetCount}, link paths skipped {SkippedLinkIssueCount}.";
+    public string IssueSummary =>
+        Issues.Count == 0
+            ? "No path or content conflicts were found. Review skipped links and operations before exporting."
+            : $"Issues: type conflicts {TypeConflictCount}, content conflicts {ContentConflictCount}, unverified target files {UnverifiedTargetCount}, link paths skipped {SkippedLinkIssueCount}.";
     public string StatusMessage
     {
         get => _statusMessage;
@@ -54,12 +58,17 @@ public sealed class DatabasePlanReviewViewModel : ObservableObject
         get
         {
             char[] invalid = Path.GetInvalidFileNameChars();
-            string safePlanId = new(PlanId.Select(character => invalid.Contains(character) ? '_' : character).ToArray());
+            string safePlanId = new(
+                PlanId.Select(character => invalid.Contains(character) ? '_' : character).ToArray()
+            );
             return $"{safePlanId}.json";
         }
     }
 
-    public DatabasePlanReviewViewModel(DatabasePlanArtifact artifact, DatabasePlanDirection direction)
+    public DatabasePlanReviewViewModel(
+        DatabasePlanArtifact artifact,
+        DatabasePlanDirection direction
+    )
     {
         Document = artifact.Document;
         Operations = artifact.Operations;
@@ -80,13 +89,20 @@ public sealed class DatabasePlanReviewViewModel : ObservableObject
             string fullPath = Path.GetFullPath(destinationPath);
             if (IsInventoryDatabaseOrCompanion(fullPath))
             {
-                StatusMessage = "Cannot export plan JSON over a selected inventory database or its SQLite companion file.";
+                StatusMessage =
+                    "Cannot export plan JSON over a selected inventory database or its SQLite companion file.";
                 return;
             }
             string? directory = Path.GetDirectoryName(fullPath);
             if (string.IsNullOrEmpty(directory) || !Directory.Exists(directory))
+            {
                 throw new DirectoryNotFoundException("The selected export folder does not exist.");
-            string temporaryPath = Path.Combine(directory, ".bn-plan-export-" + Guid.NewGuid().ToString("N") + ".tmp");
+            }
+
+            string temporaryPath = Path.Combine(
+                directory,
+                ".bn-plan-export-" + Guid.NewGuid().ToString("N") + ".tmp"
+            );
             try
             {
                 File.WriteAllText(temporaryPath, Planner.ToJson(Document));
@@ -94,7 +110,10 @@ public sealed class DatabasePlanReviewViewModel : ObservableObject
             }
             finally
             {
-                if (File.Exists(temporaryPath)) File.Delete(temporaryPath);
+                if (File.Exists(temporaryPath))
+                {
+                    File.Delete(temporaryPath);
+                }
             }
             StatusMessage = $"Saved executor-compatible plan JSON to {fullPath}.";
         }
@@ -113,11 +132,15 @@ public sealed class DatabasePlanReviewViewModel : ObservableObject
         {
             foreach (string suffix in new[] { "", "-wal", "-shm", "-journal" })
             {
-                if (Paths.PathEquals(destinationPath, database + suffix)) return true;
+                if (Paths.PathEquals(destinationPath, database + suffix))
+                {
+                    return true;
+                }
             }
         }
         return false;
     }
 
-    private int Count(string operationType) => Operations.Count(operation => operation.Type == operationType);
+    private int Count(string operationType) =>
+        Operations.Count(operation => operation.Type == operationType);
 }

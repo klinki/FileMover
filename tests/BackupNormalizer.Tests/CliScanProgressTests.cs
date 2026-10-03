@@ -11,7 +11,9 @@ public sealed class CliScanProgressTests
     {
         using var output = new StringWriter();
         var renderer = new Cli.ScanProgressRenderer("d", 100, output, () => 200);
-        renderer.Report(new ScanProgress("d", 1, 0, "path", TimeSpan.FromSeconds(10), Incremental: true));
+        renderer.Report(
+            new ScanProgress("d", 1, 0, "path", TimeSpan.FromSeconds(10), Incremental: true)
+        );
         renderer.Report(new ScanProgress("d", 64, 0, "path", TimeSpan.FromSeconds(1)));
         Assert.Contains("scan d: 64 entries", output.ToString());
     }
@@ -28,7 +30,10 @@ public sealed class CliScanProgressTests
             Assert.Contains("--usn auto|off", output.ToString());
             Assert.Contains("--full forces full enumeration", output.ToString());
         }
-        finally { Console.SetOut(original); }
+        finally
+        {
+            Console.SetOut(original);
+        }
     }
 
     [Fact]
@@ -36,14 +41,19 @@ public sealed class CliScanProgressTests
     {
         using var output = new StringWriter();
         var renderer = new Cli.ScanProgressRenderer("d", 176440, output, () => 200);
-        renderer.Report(new ScanProgress("d", 3, 0, "path", TimeSpan.FromSeconds(1), Incremental: true));
+        renderer.Report(
+            new ScanProgress("d", 3, 0, "path", TimeSpan.FromSeconds(1), Incremental: true)
+        );
         Assert.Contains("3 entries refreshed using USN", output.ToString());
         Assert.DoesNotContain("%", output.ToString());
         Assert.DoesNotContain("176", output.ToString());
     }
 
-    private static ScanProgress Snapshot(int count = 64, int milliseconds = 0, string path = @"D:\example\folder")
-        => new("d", count, 0, path, TimeSpan.FromMilliseconds(milliseconds));
+    private static ScanProgress Snapshot(
+        int count = 64,
+        int milliseconds = 0,
+        string path = @"D:\example\folder"
+    ) => new("d", count, 0, path, TimeSpan.FromMilliseconds(milliseconds));
 
     [Theory]
     [InlineData(20)]
@@ -54,7 +64,9 @@ public sealed class CliScanProgressTests
         using var output = new StringWriter();
         var renderer = new Cli.ScanProgressRenderer("d", 176440, output, () => columns);
 
-        renderer.Report(Snapshot(175508, 150000, @"D:\a-long-directory-name\another-long-directory-name"));
+        renderer.Report(
+            Snapshot(175508, 150000, @"D:\a-long-directory-name\another-long-directory-name")
+        );
 
         string text = output.ToString();
         Assert.StartsWith("\rscan d:", text);
@@ -120,7 +132,10 @@ public sealed class CliScanProgressTests
         renderer.Report(Snapshot(320, 201));
         renderer.Finish();
 
-        var updates = output.ToString().Replace(Environment.NewLine, "").Split('\r', StringSplitOptions.RemoveEmptyEntries);
+        var updates = output
+            .ToString()
+            .Replace(Environment.NewLine, "")
+            .Split('\r', StringSplitOptions.RemoveEmptyEntries);
         Assert.Equal(3, updates.Length);
         Assert.StartsWith("scan d: 256 entries", updates[1]);
         Assert.StartsWith("scan d: 320 entries", updates[2]);
@@ -167,7 +182,9 @@ public sealed class CliScanProgressTests
 
     private sealed class FailingOutput : StringWriter
     {
-        public override void Write(string? value) => throw new IOException("Terminal is unavailable.");
+        public override void Write(string? value) =>
+            throw new IOException("Terminal is unavailable.");
+
         public override void WriteLine() => throw new IOException("Terminal is unavailable.");
     }
 
@@ -180,8 +197,12 @@ public sealed class CliScanProgressTests
         renderer.Finish();
 
         using var captured = new StringWriter();
-        var unknownTerminal = new Cli.ScanProgressRenderer("d", 0, captured,
-            () => throw new IOException("Terminal width is unavailable."));
+        var unknownTerminal = new Cli.ScanProgressRenderer(
+            "d",
+            0,
+            captured,
+            () => throw new IOException("Terminal width is unavailable.")
+        );
         unknownTerminal.Report(Snapshot());
         unknownTerminal.Finish();
     }
@@ -191,7 +212,10 @@ public sealed class CliScanProgressTests
     [InlineData(true)]
     public void Summary_Only_Scanning_Still_Completes_And_Updates_The_Inventory(bool noProgress)
     {
-        string directory = Path.Combine(Path.GetTempPath(), "bn-scan-progress-" + Guid.NewGuid().ToString("N"));
+        string directory = Path.Combine(
+            Path.GetTempPath(),
+            "bn-scan-progress-" + Guid.NewGuid().ToString("N")
+        );
         string root = Path.Combine(directory, "data");
         string dbPath = Path.Combine(directory, "inventory.db");
         Directory.CreateDirectory(root);
@@ -200,7 +224,12 @@ public sealed class CliScanProgressTests
         {
             File.WriteAllText(Path.Combine(root, "file.txt"), "content");
             using (var db = new Database(dbPath))
-                db.UpsertRoot(new StorageRootRow("d", "d", root, true, "fs", "unknown", Database.UtcNow()));
+            {
+                db.UpsertRoot(
+                    new StorageRootRow("d", "d", root, true, "fs", "unknown", Database.UtcNow())
+                );
+            }
+
             using var output = new StringWriter();
             Console.SetOut(output);
             string[] args = noProgress
@@ -208,7 +237,10 @@ public sealed class CliScanProgressTests
                 : ["scan", "d", "--db", dbPath, "--mft", "off"];
 
             Assert.Equal(0, Cli.Run(args));
-            Assert.Equal($"scan d: 1 entries, 0 errors (complete){Environment.NewLine}", output.ToString());
+            Assert.Equal(
+                $"scan d: 1 entries, 0 errors (complete){Environment.NewLine}",
+                output.ToString()
+            );
             using var inventory = Database.OpenReadOnly(dbPath, pooling: false);
             Assert.Equal(ScanStatus.Completed, inventory.LatestScanStatus("d"));
             Assert.Single(inventory.ListFiles("d"));
@@ -216,10 +248,14 @@ public sealed class CliScanProgressTests
         finally
         {
             Console.SetOut(original);
-            using var connection = new SqliteConnection(new SqliteConnectionStringBuilder
-            {
-                DataSource = dbPath, Mode = SqliteOpenMode.ReadWriteCreate, ForeignKeys = true
-            }.ToString());
+            using var connection = new SqliteConnection(
+                new SqliteConnectionStringBuilder
+                {
+                    DataSource = dbPath,
+                    Mode = SqliteOpenMode.ReadWriteCreate,
+                    ForeignKeys = true,
+                }.ToString()
+            );
             SqliteConnection.ClearPool(connection);
             Directory.Delete(directory, true);
         }

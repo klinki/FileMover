@@ -24,7 +24,8 @@ public partial class MainWindow : Window
 {
     // Note: CreateStringApplicationFormat takes the bare subtype ("application/" is added internally).
     private const string DropFormatName = "x-bn-staged";
-    private static readonly DataFormat<string> DropFormat = DataFormat.CreateStringApplicationFormat(DropFormatName);
+    private static readonly DataFormat<string> DropFormat =
+        DataFormat.CreateStringApplicationFormat(DropFormatName);
 
     private FilePanelViewModel? _rubberPanel;
     private string? _rubberSide;
@@ -45,23 +46,47 @@ public partial class MainWindow : Window
     public MainWindow()
     {
         InitializeComponent();
-        Title = $"BackupNormalizer {BuildInfo.FromAssembly(typeof(MainWindow).Assembly).ShortVersion} - Inventory comparison and planner";
+        Title =
+            $"BackupNormalizer {BuildInfo.FromAssembly(typeof(MainWindow).Assembly).ShortVersion} - Inventory comparison and planner";
         DataContextChanged += OnDataContextChanged;
         Closing += OnClosingWithInventoryJob;
         Opened += RestoreBrowsingSession;
         Closed += (_, _) =>
         {
             SaveBrowsingSession();
-            if (_observedViewModel != null) _observedViewModel.PropertyChanged -= OnViewModelChanged;
+            if (_observedViewModel != null)
+            {
+                _observedViewModel.PropertyChanged -= OnViewModelChanged;
+            }
+
             StopAutoScroll();
         };
-        AddHandler(InputElement.PointerPressedEvent, OnPreviewPointerPressed, RoutingStrategies.Tunnel);
+        AddHandler(
+            InputElement.PointerPressedEvent,
+            OnPreviewPointerPressed,
+            RoutingStrategies.Tunnel
+        );
         AddHandler(InputElement.KeyDownEvent, OnPreviewKeyDown, RoutingStrategies.Tunnel);
         // handledEventsToo: DataGrid marks presses handled for its own selection;
         // our TC cursor/mark layer must still observe them.
-        AddHandler(InputElement.PointerPressedEvent, OnPressBubble, RoutingStrategies.Bubble, handledEventsToo: true);
-        AddHandler(InputElement.PointerMovedEvent, OnPointerMoved, RoutingStrategies.Bubble, handledEventsToo: true);
-        AddHandler(InputElement.PointerReleasedEvent, OnPointerReleased, RoutingStrategies.Bubble, handledEventsToo: true);
+        AddHandler(
+            InputElement.PointerPressedEvent,
+            OnPressBubble,
+            RoutingStrategies.Bubble,
+            handledEventsToo: true
+        );
+        AddHandler(
+            InputElement.PointerMovedEvent,
+            OnPointerMoved,
+            RoutingStrategies.Bubble,
+            handledEventsToo: true
+        );
+        AddHandler(
+            InputElement.PointerReleasedEvent,
+            OnPointerReleased,
+            RoutingStrategies.Bubble,
+            handledEventsToo: true
+        );
         AddHandler(DragDrop.DropEvent, OnGridDrop);
         AddHandler(DragDrop.DragOverEvent, OnGridDragOver);
         foreach (var grid in this.GetLogicalDescendants().OfType<DataGrid>())
@@ -76,15 +101,29 @@ public partial class MainWindow : Window
 
     private void OnDataContextChanged(object? sender, EventArgs e)
     {
-        if (_observedViewModel != null) _observedViewModel.PropertyChanged -= OnViewModelChanged;
+        if (_observedViewModel != null)
+        {
+            _observedViewModel.PropertyChanged -= OnViewModelChanged;
+        }
+
         _observedViewModel = Vm;
-        if (_observedViewModel != null) _observedViewModel.PropertyChanged += OnViewModelChanged;
+        if (_observedViewModel != null)
+        {
+            _observedViewModel.PropertyChanged += OnViewModelChanged;
+        }
     }
 
     private void OnViewModelChanged(object? sender, PropertyChangedEventArgs e)
     {
-        if (e.PropertyName != nameof(MainViewModel.IsComparisonEnabled)) return;
-        foreach (var grid in this.GetLogicalDescendants().OfType<DataGrid>()) UpdatePanelColumns(grid);
+        if (e.PropertyName != nameof(MainViewModel.IsComparisonEnabled))
+        {
+            return;
+        }
+
+        foreach (var grid in this.GetLogicalDescendants().OfType<DataGrid>())
+        {
+            UpdatePanelColumns(grid);
+        }
     }
 
     private void UpdatePanelColumns(DataGrid grid)
@@ -92,48 +131,85 @@ public partial class MainWindow : Window
         bool comparing = Vm?.IsComparisonEnabled == true;
         foreach (var column in grid.Columns)
         {
-            if (column.Tag as string == "Modified") column.IsVisible = grid.Bounds.Width >= (comparing ? 600 : 450);
-            if (column.Tag as string == "Ext") column.IsVisible = grid.Bounds.Width >= (comparing ? 450 : 340);
+            if (column.Tag as string == "Modified")
+            {
+                column.IsVisible = grid.Bounds.Width >= (comparing ? 600 : 450);
+            }
+
+            if (column.Tag as string == "Ext")
+            {
+                column.IsVisible = grid.Bounds.Width >= (comparing ? 450 : 340);
+            }
         }
     }
 
-    private static DataGrid? GridOf(object? source)
-        => (source as Control)?.GetLogicalAncestors().OfType<DataGrid>().FirstOrDefault()
-           ?? source as DataGrid;
+    private static DataGrid? GridOf(object? source) =>
+        (source as Control)?.GetLogicalAncestors().OfType<DataGrid>().FirstOrDefault()
+        ?? source as DataGrid;
 
-    private static FileEntryItem? RowOf(object? source)
-        => (source as Control)?.GetLogicalAncestors().OfType<DataGridRow>().FirstOrDefault()?.DataContext as FileEntryItem;
+    private static FileEntryItem? RowOf(object? source) =>
+        (source as Control)
+            ?.GetLogicalAncestors()
+            .OfType<DataGridRow>()
+            .FirstOrDefault()
+            ?.DataContext as FileEntryItem;
 
     private FilePanelViewModel? PanelOf(DataGrid grid)
     {
-        if (Vm == null) return null;
+        if (Vm == null)
+        {
+            return null;
+        }
+
         return (grid.Tag as string) == "Right" ? Vm.Right : Vm.Left;
     }
 
     private void Activate(DataGrid grid)
     {
-        if (Vm != null) Vm.IsLeftActive = (grid.Tag as string) != "Right";
+        if (Vm != null)
+        {
+            Vm.IsLeftActive = (grid.Tag as string) != "Right";
+        }
     }
 
     // --- Tunnel: Shift/Ctrl+Left and Space/Shift+Arrows (run before grid native handling) ---
 
-    private bool IsLeftPress(PointerPressedEventArgs e)
-        => e.GetCurrentPoint(this).Properties.PointerUpdateKind == PointerUpdateKind.LeftButtonPressed;
+    private bool IsLeftPress(PointerPressedEventArgs e) =>
+        e.GetCurrentPoint(this).Properties.PointerUpdateKind == PointerUpdateKind.LeftButtonPressed;
 
-    private static bool IsRightPress(PointerPressedEventArgs e, Visual relativeTo)
-        => e.GetCurrentPoint(relativeTo).Properties.PointerUpdateKind == PointerUpdateKind.RightButtonPressed;
+    private static bool IsRightPress(PointerPressedEventArgs e, Visual relativeTo) =>
+        e.GetCurrentPoint(relativeTo).Properties.PointerUpdateKind
+        == PointerUpdateKind.RightButtonPressed;
 
     private void OnPreviewPointerPressed(object? sender, PointerPressedEventArgs e)
     {
-        if (Vm == null || !IsLeftPress(e)) return;
+        if (Vm == null || !IsLeftPress(e))
+        {
+            return;
+        }
+
         var grid = GridOf(e.Source);
-        if (grid == null) return;
+        if (grid == null)
+        {
+            return;
+        }
+
         var row = RowOf(e.Source);
-        if (row == null) return;
+        if (row == null)
+        {
+            return;
+        }
+
         var panel = PanelOf(grid);
-        if (panel == null) return;
+        if (panel == null)
+        {
+            return;
+        }
+
         bool shift = e.KeyModifiers.HasFlag(KeyModifiers.Shift);
-        bool ctrl = e.KeyModifiers.HasFlag(KeyModifiers.Control) || e.KeyModifiers.HasFlag(KeyModifiers.Meta);
+        bool ctrl =
+            e.KeyModifiers.HasFlag(KeyModifiers.Control)
+            || e.KeyModifiers.HasFlag(KeyModifiers.Meta);
         if (shift)
         {
             Activate(grid);
@@ -150,7 +226,11 @@ public partial class MainWindow : Window
 
     private void OnPreviewKeyDown(object? sender, KeyEventArgs e)
     {
-        if (Vm == null) return;
+        if (Vm == null)
+        {
+            return;
+        }
+
         var grid = GridOf(e.Source);
         FilePanelViewModel? panel = grid != null ? PanelOf(grid) : null;
         // Outside grids (toolbar, status, splitter): shortcuts fall back to the
@@ -159,15 +239,28 @@ public partial class MainWindow : Window
         bool inTextInput = e.Source is TextBox;
         bool inMenu = e.Source is MenuItem or Menu;
         if (panel == null && !inTextInput)
+        {
             panel = Vm.Active;
-        if (panel == null) return;
+        }
+
+        if (panel == null)
+        {
+            return;
+        }
+
         bool inGrid = grid != null;
         if (e.Key == Key.Space && e.KeyModifiers == KeyModifiers.None && inGrid)
         {
             panel.SpaceOnCursor();
             e.Handled = true;
         }
-        else if ((e.KeyModifiers.HasFlag(KeyModifiers.Control) || e.KeyModifiers.HasFlag(KeyModifiers.Meta)) && e.Key == Key.A)
+        else if (
+            (
+                e.KeyModifiers.HasFlag(KeyModifiers.Control)
+                || e.KeyModifiers.HasFlag(KeyModifiers.Meta)
+            )
+            && e.Key == Key.A
+        )
         {
             // Ctrl+A on Windows/Linux, Cmd+A on macOS.
             panel.MarkAll();
@@ -179,12 +272,21 @@ public partial class MainWindow : Window
             Vm.IsLeftActive = !Vm.IsLeftActive;
             e.Handled = true;
         }
-        else if (e.Key == Key.Escape && e.KeyModifiers == KeyModifiers.None && !inTextInput && !inMenu)
+        else if (
+            e.Key == Key.Escape
+            && e.KeyModifiers == KeyModifiers.None
+            && !inTextInput
+            && !inMenu
+        )
         {
             panel.ClearMarks();
             e.Handled = true;
         }
-        else if ((e.Key == Key.Up || e.Key == Key.Down) && e.KeyModifiers.HasFlag(KeyModifiers.Shift) && inGrid)
+        else if (
+            (e.Key == Key.Up || e.Key == Key.Down)
+            && e.KeyModifiers.HasFlag(KeyModifiers.Shift)
+            && inGrid
+        )
         {
             panel.ShiftArrow(e.Key == Key.Down ? 1 : -1);
             e.Handled = true;
@@ -195,17 +297,35 @@ public partial class MainWindow : Window
 
     private void OnPressBubble(object? sender, PointerPressedEventArgs e)
     {
-        if (Vm == null) return;
+        if (Vm == null)
+        {
+            return;
+        }
+
         var grid = GridOf(e.Source);
-        if (grid == null) return;
+        if (grid == null)
+        {
+            return;
+        }
+
         Activate(grid);
         grid.Focus(); // cursor, focus and marks move together; keys route into the grid
         var panel = PanelOf(grid);
-        if (panel == null) return;
+        if (panel == null)
+        {
+            return;
+        }
+
         var row = RowOf(e.Source);
-        if (row == null) return;
+        if (row == null)
+        {
+            return;
+        }
+
         bool shift = e.KeyModifiers.HasFlag(KeyModifiers.Shift);
-        bool ctrl = e.KeyModifiers.HasFlag(KeyModifiers.Control) || e.KeyModifiers.HasFlag(KeyModifiers.Meta);
+        bool ctrl =
+            e.KeyModifiers.HasFlag(KeyModifiers.Control)
+            || e.KeyModifiers.HasFlag(KeyModifiers.Meta);
         if (IsLeftPress(e) && !shift && !ctrl)
         {
             panel.MarkAnchor = row;
@@ -216,7 +336,10 @@ public partial class MainWindow : Window
         }
         else if (IsRightPress(e, this))
         {
-            if (row.IsParentEntry) return;
+            if (row.IsParentEntry)
+            {
+                return;
+            }
             // TC latch: mode comes from the pre-press state of the starting row.
             _rubberSelect = panel.BeginRubber(row);
             _rubberPanel = panel;
@@ -228,14 +351,22 @@ public partial class MainWindow : Window
 
     private void OnPointerMoved(object? sender, PointerEventArgs e)
     {
-        if (Vm == null) return;
+        if (Vm == null)
+        {
+            return;
+        }
+
         var point = e.GetCurrentPoint(this);
         if (_rubberPanel != null && _rubberSide != null && point.Properties.IsRightButtonPressed)
         {
             // Geometric hit-test: pointer capture retargets event sources during drag,
             // so the row under the pointer must be resolved by position, not e.Source.
             var grid = FindGrid(_rubberSide);
-            if (grid == null) return;
+            if (grid == null)
+            {
+                return;
+            }
+
             var pos = e.GetPosition(grid);
             var row = HitRow(grid, pos);
             if (row != null && !row.IsParentEntry)
@@ -249,28 +380,57 @@ public partial class MainWindow : Window
         if (_dragPanel != null && !_dragging && point.Properties.IsLeftButtonPressed && Vm.CanStage)
         {
             var grid = GridOf(e.Source) ?? FindGrid(_dragSide);
-            if (grid == null) return;
+            if (grid == null)
+            {
+                return;
+            }
+
             var pos = e.GetPosition(grid);
-            if (Math.Abs(pos.X - _dragStart.X) < 8 && Math.Abs(pos.Y - _dragStart.Y) < 8) return;
+            if (Math.Abs(pos.X - _dragStart.X) < 8 && Math.Abs(pos.Y - _dragStart.Y) < 8)
+            {
+                return;
+            }
+
             var set = _dragPanel.StagingSet();
-            if (set.Count == 0 || _dragPress == null) { _dragPanel = null; _dragPress = null; return; }
+            if (set.Count == 0 || _dragPress == null)
+            {
+                _dragPanel = null;
+                _dragPress = null;
+                return;
+            }
             _dragging = true;
             var vm = Vm;
-            vm.StatusMessage = $"Dragging {set.Count} item(s) — release over the other panel to stage MOVE.";
+            vm.StatusMessage =
+                $"Dragging {set.Count} item(s) — release over the other panel to stage MOVE.";
             var transfer = new DataTransfer();
-            transfer.Add(DataTransferItem.Create(DropFormat, string.Join("\n", set.Select(s => s.FullPath))));
+            transfer.Add(
+                DataTransferItem.Create(DropFormat, string.Join("\n", set.Select(s => s.FullPath)))
+            );
             var press = _dragPress;
             _dragPanel = null;
             _dragPress = null;
             try
             {
-                _ = DragDrop.DoDragDropAsync(press, transfer, DragDropEffects.Move).ContinueWith(t =>
-                {
-                    _dragging = false;
-                    if (t.Exception != null)
-                        Dispatcher.UIThread.Post(() => vm.StatusMessage = "Drag failed: " +
-                            (t.Exception.InnerException?.Message ?? t.Exception.Message));
-                }, System.Threading.Tasks.TaskScheduler.Default);
+                _ = DragDrop
+                    .DoDragDropAsync(press, transfer, DragDropEffects.Move)
+                    .ContinueWith(
+                        t =>
+                        {
+                            _dragging = false;
+                            if (t.Exception != null)
+                            {
+                                Dispatcher.UIThread.Post(() =>
+                                    vm.StatusMessage =
+                                        "Drag failed: "
+                                        + (
+                                            t.Exception.InnerException?.Message
+                                            ?? t.Exception.Message
+                                        )
+                                );
+                            }
+                        },
+                        System.Threading.Tasks.TaskScheduler.Default
+                    );
             }
             catch (Exception ex)
             {
@@ -294,7 +454,10 @@ public partial class MainWindow : Window
     private void UpdateAutoScroll(DataGrid grid, Point pos)
     {
         const double edge = 28;
-        int dir = pos.Y < edge ? -1 : pos.Y > grid.Bounds.Height - edge ? 1 : 0;
+        int dir =
+            pos.Y < edge ? -1
+            : pos.Y > grid.Bounds.Height - edge ? 1
+            : 0;
         if (dir == 0)
         {
             StopAutoScroll();
@@ -309,7 +472,9 @@ public partial class MainWindow : Window
             _autoScrollTimer.Tick += (_, _) => AutoScrollTick();
         }
         if (!_autoScrollTimer.IsEnabled)
+        {
             _autoScrollTimer.Start();
+        }
     }
 
     private void StopAutoScroll()
@@ -333,27 +498,50 @@ public partial class MainWindow : Window
             StopAutoScroll();
             return;
         }
-        double rowHeight = grid.GetVisualDescendants().OfType<DataGridRow>().FirstOrDefault()?.Bounds.Height ?? 33;
-        if (rowHeight <= 0) rowHeight = 33;
-        scroller.Offset = new Vector(scroller.Offset.X, scroller.Offset.Y + _autoScrollDir * rowHeight * 2);
+        double rowHeight =
+            grid.GetVisualDescendants().OfType<DataGridRow>().FirstOrDefault()?.Bounds.Height ?? 33;
+        if (rowHeight <= 0)
+        {
+            rowHeight = 33;
+        }
+
+        scroller.Offset = new Vector(
+            scroller.Offset.X,
+            scroller.Offset.Y + _autoScrollDir * rowHeight * 2
+        );
         // Pointer is stationary; content moved under it — apply the latched mode.
         var row = HitRow(grid, _autoScrollPos);
-        if (row == null || row.IsParentEntry) return;
+        if (row == null || row.IsParentEntry)
+        {
+            return;
+        }
+
         _rubberPanel.RubberTo(row, _rubberSelect);
         _rubberPanel.SelectedEntry = row; // TC cursor follows the pointer
     }
 
     private static FileEntryItem? HitRow(DataGrid grid, Point pos)
     {
-        if (pos.X < 0 || pos.Y < 0 || pos.X > grid.Bounds.Width || pos.Y > grid.Bounds.Height) return null;
+        if (pos.X < 0 || pos.Y < 0 || pos.X > grid.Bounds.Width || pos.Y > grid.Bounds.Height)
+        {
+            return null;
+        }
+
         var v = grid.InputHitTest(pos) as Visual;
-        while (v != null && v is not DataGridRow) v = v.GetVisualParent();
+        while (v != null && v is not DataGridRow)
+        {
+            v = v.GetVisualParent();
+        }
+
         return (v as DataGridRow)?.DataContext as FileEntryItem;
     }
 
-    private DataGrid? FindGrid(string? side)
-        => this.GetLogicalDescendants().OfType<DataGrid>()
-            .FirstOrDefault(g => ((g.Tag as string) ?? "Left") == (side ?? "Left") && g.IsEffectivelyVisible);
+    private DataGrid? FindGrid(string? side) =>
+        this.GetLogicalDescendants()
+            .OfType<DataGrid>()
+            .FirstOrDefault(g =>
+                ((g.Tag as string) ?? "Left") == (side ?? "Left") && g.IsEffectivelyVisible
+            );
 
     private StagedOperationsWindow? _stagedWindow;
 
@@ -376,20 +564,45 @@ public partial class MainWindow : Window
     private void OnGridDragOver(object? sender, DragEventArgs e)
     {
         if (Vm?.CanStage == true && e.DataTransfer.Contains(DropFormat))
+        {
             e.DragEffects = DragDropEffects.Move;
-        else e.DragEffects = DragDropEffects.None;
+        }
+        else
+        {
+            e.DragEffects = DragDropEffects.None;
+        }
     }
 
     private void OnGridDrop(object? sender, DragEventArgs e)
     {
-        if (Vm == null || !Vm.CanStage) return;
+        if (Vm == null || !Vm.CanStage)
+        {
+            return;
+        }
+
         var grid = GridOf(e.Source);
-        if (grid == null) return;
-        if (!e.DataTransfer.Contains(DropFormat)) return;
+        if (grid == null)
+        {
+            return;
+        }
+
+        if (!e.DataTransfer.Contains(DropFormat))
+        {
+            return;
+        }
+
         var text = e.DataTransfer.TryGetValue(DropFormat);
-        if (string.IsNullOrWhiteSpace(text)) return;
+        if (string.IsNullOrWhiteSpace(text))
+        {
+            return;
+        }
+
         var panel = PanelOf(grid);
-        if (panel == null) return;
+        if (panel == null)
+        {
+            return;
+        }
+
         Activate(grid);
         Vm.StageMovePaths(text!.Split('\n'), panel.CurrentPath);
     }
@@ -414,10 +627,18 @@ public partial class MainWindow : Window
 
     private void OnSplitterDoubleTapped(object? sender, TappedEventArgs e) => ResetSplit();
 
-    private void OnGridSorting(object? sender, DataGridColumnEventArgs e)    {
-        if (Vm == null) return;
+    private void OnGridSorting(object? sender, DataGridColumnEventArgs e)
+    {
+        if (Vm == null)
+        {
+            return;
+        }
+
         var grid = sender as DataGrid;
-        if (grid == null || e.Column == null) return;
+        if (grid == null || e.Column == null)
+        {
+            return;
+        }
         // Columns carry no SortMemberPath, so the grid performs no built-in sort:
         // we sort the source collection here, keeping ".." pinned first.
         string side = (grid.Tag as string) ?? (Vm.IsLeftActive ? "Left" : "Right");
@@ -428,9 +649,8 @@ public partial class MainWindow : Window
         {
             string key = col.Tag as string ?? "";
             string title = ColumnTitles.TryGetValue(key, out var t) ? t : key;
-            col.Header = key == panel.SortColumn
-                ? title + (panel.SortAscending ? " ▲" : " ▼")
-                : title;
+            col.Header =
+                key == panel.SortColumn ? title + (panel.SortAscending ? " ▲" : " ▼") : title;
         }
     }
 
@@ -438,17 +658,30 @@ public partial class MainWindow : Window
 
     private async void OnMkdir(object? sender, RoutedEventArgs e)
     {
-        if (Vm == null || !Vm.CanStage) return;
+        if (Vm == null || !Vm.CanStage)
+        {
+            return;
+        }
+
         var dialog = new MkdirDialog();
         string? name = await dialog.ShowDialog<string?>(this);
         if (!string.IsNullOrWhiteSpace(name))
+        {
             Vm.StageMkdirFromDialog(name);
+        }
     }
 
     private void OnDriveClick(object? sender, RoutedEventArgs e)
     {
-        if (Vm == null || sender is not Button button || button.CommandParameter is not DriveView drive)
+        if (
+            Vm == null
+            || sender is not Button button
+            || button.CommandParameter is not DriveView drive
+        )
+        {
             return;
+        }
+
         var panel = (button.Tag as string) == "Right" ? Vm.Right : Vm.Left;
         Vm.IsLeftActive = (button.Tag as string) != "Right";
         panel.GoToDrive(drive);
@@ -456,62 +689,105 @@ public partial class MainWindow : Window
 
     private async void OnLoadDatabase(object? sender, RoutedEventArgs e)
     {
-        if (sender is Button button) await OpenDatabase(button.Tag as string ?? "Left");
+        if (sender is Button button)
+        {
+            await OpenDatabase(button.Tag as string ?? "Left");
+        }
     }
 
     private async void OnLoadDatabaseMenu(object? sender, RoutedEventArgs e)
     {
-        if (sender is MenuItem item) await OpenDatabase(item.Tag as string ?? "Left");
+        if (sender is MenuItem item)
+        {
+            await OpenDatabase(item.Tag as string ?? "Left");
+        }
     }
 
     private async System.Threading.Tasks.Task OpenDatabase(string side)
     {
-        if (Vm == null || !Vm.CanChangePanelSource) return;
+        if (Vm == null || !Vm.CanChangePanelSource)
+        {
+            return;
+        }
+
         var vm = Vm;
         try
         {
-            var files = await StorageProvider.OpenFilePickerAsync(new FilePickerOpenOptions
-            {
-                Title = "Load inventory database",
-                AllowMultiple = false,
-                FileTypeFilter = new[]
+            var files = await StorageProvider.OpenFilePickerAsync(
+                new FilePickerOpenOptions
                 {
-                    new FilePickerFileType("SQLite database") { Patterns = new[] { "*.db", "*.sqlite", "*.sqlite3" } },
-                    FilePickerFileTypes.All,
-                },
-            });
-            if (files.Count == 0) return;
+                    Title = "Load inventory database",
+                    AllowMultiple = false,
+                    FileTypeFilter = new[]
+                    {
+                        new FilePickerFileType("SQLite database")
+                        {
+                            Patterns = new[] { "*.db", "*.sqlite", "*.sqlite3" },
+                        },
+                        FilePickerFileTypes.All,
+                    },
+                }
+            );
+            if (files.Count == 0)
+            {
+                return;
+            }
+
             string? path = files[0].TryGetLocalPath();
-            if (path == null) { vm.StatusMessage = "Choose a local database file."; return; }
+            if (path == null)
+            {
+                vm.StatusMessage = "Choose a local database file.";
+                return;
+            }
             await vm.LoadDatabaseAsync(side, path);
         }
-        catch (Exception ex) { vm.StatusMessage = "Open database failed: " + ex.Message; }
+        catch (Exception ex)
+        {
+            vm.StatusMessage = "Open database failed: " + ex.Message;
+        }
     }
 
     private void OnUseLive(object? sender, RoutedEventArgs e)
     {
         if (Vm != null && sender is Button button)
+        {
             Vm.UseLivePanel(button.Tag as string ?? "Left");
+        }
     }
 
     private async void OnInventoryHealth(object? sender, RoutedEventArgs e)
     {
-        if (Vm == null || sender is not Button button) return;
+        if (Vm == null || sender is not Button button)
+        {
+            return;
+        }
+
         var report = Vm.CreateInventoryHealthViewModel(button.Tag as string ?? "Left");
-        if (report != null) await new InventoryHealthWindow(report).ShowDialog(this);
+        if (report != null)
+        {
+            await new InventoryHealthWindow(report).ShowDialog(this);
+        }
     }
 
     // --- Double-click navigates (Left=activate left, etc.) ---
     private void OnLeftDoubleTapped(object? sender, TappedEventArgs e)
     {
-        if (Vm == null) return;
+        if (Vm == null)
+        {
+            return;
+        }
+
         Vm.IsLeftActive = true;
         Vm.EnterSelected();
     }
 
     private void OnRightDoubleTapped(object? sender, TappedEventArgs e)
     {
-        if (Vm == null) return;
+        if (Vm == null)
+        {
+            return;
+        }
+
         Vm.IsLeftActive = false;
         Vm.EnterSelected();
     }

@@ -8,9 +8,19 @@ public partial class MainWindow
 {
     private async void OnDatabasePlan(object? sender, RoutedEventArgs args)
     {
-        if (Vm == null || sender is not Button button) return;
-        var direction = button.Tag as string == "RightToLeft" ? DatabasePlanDirection.RightToLeft : DatabasePlanDirection.LeftToRight;
+        if (Vm == null || sender is not Button button)
+        {
+            return;
+        }
+
+        var direction =
+            button.Tag as string == "RightToLeft"
+                ? DatabasePlanDirection.RightToLeft
+                : DatabasePlanDirection.LeftToRight;
         var review = await Vm.PreparePlanAsync(direction);
-        if (review != null) await new DatabasePlanReviewWindow(review).ShowDialog(this);
+        if (review != null)
+        {
+            await new DatabasePlanReviewWindow(review).ShowDialog(this);
+        }
     }
 }

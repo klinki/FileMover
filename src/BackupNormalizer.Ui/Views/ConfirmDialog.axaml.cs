@@ -10,9 +10,13 @@ public partial class ConfirmDialog : Window
         InitializeComponent();
         Title = title;
         var text = this.FindControl<TextBlock>("MessageText");
-        if (text != null) text.Text = message;
+        if (text != null)
+        {
+            text.Text = message;
+        }
     }
 
     private void OnOk(object? sender, RoutedEventArgs e) => Close(true);
+
     private void OnCancel(object? sender, RoutedEventArgs e) => Close(false);
 }

@@ -20,13 +20,23 @@ public sealed partial class StagedOpItem : ObservableObject
     public string HashFull { get; }
     public string? SkipReason { get; }
 
-    public StagedOpItem(string type, string source, string dest, long size, string? hash, string? skipReason = null)
+    public StagedOpItem(
+        string type,
+        string source,
+        string dest,
+        long size,
+        string? hash,
+        string? skipReason = null
+    )
     {
         Type = type;
         Source = source;
         Dest = dest;
         Size = size;
-        HashShort = hash is null ? "" : hash.Length > 12 ? hash[..12] + "…" : hash;
+        HashShort =
+            hash is null ? ""
+            : hash.Length > 12 ? hash[..12] + "…"
+            : hash;
         HashFull = hash ?? "";
         SkipReason = skipReason;
     }
@@ -42,7 +52,8 @@ public sealed partial class MainViewModel : ViewModelBase
     public partial string RootId { get; set; } = "disk";
 
     [ObservableProperty]
-    public partial string BasePath { get; set; } = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+    public partial string BasePath { get; set; } =
+        Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
 
     [ObservableProperty]
     public partial string PlanId { get; set; } = DateTime.UtcNow.ToString("yyyy-MM-dd-001");
@@ -57,7 +68,8 @@ public sealed partial class MainViewModel : ViewModelBase
     public partial bool IsLeftActive { get; set; } = true;
 
     [ObservableProperty]
-    public partial string StatusMessage { get; set; } = "Plan-only mode: nothing is executed from this UI.";
+    public partial string StatusMessage { get; set; } =
+        "Plan-only mode: nothing is executed from this UI.";
 
     [ObservableProperty]
     public partial string PlanSummary { get; set; } = "No staged operations.";
@@ -130,8 +142,16 @@ public sealed partial class MainViewModel : ViewModelBase
     [RelayCommand]
     public async Task RefreshAll()
     {
-        if (IsBusy) return;
-        if (Left.IsDatabase || Right.IsDatabase) { await ReloadSnapshots(false); return; }
+        if (IsBusy)
+        {
+            return;
+        }
+
+        if (Left.IsDatabase || Right.IsDatabase)
+        {
+            await ReloadSnapshots(false);
+            return;
+        }
         Left.RefreshDrives();
         Right.RefreshDrives();
         Left.Refresh();
@@ -142,8 +162,16 @@ public sealed partial class MainViewModel : ViewModelBase
     [RelayCommand]
     public async Task RefreshActive()
     {
-        if (IsBusy) return;
-        if (Active.IsDatabase) { await ReloadSnapshots(true); return; }
+        if (IsBusy)
+        {
+            return;
+        }
+
+        if (Active.IsDatabase)
+        {
+            await ReloadSnapshots(true);
+            return;
+        }
         Active.Refresh();
         StatusMessage = "Active panel refreshed.";
     }
@@ -151,7 +179,11 @@ public sealed partial class MainViewModel : ViewModelBase
     [RelayCommand]
     public void SwapPanels()
     {
-        if (IsBusy) return;
+        if (IsBusy)
+        {
+            return;
+        }
+
         if (Left.IsDatabase || Right.IsDatabase)
         {
             SwapSources();
@@ -181,11 +213,19 @@ public sealed partial class MainViewModel : ViewModelBase
     [RelayCommand]
     public void EnterSelected()
     {
-        if (IsBusy) return;
+        if (IsBusy)
+        {
+            return;
+        }
+
         var sel = Active.SelectedEntry;
         if (sel != null && sel.IsDirectory)
         {
-            if (sel.IsParentEntry) { GoUpPanel(Active); return; }
+            if (sel.IsParentEntry)
+            {
+                GoUpPanel(Active);
+                return;
+            }
             Active.NavigateTo(sel);
             FollowInventoryNavigation(Active);
         }
@@ -198,14 +238,28 @@ public sealed partial class MainViewModel : ViewModelBase
         {
             string src = op.Type == OpType.Mkdir ? "" : op.SourceRel;
             string dst = op.Type == OpType.Trash ? "" : (op.DestRel ?? op.SourceRel);
-            if (_stagedCore.Any(s => s.Type == op.Type && s.SourceRel == op.SourceRel && (s.DestRel ?? "") == (op.DestRel ?? "")))
+            if (
+                _stagedCore.Any(s =>
+                    s.Type == op.Type
+                    && s.SourceRel == op.SourceRel
+                    && (s.DestRel ?? "") == (op.DestRel ?? "")
+                )
+            )
+            {
                 continue; // dedupe
+            }
+
             _stagedCore.Add(op);
-            Staged.Add(new StagedOpItem(op.Type, src, dst, op.ExpectedSize, op.ExpectedHash, op.SkipReason));
+            Staged.Add(
+                new StagedOpItem(op.Type, src, dst, op.ExpectedSize, op.ExpectedHash, op.SkipReason)
+            );
             added++;
         }
         UpdateSummary();
-        StatusMessage = added == 0 ? "Already staged (deduped)." : $"Staged {added} operation(s). Total: {_stagedCore.Count}. Nothing executed.";
+        StatusMessage =
+            added == 0
+                ? "Already staged (deduped)."
+                : $"Staged {added} operation(s). Total: {_stagedCore.Count}. Nothing executed.";
     }
 
     private void UpdateSummary()
@@ -214,8 +268,16 @@ public sealed partial class MainViewModel : ViewModelBase
         if (_stagedCore.Count == 0)
         {
             VirtualDirs.Clear();
-            if (Left.IsLive && !Directory.Exists(Left.CurrentPath)) Left.CurrentPath = AppliedBasePath;
-            if (Right.IsLive && !Directory.Exists(Right.CurrentPath)) Right.CurrentPath = AppliedBasePath;
+            if (Left.IsLive && !Directory.Exists(Left.CurrentPath))
+            {
+                Left.CurrentPath = AppliedBasePath;
+            }
+
+            if (Right.IsLive && !Directory.Exists(Right.CurrentPath))
+            {
+                Right.CurrentPath = AppliedBasePath;
+            }
+
             Left.Refresh();
             Right.Refresh();
         }
@@ -224,62 +286,124 @@ public sealed partial class MainViewModel : ViewModelBase
         int copy = _stagedCore.Count(o => o.Type == OpType.Copy);
         int trash = _stagedCore.Count(o => o.Type == OpType.Trash);
         long bytes = _stagedCore.Where(o => o.Type == OpType.Copy).Sum(o => o.ExpectedSize);
-        PlanSummary = _stagedCore.Count == 0
-            ? "No staged operations."
-            : $"Staged: MKDIR {mkdir}  MOVE {move}  COPY {copy}  TRASH {trash}  SKIP_LINK {_stagedCore.Count(o => o.Type == OpType.SkipLink)}  | bytes to copy: {bytes:N0}";
+        PlanSummary =
+            _stagedCore.Count == 0
+                ? "No staged operations."
+                : $"Staged: MKDIR {mkdir}  MOVE {move}  COPY {copy}  TRASH {trash}  SKIP_LINK {_stagedCore.Count(o => o.Type == OpType.SkipLink)}  | bytes to copy: {bytes:N0}";
     }
 
     [RelayCommand(CanExecute = nameof(CanStage))]
     public void StageCopy()
     {
-        if (!EnsureLiveStaging()) return;
+        if (!EnsureLiveStaging())
+        {
+            return;
+        }
+
         try
         {
             var sources = Active.StagingSet();
-            if (sources.Count == 0) { StatusMessage = "Mark files (right-click/Space) or select one in the active panel first."; return; }
+            if (sources.Count == 0)
+            {
+                StatusMessage =
+                    "Mark files (right-click/Space) or select one in the active panel first.";
+                return;
+            }
             int files = 0;
             foreach (var sel in sources)
             {
-                AppendStaged(BackupNormalizer.PlanStaging.StageCopy(AppliedBasePath, sel.FullPath, Inactive.CurrentPath));
+                AppendStaged(
+                    BackupNormalizer.PlanStaging.StageCopy(
+                        AppliedBasePath,
+                        sel.FullPath,
+                        Inactive.CurrentPath
+                    )
+                );
                 files++;
             }
-            StatusMessage = $"Staged COPY for {files} item(s). Total ops: {_stagedCore.Count}. Nothing executed.";
+            StatusMessage =
+                $"Staged COPY for {files} item(s). Total ops: {_stagedCore.Count}. Nothing executed.";
         }
-        catch (Exception ex) { StatusMessage = "stage copy failed: " + ex.Message; }
+        catch (Exception ex)
+        {
+            StatusMessage = "stage copy failed: " + ex.Message;
+        }
     }
 
     [RelayCommand(CanExecute = nameof(CanStage))]
     public void StageMove()
     {
-        if (!EnsureLiveStaging()) return;
+        if (!EnsureLiveStaging())
+        {
+            return;
+        }
+
         try
         {
             var sources = Active.StagingSet();
-            if (sources.Count == 0) { StatusMessage = "Mark files (right-click/Space) or select one in the active panel first."; return; }
+            if (sources.Count == 0)
+            {
+                StatusMessage =
+                    "Mark files (right-click/Space) or select one in the active panel first.";
+                return;
+            }
             foreach (var sel in sources)
-                AppendStaged(BackupNormalizer.PlanStaging.StageMove(AppliedBasePath, sel.FullPath, Inactive.CurrentPath));
-            StatusMessage = $"Staged MOVE for {sources.Count} item(s). Total ops: {_stagedCore.Count}. Nothing executed.";
+            {
+                AppendStaged(
+                    BackupNormalizer.PlanStaging.StageMove(
+                        AppliedBasePath,
+                        sel.FullPath,
+                        Inactive.CurrentPath
+                    )
+                );
+            }
+
+            StatusMessage =
+                $"Staged MOVE for {sources.Count} item(s). Total ops: {_stagedCore.Count}. Nothing executed.";
         }
-        catch (Exception ex) { StatusMessage = "stage move failed: " + ex.Message; }
+        catch (Exception ex)
+        {
+            StatusMessage = "stage move failed: " + ex.Message;
+        }
     }
 
     /// <summary>Drop target: schedule MOVE of absolute source paths into a panel directory.</summary>
     public void StageMovePaths(IEnumerable<string> sourceAbsPaths, string destDirAbs)
     {
-        if (!EnsureLiveStaging()) return;
+        if (!EnsureLiveStaging())
+        {
+            return;
+        }
+
         try
         {
             int files = 0;
             foreach (var abs in sourceAbsPaths)
             {
-                if (string.IsNullOrWhiteSpace(abs)) continue;
-                AppendStaged(BackupNormalizer.PlanStaging.StageMove(AppliedBasePath, abs.Trim(), destDirAbs));
+                if (string.IsNullOrWhiteSpace(abs))
+                {
+                    continue;
+                }
+
+                AppendStaged(
+                    BackupNormalizer.PlanStaging.StageMove(AppliedBasePath, abs.Trim(), destDirAbs)
+                );
                 files++;
             }
-            if (files == 0) StatusMessage = "Drop ignored: no valid paths.";
-            else StatusMessage = $"Staged MOVE for {files} dropped item(s). Total ops: {_stagedCore.Count}. Nothing executed.";
+            if (files == 0)
+            {
+                StatusMessage = "Drop ignored: no valid paths.";
+            }
+            else
+            {
+                StatusMessage =
+                    $"Staged MOVE for {files} dropped item(s). Total ops: {_stagedCore.Count}. Nothing executed.";
+            }
         }
-        catch (Exception ex) { StatusMessage = "drop failed: " + ex.Message; }
+        catch (Exception ex)
+        {
+            StatusMessage = "drop failed: " + ex.Message;
+        }
     }
 
     /// <summary>
@@ -288,44 +412,87 @@ public sealed partial class MainViewModel : ViewModelBase
     /// </summary>
     public void StageMkdirFromDialog(string name)
     {
-        if (!EnsureLiveStaging()) return;
+        if (!EnsureLiveStaging())
+        {
+            return;
+        }
+
         try
         {
             string trimmed = (name ?? "").Trim();
-            if (trimmed.Length == 0) { StatusMessage = "Folder name is empty."; return; }
-            if (trimmed == "." || trimmed == ".." || trimmed.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0)
-            { StatusMessage = $"Invalid folder name: '{trimmed}'."; return; }
+            if (trimmed.Length == 0)
+            {
+                StatusMessage = "Folder name is empty.";
+                return;
+            }
+            if (
+                trimmed == "."
+                || trimmed == ".."
+                || trimmed.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0
+            )
+            {
+                StatusMessage = $"Invalid folder name: '{trimmed}'.";
+                return;
+            }
             string abs = Path.GetFullPath(Path.Combine(Active.CurrentPath, trimmed));
             if (Directory.Exists(abs) || VirtualDirs.Contains(abs))
-            { StatusMessage = $"Already exists: '{trimmed}'."; return; }
+            {
+                StatusMessage = $"Already exists: '{trimmed}'.";
+                return;
+            }
             AppendStaged(BackupNormalizer.PlanStaging.StageMkdir(AppliedBasePath, abs));
             VirtualDirs.Add(abs);
             Left.Refresh();
             Right.Refresh();
             StatusMessage = $"Staged MKDIR '{trimmed}'. Nothing executed.";
         }
-        catch (Exception ex) { StatusMessage = "stage mkdir failed: " + ex.Message; }
+        catch (Exception ex)
+        {
+            StatusMessage = "stage mkdir failed: " + ex.Message;
+        }
     }
 
     [RelayCommand(CanExecute = nameof(CanStage))]
     public void StageTrash()
     {
-        if (!EnsureLiveStaging()) return;
+        if (!EnsureLiveStaging())
+        {
+            return;
+        }
+
         try
         {
             var sources = Active.StagingSet();
-            if (sources.Count == 0) { StatusMessage = "Mark files (right-click/Space) or select one in the active panel first."; return; }
+            if (sources.Count == 0)
+            {
+                StatusMessage =
+                    "Mark files (right-click/Space) or select one in the active panel first.";
+                return;
+            }
             foreach (var sel in sources)
-                AppendStaged(BackupNormalizer.PlanStaging.StageTrash(AppliedBasePath, sel.FullPath));
-            StatusMessage = $"Staged TRASH for {sources.Count} item(s). Total ops: {_stagedCore.Count}. Nothing executed.";
+            {
+                AppendStaged(
+                    BackupNormalizer.PlanStaging.StageTrash(AppliedBasePath, sel.FullPath)
+                );
+            }
+
+            StatusMessage =
+                $"Staged TRASH for {sources.Count} item(s). Total ops: {_stagedCore.Count}. Nothing executed.";
         }
-        catch (Exception ex) { StatusMessage = "stage delete failed: " + ex.Message; }
+        catch (Exception ex)
+        {
+            StatusMessage = "stage delete failed: " + ex.Message;
+        }
     }
 
     [RelayCommand]
     public void RemoveStaged(StagedOpItem? item)
     {
-        if (item == null) return;
+        if (item == null)
+        {
+            return;
+        }
+
         int idx = Staged.IndexOf(item);
         if (idx >= 0)
         {
@@ -350,13 +517,30 @@ public sealed partial class MainViewModel : ViewModelBase
     {
         try
         {
-            if (_stagedCore.Count == 0) { StatusMessage = "Nothing to save: stage operations first (F5/F6/F7/F8)."; return; }
-            if (string.IsNullOrWhiteSpace(PlanId)) { StatusMessage = "Plan ID is required."; return; }
-            var doc = BackupNormalizer.PlanStaging.BuildPlanDoc(PlanId.Trim(), RootId.Trim(), AppliedBasePath, _stagedCore);
+            if (_stagedCore.Count == 0)
+            {
+                StatusMessage = "Nothing to save: stage operations first (F5/F6/F7/F8).";
+                return;
+            }
+            if (string.IsNullOrWhiteSpace(PlanId))
+            {
+                StatusMessage = "Plan ID is required.";
+                return;
+            }
+            var doc = BackupNormalizer.PlanStaging.BuildPlanDoc(
+                PlanId.Trim(),
+                RootId.Trim(),
+                AppliedBasePath,
+                _stagedCore
+            );
             File.WriteAllText(JsonPath, BackupNormalizer.PlanStaging.ToJson(doc));
-            StatusMessage = $"Saved plan {doc.PlanId} ({doc.Operations.Count} ops) to {JsonPath}. Execute later with: plan import + execute.";
+            StatusMessage =
+                $"Saved plan {doc.PlanId} ({doc.Operations.Count} ops) to {JsonPath}. Execute later with: plan import + execute.";
         }
-        catch (Exception ex) { StatusMessage = "save failed: " + ex.Message; }
+        catch (Exception ex)
+        {
+            StatusMessage = "save failed: " + ex.Message;
+        }
     }
 
     [RelayCommand]
@@ -364,12 +548,25 @@ public sealed partial class MainViewModel : ViewModelBase
     {
         try
         {
-            if (_stagedCore.Count == 0) { StatusMessage = "Nothing to write: stage operations first."; return; }
-            var doc = BackupNormalizer.PlanStaging.BuildPlanDoc(PlanId.Trim(), RootId.Trim(), AppliedBasePath, _stagedCore);
+            if (_stagedCore.Count == 0)
+            {
+                StatusMessage = "Nothing to write: stage operations first.";
+                return;
+            }
+            var doc = BackupNormalizer.PlanStaging.BuildPlanDoc(
+                PlanId.Trim(),
+                RootId.Trim(),
+                AppliedBasePath,
+                _stagedCore
+            );
             using var db = new BackupNormalizer.Database(DbPath);
             BackupNormalizer.PlanStaging.WriteToDatabase(db, doc, RootId.Trim(), AppliedBasePath);
-            StatusMessage = $"Wrote plan {doc.PlanId} ({doc.Operations.Count} ops) into {DbPath}. Run: execute {doc.PlanId} --db {DbPath}.";
+            StatusMessage =
+                $"Wrote plan {doc.PlanId} ({doc.Operations.Count} ops) into {DbPath}. Run: execute {doc.PlanId} --db {DbPath}.";
         }
-        catch (Exception ex) { StatusMessage = "write to DB failed: " + ex.Message; }
+        catch (Exception ex)
+        {
+            StatusMessage = "write to DB failed: " + ex.Message;
+        }
     }
 }

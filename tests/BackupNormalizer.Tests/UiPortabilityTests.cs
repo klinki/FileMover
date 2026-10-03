@@ -10,8 +10,13 @@ namespace BackupNormalizer.Tests;
 [Collection("UI")]
 public sealed class UiPortabilityTests : IDisposable
 {
-    private readonly string _directory = Path.Combine(Path.GetTempPath(), "bn-ui-portable-" + Guid.NewGuid().ToString("N"));
+    private readonly string _directory = Path.Combine(
+        Path.GetTempPath(),
+        "bn-ui-portable-" + Guid.NewGuid().ToString("N")
+    );
+
     public UiPortabilityTests() => Directory.CreateDirectory(_directory);
+
     public void Dispose()
     {
         Directory.Delete(_directory, true);
@@ -23,10 +28,33 @@ public sealed class UiPortabilityTests : IDisposable
         using var db = Database.OpenWritable(path, pooling: false);
         foreach (string root in new[] { "first", "second" })
         {
-            db.UpsertRoot(new StorageRootRow(root, root, "/offline/" + root, false, "unknown", "sensitive", Database.UtcNow()));
+            db.UpsertRoot(
+                new StorageRootRow(
+                    root,
+                    root,
+                    "/offline/" + root,
+                    false,
+                    "unknown",
+                    "sensitive",
+                    Database.UtcNow()
+                )
+            );
             long scan = db.BeginScan(root);
-            db.UpsertFileEntry(new FileEntryRow(0, root, "folder/file.txt", "file.txt", 1,
-                Database.UtcNow(), null, null, scan, FileStatus.Ok, null));
+            db.UpsertFileEntry(
+                new FileEntryRow(
+                    0,
+                    root,
+                    "folder/file.txt",
+                    "file.txt",
+                    1,
+                    Database.UtcNow(),
+                    null,
+                    null,
+                    scan,
+                    FileStatus.Ok,
+                    null
+                )
+            );
             db.FinishScan(scan, ScanStatus.Completed);
         }
         return path;
@@ -37,8 +65,13 @@ public sealed class UiPortabilityTests : IDisposable
     {
         var store = new GuiSessionStore(Path.Combine(_directory, "session.json"));
         Assert.Null(store.Load());
-        var session = new GuiSession(new("left.db", "r1", "Photos"), new(null, null, _directory), false, 0.65,
-            new() { new("Name", 2, true), new("Size", 120, false) });
+        var session = new GuiSession(
+            new("left.db", "r1", "Photos"),
+            new(null, null, _directory),
+            false,
+            0.65,
+            new() { new("Name", 2, true), new("Size", 120, false) }
+        );
         store.Save(session);
         var loaded = store.Load()!;
         Assert.Equal(session.Left, loaded.Left);
@@ -47,10 +80,15 @@ public sealed class UiPortabilityTests : IDisposable
         Assert.Equal(session.LeftColumns, loaded.LeftColumns);
         File.WriteAllText(store.Path, "broken json");
         Assert.Null(store.Load());
-        File.WriteAllText(store.Path, "{\"Left\":null,\"Right\":{\"DatabasePath\":null,\"RootId\":null,\"Folder\":null}}");
+        File.WriteAllText(
+            store.Path,
+            "{\"Left\":null,\"Right\":{\"DatabasePath\":null,\"RootId\":null,\"Folder\":null}}"
+        );
         Assert.Null(store.Load());
-        File.WriteAllText(store.Path,
-            "{\"Left\":{\"Folder\":null},\"Right\":{\"Folder\":null},\"LeftColumns\":[null,{\"Key\":null,\"Width\":2,\"IsStar\":true},{\"Key\":\"Name\",\"Width\":0,\"IsStar\":false}]}");
+        File.WriteAllText(
+            store.Path,
+            "{\"Left\":{\"Folder\":null},\"Right\":{\"Folder\":null},\"LeftColumns\":[null,{\"Key\":null,\"Width\":2,\"IsStar\":true},{\"Key\":\"Name\",\"Width\":0,\"IsStar\":false}]}"
+        );
         var normalized = store.Load()!;
         Assert.Equal("", normalized.Left.Folder);
         Assert.Equal("", normalized.Right.Folder);
@@ -63,7 +101,9 @@ public sealed class UiPortabilityTests : IDisposable
     {
         string path = Inventory();
         var vm = new MainViewModel();
-        await vm.RestoreSessionAsync(new(new(path, "first", "folder/removed"), new(path, "second", "folder"), false));
+        await vm.RestoreSessionAsync(
+            new(new(path, "first", "folder/removed"), new(path, "second", "folder"), false)
+        );
         Assert.Equal("first", vm.Left.SelectedInventoryRoot!.Root.Id);
         Assert.Equal("second", vm.Right.SelectedInventoryRoot!.Root.Id);
         Assert.Equal("folder", vm.Left.InventoryPath);
@@ -83,7 +123,9 @@ public sealed class UiPortabilityTests : IDisposable
     {
         string path = Inventory();
         var vm = new MainViewModel();
-        await vm.RestoreSessionAsync(new(new(path, "removed", "folder"), new(path, "second", "folder"), true));
+        await vm.RestoreSessionAsync(
+            new(new(path, "removed", "folder"), new(path, "second", "folder"), true)
+        );
 
         Assert.Equal("first", vm.Left.SelectedInventoryRoot!.Root.Id);
         Assert.Equal("", vm.Left.InventoryPath);
@@ -96,7 +138,9 @@ public sealed class UiPortabilityTests : IDisposable
     {
         Assert.True(FilePanelViewModel.IsHostNativeAbsolutePath(Path.GetFullPath(_directory)));
         if (OperatingSystem.IsWindows())
+        {
             Assert.False(FilePanelViewModel.IsHostNativeAbsolutePath("/offline/linux-root"));
+        }
         else
         {
             Assert.False(FilePanelViewModel.IsHostNativeAbsolutePath("C:\\offline\\windows-root"));
@@ -108,9 +152,16 @@ public sealed class UiPortabilityTests : IDisposable
     public void Window_Restores_Split_And_Star_And_Pixel_Column_Widths()
     {
         var store = new GuiSessionStore(Path.Combine(_directory, "layout.json"));
-        store.Save(new(new(null, null, _directory), new(null, null, _directory), false, 0.7,
-            new() { new("Name", 2, true), new("Size", 140, false) },
-            new() { new("Name", 1.5, true), new("Size", 125, false) }));
+        store.Save(
+            new(
+                new(null, null, _directory),
+                new(null, null, _directory),
+                false,
+                0.7,
+                new() { new("Name", 2, true), new("Size", 140, false) },
+                new() { new("Name", 1.5, true), new("Size", 125, false) }
+            )
+        );
 
         UiTestHost.Run(() =>
         {
@@ -126,19 +177,51 @@ public sealed class UiPortabilityTests : IDisposable
                 window.Show();
                 window.UpdateLayout();
                 Dispatcher.UIThread.RunJobs();
-                var split = window.GetLogicalDescendants().OfType<Grid>().Single(grid => grid.Name == "SplitGrid");
+                var split = window
+                    .GetLogicalDescendants()
+                    .OfType<Grid>()
+                    .Single(grid => grid.Name == "SplitGrid");
                 Assert.Equal(0.7, split.ColumnDefinitions[0].Width.Value, 3);
                 Assert.Equal(0.3, split.ColumnDefinitions[2].Width.Value, 3);
-                var grids = window.GetLogicalDescendants().OfType<DataGrid>().ToDictionary(grid => (string)grid.Tag!);
-                Assert.Equal(DataGridLengthUnitType.Star, grids["Left"].Columns.Single(column => Equals(column.Tag, "Name")).Width.UnitType);
-                Assert.Equal(2, grids["Left"].Columns.Single(column => Equals(column.Tag, "Name")).Width.Value);
-                Assert.Equal(DataGridLengthUnitType.Pixel, grids["Left"].Columns.Single(column => Equals(column.Tag, "Size")).Width.UnitType);
-                Assert.Equal(140, grids["Left"].Columns.Single(column => Equals(column.Tag, "Size")).Width.Value);
-                Assert.Equal(1.5, grids["Right"].Columns.Single(column => Equals(column.Tag, "Name")).Width.Value);
-                Assert.Equal(125, grids["Right"].Columns.Single(column => Equals(column.Tag, "Size")).Width.Value);
-                grids["Left"].Columns.Single(column => Equals(column.Tag, "Size")).Width = new DataGridLength(170);
+                var grids = window
+                    .GetLogicalDescendants()
+                    .OfType<DataGrid>()
+                    .ToDictionary(grid => (string)grid.Tag!);
+                Assert.Equal(
+                    DataGridLengthUnitType.Star,
+                    grids["Left"]
+                        .Columns.Single(column => Equals(column.Tag, "Name"))
+                        .Width.UnitType
+                );
+                Assert.Equal(
+                    2,
+                    grids["Left"].Columns.Single(column => Equals(column.Tag, "Name")).Width.Value
+                );
+                Assert.Equal(
+                    DataGridLengthUnitType.Pixel,
+                    grids["Left"]
+                        .Columns.Single(column => Equals(column.Tag, "Size"))
+                        .Width.UnitType
+                );
+                Assert.Equal(
+                    140,
+                    grids["Left"].Columns.Single(column => Equals(column.Tag, "Size")).Width.Value
+                );
+                Assert.Equal(
+                    1.5,
+                    grids["Right"].Columns.Single(column => Equals(column.Tag, "Name")).Width.Value
+                );
+                Assert.Equal(
+                    125,
+                    grids["Right"].Columns.Single(column => Equals(column.Tag, "Size")).Width.Value
+                );
+                grids["Left"].Columns.Single(column => Equals(column.Tag, "Size")).Width =
+                    new DataGridLength(170);
             }
-            finally { window.Close(); }
+            finally
+            {
+                window.Close();
+            }
         });
         var saved = store.Load()!;
         Assert.Equal(_directory, saved.Left.Folder);
@@ -151,7 +234,9 @@ public sealed class UiPortabilityTests : IDisposable
     {
         string missing = Path.Combine(_directory, "missing.db");
         var vm = new MainViewModel();
-        await vm.RestoreSessionAsync(new(new(missing, "first", ""), new(Inventory(), "second", "folder"), true));
+        await vm.RestoreSessionAsync(
+            new(new(missing, "first", ""), new(Inventory(), "second", "folder"), true)
+        );
         Assert.True(vm.Left.IsLive);
         Assert.True(vm.Right.IsDatabase);
         Assert.Contains("could not be restored", vm.StatusMessage);
@@ -167,7 +252,11 @@ public sealed class UiPortabilityTests : IDisposable
         string output = Path.Combine(_directory, "export.db");
         await vm.ExportInventoryAsync(output);
         Assert.Contains("exported", vm.StatusMessage);
-        using (var exported = Database.OpenReadOnly(output, pooling: false)) Assert.Equal(2, exported.ListRoots().Count);
+        using (var exported = Database.OpenReadOnly(output, pooling: false))
+        {
+            Assert.Equal(2, exported.ListRoots().Count);
+        }
+
         byte[] bytes = File.ReadAllBytes(output);
         await vm.ExportInventoryAsync(output);
         Assert.Contains("already exists", vm.StatusMessage);

@@ -2,7 +2,8 @@ using Microsoft.EntityFrameworkCore;
 
 namespace BackupNormalizer;
 
-public sealed class BackupNormalizerDbContext(DbContextOptions<BackupNormalizerDbContext> options) : DbContext(options)
+public sealed class BackupNormalizerDbContext(DbContextOptions<BackupNormalizerDbContext> options)
+    : DbContext(options)
 {
     public DbSet<StorageRootEntity> StorageRoots => Set<StorageRootEntity>();
     public DbSet<ScanEntity> Scans => Set<ScanEntity>();
@@ -15,8 +16,8 @@ public sealed class BackupNormalizerDbContext(DbContextOptions<BackupNormalizerD
     public DbSet<PlanOperationEntity> PlanOperations => Set<PlanOperationEntity>();
     public DbSet<ExecutionLogEntity> ExecutionLogs => Set<ExecutionLogEntity>();
 
-    protected override void OnModelCreating(ModelBuilder modelBuilder)
-        => ConfigureModel(modelBuilder);
+    protected override void OnModelCreating(ModelBuilder modelBuilder) =>
+        ConfigureModel(modelBuilder);
 
     internal static void ConfigureModel(ModelBuilder modelBuilder)
     {
@@ -28,8 +29,14 @@ public sealed class BackupNormalizerDbContext(DbContextOptions<BackupNormalizerD
             entity.Property(x => x.Name).HasColumnName("Name").IsRequired();
             entity.Property(x => x.Path).HasColumnName("Path").IsRequired();
             entity.Property(x => x.Writable).HasColumnName("Writable").HasDefaultValue(true);
-            entity.Property(x => x.FileSystemId).HasColumnName("FileSystemId").HasDefaultValue("unknown");
-            entity.Property(x => x.CaseSensitivity).HasColumnName("CaseSensitivity").HasDefaultValue("unknown");
+            entity
+                .Property(x => x.FileSystemId)
+                .HasColumnName("FileSystemId")
+                .HasDefaultValue("unknown");
+            entity
+                .Property(x => x.CaseSensitivity)
+                .HasColumnName("CaseSensitivity")
+                .HasDefaultValue("unknown");
             entity.Property(x => x.CreatedUtc).HasColumnName("CreatedUtc").IsRequired();
         });
 
@@ -38,7 +45,11 @@ public sealed class BackupNormalizerDbContext(DbContextOptions<BackupNormalizerD
             entity.ToTable("RootScanPolicy");
             entity.HasKey(x => x.StorageRootId);
             entity.Property(x => x.ExcludedPathRegexesJson).IsRequired();
-            entity.HasOne<StorageRootEntity>().WithMany().HasForeignKey(x => x.StorageRootId).OnDelete(DeleteBehavior.Cascade);
+            entity
+                .HasOne<StorageRootEntity>()
+                .WithMany()
+                .HasForeignKey(x => x.StorageRootId)
+                .OnDelete(DeleteBehavior.Cascade);
         });
 
         modelBuilder.Entity<ScanEntity>(entity =>
@@ -49,8 +60,15 @@ public sealed class BackupNormalizerDbContext(DbContextOptions<BackupNormalizerD
             entity.Property(x => x.StorageRootId).HasColumnName("StorageRootId").IsRequired();
             entity.Property(x => x.StartedUtc).HasColumnName("StartedUtc").IsRequired();
             entity.Property(x => x.CompletedUtc).HasColumnName("CompletedUtc");
-            entity.Property(x => x.Status).HasColumnName("Status").HasDefaultValue(ScanStatus.Started);
-            entity.HasOne<StorageRootEntity>().WithMany().HasForeignKey(x => x.StorageRootId).OnDelete(DeleteBehavior.NoAction);
+            entity
+                .Property(x => x.Status)
+                .HasColumnName("Status")
+                .HasDefaultValue(ScanStatus.Started);
+            entity
+                .HasOne<StorageRootEntity>()
+                .WithMany()
+                .HasForeignKey(x => x.StorageRootId)
+                .OnDelete(DeleteBehavior.NoAction);
         });
 
         modelBuilder.Entity<ScanDiagnosticEntity>(entity =>
@@ -61,7 +79,11 @@ public sealed class BackupNormalizerDbContext(DbContextOptions<BackupNormalizerD
             entity.Property(x => x.Message).IsRequired();
             entity.Property(x => x.RecordedUtc).IsRequired();
             entity.HasIndex(x => x.ScanId);
-            entity.HasOne<ScanEntity>().WithMany().HasForeignKey(x => x.ScanId).OnDelete(DeleteBehavior.Cascade);
+            entity
+                .HasOne<ScanEntity>()
+                .WithMany()
+                .HasForeignKey(x => x.ScanId)
+                .OnDelete(DeleteBehavior.Cascade);
         });
 
         modelBuilder.Entity<ScanCheckpointEntity>(entity =>
@@ -72,7 +94,11 @@ public sealed class BackupNormalizerDbContext(DbContextOptions<BackupNormalizerD
             entity.Property(x => x.VolumeIdentity).IsRequired();
             entity.Property(x => x.RootIdentity).IsRequired();
             entity.Property(x => x.JournalId).IsRequired();
-            entity.HasOne<StorageRootEntity>().WithMany().HasForeignKey(x => x.StorageRootId).OnDelete(DeleteBehavior.Cascade);
+            entity
+                .HasOne<StorageRootEntity>()
+                .WithMany()
+                .HasForeignKey(x => x.StorageRootId)
+                .OnDelete(DeleteBehavior.Cascade);
         });
 
         modelBuilder.Entity<FileEntryEntity>(entity =>
@@ -90,14 +116,22 @@ public sealed class BackupNormalizerDbContext(DbContextOptions<BackupNormalizerD
             entity.Property(x => x.LastSeenScanId).HasColumnName("LastSeenScanId");
             entity.Property(x => x.Status).HasColumnName("Status").HasDefaultValue(FileStatus.Ok);
             entity.Property(x => x.Error).HasColumnName("Error");
-            entity.Property(x => x.EntryKind).HasColumnName("EntryKind").HasDefaultValue(EntryKind.File).IsRequired();
+            entity
+                .Property(x => x.EntryKind)
+                .HasColumnName("EntryKind")
+                .HasDefaultValue(EntryKind.File)
+                .IsRequired();
             entity.Property(x => x.LinkTarget).HasColumnName("LinkTarget");
             entity.Property(x => x.TargetPath).HasColumnName("TargetPath");
             entity.Property(x => x.LinkNote).HasColumnName("LinkNote");
             entity.HasAlternateKey(x => new { x.StorageRootId, x.RelativePath });
             entity.HasIndex(x => x.StorageRootId).HasDatabaseName("IX_FileEntry_Root");
             entity.HasIndex(x => x.Size).HasDatabaseName("IX_FileEntry_Size");
-            entity.HasOne<StorageRootEntity>().WithMany().HasForeignKey(x => x.StorageRootId).OnDelete(DeleteBehavior.NoAction);
+            entity
+                .HasOne<StorageRootEntity>()
+                .WithMany()
+                .HasForeignKey(x => x.StorageRootId)
+                .OnDelete(DeleteBehavior.NoAction);
         });
 
         modelBuilder.Entity<FileHashEntity>(entity =>
@@ -108,11 +142,20 @@ public sealed class BackupNormalizerDbContext(DbContextOptions<BackupNormalizerD
             entity.Property(x => x.Algorithm).HasColumnName("Algorithm");
             entity.Property(x => x.Digest).HasColumnName("Digest").IsRequired();
             entity.Property(x => x.SizeAtHash).HasColumnName("SizeAtHash");
-            entity.Property(x => x.ModifiedUtcAtHash).HasColumnName("ModifiedUtcAtHash").IsRequired();
+            entity
+                .Property(x => x.ModifiedUtcAtHash)
+                .HasColumnName("ModifiedUtcAtHash")
+                .IsRequired();
             entity.Property(x => x.CalculatedUtc).HasColumnName("CalculatedUtc").IsRequired();
             entity.Property(x => x.State).HasColumnName("State").HasDefaultValue(HashState.Ok);
-            entity.HasIndex(x => new { x.Algorithm, x.Digest }).HasDatabaseName("IX_FileHash_Digest");
-            entity.HasOne<FileEntryEntity>().WithMany().HasForeignKey(x => x.FileEntryId).OnDelete(DeleteBehavior.Cascade);
+            entity
+                .HasIndex(x => new { x.Algorithm, x.Digest })
+                .HasDatabaseName("IX_FileHash_Digest");
+            entity
+                .HasOne<FileEntryEntity>()
+                .WithMany()
+                .HasForeignKey(x => x.FileEntryId)
+                .OnDelete(DeleteBehavior.Cascade);
         });
 
         modelBuilder.Entity<PlanEntity>(entity =>
@@ -121,15 +164,28 @@ public sealed class BackupNormalizerDbContext(DbContextOptions<BackupNormalizerD
             entity.HasKey(x => x.Id);
             entity.Property(x => x.Id).HasColumnName("Id");
             entity.Property(x => x.CreatedUtc).HasColumnName("CreatedUtc").IsRequired();
-            entity.Property(x => x.SourceDatabasePath).HasColumnName("SourceDatabasePath").IsRequired();
+            entity
+                .Property(x => x.SourceDatabasePath)
+                .HasColumnName("SourceDatabasePath")
+                .IsRequired();
             entity.Property(x => x.SourceRootId).HasColumnName("SourceRootId").IsRequired();
             entity.Property(x => x.SourceRootPath).HasColumnName("SourceRootPath").IsRequired();
             entity.Property(x => x.TargetRootId).HasColumnName("TargetRootId").IsRequired();
             entity.Property(x => x.TargetRootPath).HasColumnName("TargetRootPath").IsRequired();
-            entity.Property(x => x.ExecutionSourceRootPath).HasColumnName("ExecutionSourceRootPath");
-            entity.Property(x => x.ExecutionTargetRootPath).HasColumnName("ExecutionTargetRootPath");
-            entity.Property(x => x.Status).HasColumnName("Status").HasDefaultValue(PlanStatus.Planned);
-            entity.Property(x => x.EstimatedBytesCopied).HasColumnName("EstimatedBytesCopied").HasDefaultValue(0L);
+            entity
+                .Property(x => x.ExecutionSourceRootPath)
+                .HasColumnName("ExecutionSourceRootPath");
+            entity
+                .Property(x => x.ExecutionTargetRootPath)
+                .HasColumnName("ExecutionTargetRootPath");
+            entity
+                .Property(x => x.Status)
+                .HasColumnName("Status")
+                .HasDefaultValue(PlanStatus.Planned);
+            entity
+                .Property(x => x.EstimatedBytesCopied)
+                .HasColumnName("EstimatedBytesCopied")
+                .HasDefaultValue(0L);
         });
 
         modelBuilder.Entity<PlanOperationEntity>(entity =>
@@ -148,12 +204,19 @@ public sealed class BackupNormalizerDbContext(DbContextOptions<BackupNormalizerD
             entity.Property(x => x.DestinationPath).HasColumnName("DestinationPath");
             entity.Property(x => x.ExpectedSize).HasColumnName("ExpectedSize").HasDefaultValue(0L);
             entity.Property(x => x.ExpectedHash).HasColumnName("ExpectedHash");
-            entity.Property(x => x.Status).HasColumnName("Status").HasDefaultValue(OpStatus.Planned);
+            entity
+                .Property(x => x.Status)
+                .HasColumnName("Status")
+                .HasDefaultValue(OpStatus.Planned);
             entity.Property(x => x.StartedUtc).HasColumnName("StartedUtc");
             entity.Property(x => x.CompletedUtc).HasColumnName("CompletedUtc");
             entity.Property(x => x.Error).HasColumnName("Error");
             entity.HasIndex(x => new { x.PlanId, x.Sequence }).HasDatabaseName("IX_PlanOp_Plan");
-            entity.HasOne<PlanEntity>().WithMany().HasForeignKey(x => x.PlanId).OnDelete(DeleteBehavior.Cascade);
+            entity
+                .HasOne<PlanEntity>()
+                .WithMany()
+                .HasForeignKey(x => x.PlanId)
+                .OnDelete(DeleteBehavior.Cascade);
         });
 
         modelBuilder.Entity<ExecutionLogEntity>(entity =>

@@ -14,7 +14,10 @@ namespace BackupNormalizer.Tests;
 [Collection("UI")]
 public sealed class HeadlessInteractionTests : IDisposable
 {
-    private readonly string _dir = Path.Combine(Path.GetTempPath(), "bn-gesture-" + Guid.NewGuid().ToString("N"));
+    private readonly string _dir = Path.Combine(
+        Path.GetTempPath(),
+        "bn-gesture-" + Guid.NewGuid().ToString("N")
+    );
 
     public HeadlessInteractionTests()
     {
@@ -23,7 +26,14 @@ public sealed class HeadlessInteractionTests : IDisposable
         File.WriteAllText(Path.Combine(_dir, "z.txt"), "z");
     }
 
-    public void Dispose() { try { Directory.Delete(_dir, true); } catch { } }
+    public void Dispose()
+    {
+        try
+        {
+            Directory.Delete(_dir, true);
+        }
+        catch { }
+    }
 
     private static void Pump()
     {
@@ -36,7 +46,12 @@ public sealed class HeadlessInteractionTests : IDisposable
     {
         var vm = new MainViewModel { BasePath = dir };
         vm.ApplyBase();
-        var window = new MainWindow { DataContext = vm, Width = 1100, Height = 700 };
+        var window = new MainWindow
+        {
+            DataContext = vm,
+            Width = 1100,
+            Height = 700,
+        };
         window.Show();
         window.Activate();
         Pump();
@@ -45,20 +60,28 @@ public sealed class HeadlessInteractionTests : IDisposable
         return (window, vm);
     }
 
-    private static DataGrid Grid(MainWindow w, string tag)
-        => w.GetLogicalDescendants().OfType<DataGrid>()
+    private static DataGrid Grid(MainWindow w, string tag) =>
+        w.GetLogicalDescendants()
+            .OfType<DataGrid>()
             .First(g => (g.Tag as string) == tag && g.IsEffectivelyVisible);
 
     private static Point RowPoint(MainWindow w, DataGrid g, string name)
     {
-        var row = g.GetVisualDescendants().OfType<DataGridRow>()
+        var row = g.GetVisualDescendants()
+            .OfType<DataGridRow>()
             .First(r => ((FileEntryItem)r.DataContext!).Name == name);
         var pt = row.TranslatePoint(new Point(row.Bounds.Width / 2, row.Bounds.Height / 2), w);
         Assert.True(pt.HasValue);
         return pt!.Value;
     }
 
-    private static void Click(MainWindow w, DataGrid g, string name, MouseButton button, RawInputModifiers mods)
+    private static void Click(
+        MainWindow w,
+        DataGrid g,
+        string name,
+        MouseButton button,
+        RawInputModifiers mods
+    )
     {
         var pt = RowPoint(w, g, name);
         w.MouseDown(pt, button, mods);
@@ -67,8 +90,8 @@ public sealed class HeadlessInteractionTests : IDisposable
         Pump();
     }
 
-    private static FileEntryItem Entry(MainViewModel vm, string name)
-        => vm.Left.Entries.First(e => e.Name == name);
+    private static FileEntryItem Entry(MainViewModel vm, string name) =>
+        vm.Left.Entries.First(e => e.Name == name);
 
     [Fact(Skip = "Requires real pointer delivery; headless input is not faithful")]
     public void LeftClick_Moves_Cursor_Sets_Anchor_Without_Marking()
@@ -232,10 +255,16 @@ public sealed class HeadlessShortcutTests
             {
                 var vm = new MainViewModel { BasePath = dir };
                 vm.ApplyBase();
-                var w = new MainWindow { DataContext = vm, Width = 1100, Height = 700 };
+                var w = new MainWindow
+                {
+                    DataContext = vm,
+                    Width = 1100,
+                    Height = 700,
+                };
                 w.Show();
                 Pump5();
-                var grid = w.GetLogicalDescendants().OfType<DataGrid>()
+                var grid = w.GetLogicalDescendants()
+                    .OfType<DataGrid>()
                     .First(g => (g.Tag as string) == "Left" && g.IsEffectivelyVisible);
                 grid.Focus();
                 Pump5();
@@ -254,7 +283,14 @@ public sealed class HeadlessShortcutTests
                 Assert.False(vm.IsLeftActive);
                 w.Close();
             }
-            finally { try { Directory.Delete(dir, true); } catch { } }
+            finally
+            {
+                try
+                {
+                    Directory.Delete(dir, true);
+                }
+                catch { }
+            }
         });
     }
 
@@ -274,21 +310,33 @@ public sealed class HeadlessFallbackShortcutTests
     {
         UiTestHost.Run(() =>
         {
-            var dir = Path.Combine(Path.GetTempPath(), "bn-fallback-" + Guid.NewGuid().ToString("N"));
+            var dir = Path.Combine(
+                Path.GetTempPath(),
+                "bn-fallback-" + Guid.NewGuid().ToString("N")
+            );
             Directory.CreateDirectory(dir);
             File.WriteAllText(Path.Combine(dir, "f.txt"), "x");
             try
             {
                 var vm = new MainViewModel { BasePath = dir };
                 vm.ApplyBase();
-                var w = new MainWindow { DataContext = vm, Width = 1100, Height = 700 };
+                var w = new MainWindow
+                {
+                    DataContext = vm,
+                    Width = 1100,
+                    Height = 700,
+                };
                 w.Show();
                 Pump6();
                 // All grids must accept drops (ctor wiring, not XAML).
                 foreach (var g in w.GetLogicalDescendants().OfType<DataGrid>())
+                {
                     Assert.True(DragDrop.GetAllowDrop(g));
+                }
                 // Focus a neutral toolbar button: shortcuts apply to the active panel.
-                var btn = w.GetVisualDescendants().OfType<Button>().First(b => (b.Content as string) == "Apply");
+                var btn = w.GetVisualDescendants()
+                    .OfType<Button>()
+                    .First(b => (b.Content as string) == "Apply");
                 btn.Focus();
                 Pump6();
                 w.KeyPress(Key.A, RawInputModifiers.Control, PhysicalKey.A, "a");
@@ -298,7 +346,8 @@ public sealed class HeadlessFallbackShortcutTests
                 Pump6();
                 Assert.Empty(vm.Left.Entries.Where(e => e.IsMarked).ToList());
                 // ...but never hijack text input.
-                var box = w.GetVisualDescendants().OfType<TextBox>()
+                var box = w.GetVisualDescendants()
+                    .OfType<TextBox>()
                     .First(b => b.IsEffectivelyVisible && b.IsEffectivelyEnabled);
                 Assert.True(box.Focus());
                 Pump6();
@@ -307,7 +356,14 @@ public sealed class HeadlessFallbackShortcutTests
                 Assert.Empty(vm.Left.Entries.Where(e => e.IsMarked).ToList());
                 w.Close();
             }
-            finally { try { Directory.Delete(dir, true); } catch { } }
+            finally
+            {
+                try
+                {
+                    Directory.Delete(dir, true);
+                }
+                catch { }
+            }
         });
     }
 

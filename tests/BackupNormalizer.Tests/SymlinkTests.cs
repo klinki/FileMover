@@ -14,17 +14,35 @@ public class SymlinkFactAttribute : FactAttribute
 {
     private static readonly Lazy<bool> Supported = new(() =>
     {
-        var directory = Path.Combine(AppContext.BaseDirectory, "bn-link-probe-" + Guid.NewGuid().ToString("N"));
+        var directory = Path.Combine(
+            AppContext.BaseDirectory,
+            "bn-link-probe-" + Guid.NewGuid().ToString("N")
+        );
         Directory.CreateDirectory(directory);
         var link = Path.Combine(directory, "link");
-        try { File.CreateSymbolicLink(link, "missing"); return true; }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or PlatformNotSupportedException) { return false; }
-        finally { File.Delete(link); Directory.Delete(directory); }
+        try
+        {
+            File.CreateSymbolicLink(link, "missing");
+            return true;
+        }
+        catch (Exception ex)
+            when (ex is IOException or UnauthorizedAccessException or PlatformNotSupportedException)
+        {
+            return false;
+        }
+        finally
+        {
+            File.Delete(link);
+            Directory.Delete(directory);
+        }
     });
 
     public SymlinkFactAttribute()
     {
-        if (!Supported.Value) Skip = "This environment cannot create symbolic links.";
+        if (!Supported.Value)
+        {
+            Skip = "This environment cannot create symbolic links.";
+        }
     }
 }
 
@@ -33,7 +51,9 @@ public sealed class ElevatedMftFactAttribute : SymlinkFactAttribute
     public ElevatedMftFactAttribute()
     {
         if (!OperatingSystem.IsWindows() || !Elevation.IsWindowsAdmin())
+        {
             Skip = "A real MFT comparison requires elevated Windows access.";
+        }
     }
 }
 
@@ -41,18 +61,32 @@ public sealed class JunctionFactAttribute : FactAttribute
 {
     public JunctionFactAttribute()
     {
-        if (!OperatingSystem.IsWindows()) Skip = "Junctions require Windows.";
+        if (!OperatingSystem.IsWindows())
+        {
+            Skip = "Junctions require Windows.";
+        }
     }
 }
 
 public sealed class SymlinkTests : IDisposable
 {
-    private readonly string _dir = Path.Combine(AppContext.BaseDirectory, "bn-links-" + Guid.NewGuid().ToString("N"));
+    private readonly string _dir = Path.Combine(
+        AppContext.BaseDirectory,
+        "bn-links-" + Guid.NewGuid().ToString("N")
+    );
     private readonly List<string> _junctions = [];
-    [DllImport("kernel32.dll", EntryPoint = "RemoveDirectoryW", CharSet = CharSet.Unicode, SetLastError = true)]
+
+    [DllImport(
+        "kernel32.dll",
+        EntryPoint = "RemoveDirectoryW",
+        CharSet = CharSet.Unicode,
+        SetLastError = true
+    )]
     [return: MarshalAs(UnmanagedType.Bool)]
     private static extern bool RemoveJunction(string path);
+
     public SymlinkTests() => Directory.CreateDirectory(_dir);
+
     public void Dispose()
     {
         SqliteConnection.ClearAllPools();
@@ -61,7 +95,10 @@ public sealed class SymlinkTests : IDisposable
             Assert.StartsWith(_dir + Path.DirectorySeparatorChar, Path.GetFullPath(junction));
             // Remove only the directory entry. Recursive .NET deletion also tries
             // to remove the mount point and requires privileges unavailable here.
-            Assert.True(RemoveJunction(junction), $"Unable to unlink test junction: Win32 {Marshal.GetLastWin32Error()}");
+            Assert.True(
+                RemoveJunction(junction),
+                $"Unable to unlink test junction: Win32 {Marshal.GetLastWin32Error()}"
+            );
         }
         Directory.Delete(_dir, true);
     }
@@ -76,7 +113,9 @@ public sealed class SymlinkTests : IDisposable
     private Database Open(string name, string root)
     {
         var db = new Database(Path.Combine(_dir, name + ".db"));
-        db.UpsertRoot(new StorageRootRow("r", "r", root, true, "fs", "insensitive", Database.UtcNow()));
+        db.UpsertRoot(
+            new StorageRootRow("r", "r", root, true, "fs", "insensitive", Database.UtcNow())
+        );
         return db;
     }
 
@@ -95,37 +134,62 @@ public sealed class SymlinkTests : IDisposable
         File.WriteAllText(Path.Combine(root, "file.txt"), "inside");
         File.WriteAllText(Path.Combine(external, "outside.txt"), "outside");
         File.CreateSymbolicLink(Path.Combine(root, "relative.txt"), "file.txt");
-        File.CreateSymbolicLink(Path.Combine(root, "absolute.txt"), Path.Combine(external, "outside.txt"));
+        File.CreateSymbolicLink(
+            Path.Combine(root, "absolute.txt"),
+            Path.Combine(external, "outside.txt")
+        );
         File.CreateSymbolicLink(Path.Combine(root, "broken.txt"), "absent.txt");
         File.CreateSymbolicLink(Path.Combine(root, "chain.txt"), "relative.txt");
         File.CreateSymbolicLink(Path.Combine(root, "cycle-a"), "cycle-b");
         File.CreateSymbolicLink(Path.Combine(root, "cycle-b"), "cycle-a");
         Directory.CreateSymbolicLink(Path.Combine(root, "linked-directory"), external);
         Directory.CreateSymbolicLink(Path.Combine(root, "directory-cycle"), root);
-        Directory.CreateSymbolicLink(Path.Combine(root, "broken-directory"), Path.Combine(_dir, "absent-directory"));
+        Directory.CreateSymbolicLink(
+            Path.Combine(root, "broken-directory"),
+            Path.Combine(_dir, "absent-directory")
+        );
         using var db = Open("inventory", root);
         var progress = new List<ScanProgress>();
         var scanner = new Scanner(db);
-        Assert.Equal((10, 0), scanner.ScanRoot("r", new InlineProgress<ScanProgress>(progress.Add)));
+        Assert.Equal(
+            (10, 0),
+            scanner.ScanRoot("r", new InlineProgress<ScanProgress>(progress.Add))
+        );
         Assert.Equal(ScanStatus.Completed, db.LatestScanStatus("r"));
         Assert.Equal(10, progress[^1].Scanned);
-        Assert.All(db.ListFiles(), f => { Assert.Equal(FileStatus.Ok, f.Status); Assert.Null(f.Error); });
+        Assert.All(
+            db.ListFiles(),
+            f =>
+            {
+                Assert.Equal(FileStatus.Ok, f.Status);
+                Assert.Null(f.Error);
+            }
+        );
         var relative = db.GetFileEntry("r", "relative.txt")!;
         Assert.Equal(EntryKind.FileLink, relative.EntryKind);
         Assert.Equal("file.txt", relative.LinkTarget);
         Assert.Equal(Path.Combine(root, "file.txt"), relative.TargetPath);
-        Assert.Equal(Path.Combine(root, "relative.txt"), db.GetFileEntry("r", "chain.txt")!.TargetPath);
-        Assert.Equal(Path.Combine(root, "absent.txt"), db.GetFileEntry("r", "broken.txt")!.TargetPath);
+        Assert.Equal(
+            Path.Combine(root, "relative.txt"),
+            db.GetFileEntry("r", "chain.txt")!.TargetPath
+        );
+        Assert.Equal(
+            Path.Combine(root, "absent.txt"),
+            db.GetFileEntry("r", "broken.txt")!.TargetPath
+        );
         Assert.NotNull(db.GetFileEntry("r", "broken.txt")!.LinkNote);
         Assert.Equal(EntryKind.DirectoryLink, db.GetFileEntry("r", "linked-directory")!.EntryKind);
         Assert.Equal(EntryKind.DirectoryLink, db.GetFileEntry("r", "broken-directory")!.EntryKind);
         Assert.DoesNotContain(db.ListFiles(), f => f.RelativePath.Contains('/'));
         Assert.Equal((1, 9, 0), scanner.HashNeeded("r", true, 1));
-        Assert.All(db.ListFiles().Where(f => f.EntryKind != EntryKind.File), f =>
-        {
-            Assert.Equal(0, f.Size);
-            Assert.Null(db.GetHash(f.Id, "sha256"));
-        });
+        Assert.All(
+            db.ListFiles().Where(f => f.EntryKind != EntryKind.File),
+            f =>
+            {
+                Assert.Equal(0, f.Size);
+                Assert.Null(db.GetHash(f.Id, "sha256"));
+            }
+        );
         Assert.Single(Matcher.LoadFromDb(db, "sha256", "r"));
     }
 
@@ -136,8 +200,22 @@ public sealed class SymlinkTests : IDisposable
         File.WriteAllText(Path.Combine(root, "old.txt"), "old");
         using var db = Open("inventory", root);
         new Scanner(db).ScanRoot("r");
-        var scanner = new Scanner(db, _ => [new FsEntry(Path.Combine(root, "unavailable"), false,
-            999, DateTime.UtcNow, DateTime.UtcNow, true, true, null)]);
+        var scanner = new Scanner(
+            db,
+            _ =>
+                [
+                    new FsEntry(
+                        Path.Combine(root, "unavailable"),
+                        false,
+                        999,
+                        DateTime.UtcNow,
+                        DateTime.UtcNow,
+                        true,
+                        true,
+                        null
+                    ),
+                ]
+        );
         Assert.Equal((1, 0), scanner.ScanRoot("r"));
         var link = db.GetFileEntry("r", "unavailable")!;
         Assert.Equal(EntryKind.ReparsePoint, link.EntryKind);
@@ -157,7 +235,17 @@ public sealed class SymlinkTests : IDisposable
         using var db = Open("inventory", root);
         ScanHash(db);
         var before = db.GetFileEntry("r", "entry")!;
-        db.UpsertHash(new FileHashRow(before.Id, "other", "digest", before.Size, before.ModifiedUtc, Database.UtcNow(), HashState.Ok));
+        db.UpsertHash(
+            new FileHashRow(
+                before.Id,
+                "other",
+                "digest",
+                before.Size,
+                before.ModifiedUtc,
+                Database.UtcNow(),
+                HashState.Ok
+            )
+        );
         File.Delete(path);
         File.CreateSymbolicLink(path, "first-missing");
         new Scanner(db).ScanRoot("r");
@@ -203,17 +291,28 @@ public sealed class SymlinkTests : IDisposable
     {
         var volume = Path.GetPathRoot(_dir)!;
         var root = Path.Combine(volume, "inventory");
-        NtfsMftEnumerator.ParsedFileRecord Entry(string name, ulong parent, bool directory = false, bool link = false) =>
-            new(name, parent, 3, DateTime.UtcNow, DateTime.UtcNow, directory, link);
+        NtfsMftEnumerator.ParsedFileRecord Entry(
+            string name,
+            ulong parent,
+            bool directory = false,
+            bool link = false
+        ) => new(name, parent, 3, DateTime.UtcNow, DateTime.UtcNow, directory, link);
         (ulong Frn, NtfsMftEnumerator.ParsedFileRecord? Parsed)[] records =
         [
-            (20, Entry("inventory", 5, true)), (21, Entry("linked", 20, true, true)),
-            (22, Entry("descendant.txt", 21)), (23, Entry("file.txt", 20)),
-            (24, Entry("file-link", 20, false, true)), (25, Entry("nested", 21, true)),
-            (26, Entry("hidden.txt", 25)), (27, Entry("nested-link", 25, true, true))
+            (20, Entry("inventory", 5, true)),
+            (21, Entry("linked", 20, true, true)),
+            (22, Entry("descendant.txt", 21)),
+            (23, Entry("file.txt", 20)),
+            (24, Entry("file-link", 20, false, true)),
+            (25, Entry("nested", 21, true)),
+            (26, Entry("hidden.txt", 25)),
+            (27, Entry("nested-link", 25, true, true)),
         ];
         var entries = NtfsMftEnumerator.EnumerateEntries(volume, root, () => records).ToList();
-        Assert.Equal(new[] { "file-link", "file.txt", "linked" }, entries.Select(e => e.Name).Order().ToArray());
+        Assert.Equal(
+            new[] { "file-link", "file.txt", "linked" },
+            entries.Select(e => e.Name).Order().ToArray()
+        );
         Assert.True(entries.Single(e => e.Name == "linked").IsDirectory);
     }
 
@@ -227,12 +326,29 @@ public sealed class SymlinkTests : IDisposable
         using var recursive = Open("recursive", root);
         using var mft = Open("mft", root);
         new Scanner(recursive).ScanRoot("r");
-        var synthetic = new Scanner(mft, _ => recursive.ListFiles().Select(f => new FsEntry(
-            Path.Combine(root, f.RelativePath), f.EntryKind == EntryKind.DirectoryLink, f.Size,
-            DateTime.Parse(f.ModifiedUtc), DateTime.UtcNow, true, f.EntryKind != EntryKind.File, null)));
+        var synthetic = new Scanner(
+            mft,
+            _ =>
+                recursive
+                    .ListFiles()
+                    .Select(f => new FsEntry(
+                        Path.Combine(root, f.RelativePath),
+                        f.EntryKind == EntryKind.DirectoryLink,
+                        f.Size,
+                        DateTime.Parse(f.ModifiedUtc),
+                        DateTime.UtcNow,
+                        true,
+                        f.EntryKind != EntryKind.File,
+                        null
+                    ))
+        );
         Assert.Equal((3, 0), synthetic.ScanRoot("r"));
-        Assert.Equal(recursive.ListFiles().Select(f => (f.RelativePath, f.EntryKind, f.LinkTarget, f.TargetPath)),
-            mft.ListFiles().Select(f => (f.RelativePath, f.EntryKind, f.LinkTarget, f.TargetPath)));
+        Assert.Equal(
+            recursive
+                .ListFiles()
+                .Select(f => (f.RelativePath, f.EntryKind, f.LinkTarget, f.TargetPath)),
+            mft.ListFiles().Select(f => (f.RelativePath, f.EntryKind, f.LinkTarget, f.TargetPath))
+        );
     }
 
     [ElevatedMftFact]
@@ -246,22 +362,34 @@ public sealed class SymlinkTests : IDisposable
         using var mft = Open("mft", root);
         Assert.Equal((3, 0), new Scanner(recursive).ScanRoot("r"));
         Assert.Equal((3, 0), new Scanner(mft, mftMode: "require").ScanRoot("r"));
-        Assert.Equal(recursive.ListFiles().Select(f => (f.RelativePath, f.EntryKind, f.LinkTarget)),
-            mft.ListFiles().Select(f => (f.RelativePath, f.EntryKind, f.LinkTarget)));
+        Assert.Equal(
+            recursive.ListFiles().Select(f => (f.RelativePath, f.EntryKind, f.LinkTarget)),
+            mft.ListFiles().Select(f => (f.RelativePath, f.EntryKind, f.LinkTarget))
+        );
     }
 
     [Fact]
     public void Legacy_Read_Only_Inventories_Work_And_Writable_Upgrade_Preserves_Scan_History()
     {
         var path = Path.Combine(_dir, "legacy.db");
-        var options = new DbContextOptionsBuilder<BackupNormalizerDbContext>().UseSqlite($"Data Source={path};Pooling=False").Options;
+        var options = new DbContextOptionsBuilder<BackupNormalizerDbContext>()
+            .UseSqlite($"Data Source={path};Pooling=False")
+            .Options;
         using (var old = new BackupNormalizerDbContext(options))
         {
             old.GetService<IMigrator>().Migrate("20260929221047_BindExecutionRoots");
-            old.Database.ExecuteSqlRaw("INSERT INTO StorageRoot (Id, Name, Path, Writable, FileSystemId, CaseSensitivity, CreatedUtc) VALUES ('r', 'r', '/offline', 0, 'fs', 'sensitive', 'before')");
-            old.Database.ExecuteSqlRaw("INSERT INTO Scan (Id, StorageRootId, StartedUtc, Status) VALUES (1, 'r', 'before', 'Incomplete')");
-            old.Database.ExecuteSqlRaw("INSERT INTO FileEntry (Id, StorageRootId, RelativePath, Name, Size, ModifiedUtc, LastSeenScanId, Status, Error) VALUES (1, 'r', 'link', 'link', 0, 'before', 1, 'UnsupportedEntry', 'symlink')");
-            old.Database.ExecuteSqlRaw("INSERT INTO FileHash (FileEntryId, Algorithm, Digest, SizeAtHash, ModifiedUtcAtHash, CalculatedUtc, State) VALUES (1, 'sha256', 'oldhash', 0, 'before', 'before', 'Ok')");
+            old.Database.ExecuteSqlRaw(
+                "INSERT INTO StorageRoot (Id, Name, Path, Writable, FileSystemId, CaseSensitivity, CreatedUtc) VALUES ('r', 'r', '/offline', 0, 'fs', 'sensitive', 'before')"
+            );
+            old.Database.ExecuteSqlRaw(
+                "INSERT INTO Scan (Id, StorageRootId, StartedUtc, Status) VALUES (1, 'r', 'before', 'Incomplete')"
+            );
+            old.Database.ExecuteSqlRaw(
+                "INSERT INTO FileEntry (Id, StorageRootId, RelativePath, Name, Size, ModifiedUtc, LastSeenScanId, Status, Error) VALUES (1, 'r', 'link', 'link', 0, 'before', 1, 'UnsupportedEntry', 'symlink')"
+            );
+            old.Database.ExecuteSqlRaw(
+                "INSERT INTO FileHash (FileEntryId, Algorithm, Digest, SizeAtHash, ModifiedUtcAtHash, CalculatedUtc, State) VALUES (1, 'sha256', 'oldhash', 0, 'before', 'before', 'Ok')"
+            );
         }
         var bytes = File.ReadAllBytes(path);
         using (var readOnly = Database.OpenReadOnly(path, false))
@@ -297,11 +425,15 @@ public sealed class SymlinkTests : IDisposable
         File.WriteAllText(Path.Combine(sourceRoot, "dir", "child"), "content");
         File.CreateSymbolicLink(Path.Combine(sourceRoot, "preserved"), "missing");
         File.WriteAllText(Path.Combine(targetRoot, "preserved"), "content");
-        File.CreateSymbolicLink(Path.Combine(targetRoot, "blocked"), Path.Combine(external, "untouched"));
+        File.CreateSymbolicLink(
+            Path.Combine(targetRoot, "blocked"),
+            Path.Combine(external, "untouched")
+        );
         Directory.CreateSymbolicLink(Path.Combine(targetRoot, "dir"), external);
         using var source = Open("source", sourceRoot);
         using var target = Open("target", targetRoot);
-        ScanHash(source); ScanHash(target);
+        ScanHash(source);
+        ScanHash(target);
         var planner = new Planner(target);
         var result = planner.PlanFromRoots(source, "r", "r", "plan");
         Assert.Equal(1, result.Copy);
@@ -311,7 +443,10 @@ public sealed class SymlinkTests : IDisposable
         var json = Path.Combine(_dir, "plan.json");
         File.WriteAllText(json, Planner.ToJson(doc));
         var imported = PlanStaging.ImportJson(json);
-        Assert.All(imported.Operations.Where(op => op.Type == OpType.SkipLink), op => Assert.NotNull(op.SkipReason));
+        Assert.All(
+            imported.Operations.Where(op => op.Type == OpType.SkipLink),
+            op => Assert.NotNull(op.SkipReason)
+        );
         using var replay = Open("replay", targetRoot);
         PlanStaging.WriteToDatabase(replay, imported with { PlanId = "replay" }, "r", targetRoot);
         var summary = new Executor(replay).Execute("replay");
@@ -322,16 +457,25 @@ public sealed class SymlinkTests : IDisposable
         Assert.Equal("content", File.ReadAllText(Path.Combine(targetRoot, "preserved")));
         Assert.Equal("external", File.ReadAllText(Path.Combine(external, "untouched")));
         Assert.False(File.Exists(Path.Combine(external, "child")));
-        Assert.All(replay.ListPlanOperations("replay").Where(op => op.Type == OpType.SkipLink), op =>
-        { Assert.Equal(OpStatus.Skipped, op.Status); Assert.Null(op.Error); Assert.NotNull(op.SkipReason); });
+        Assert.All(
+            replay.ListPlanOperations("replay").Where(op => op.Type == OpType.SkipLink),
+            op =>
+            {
+                Assert.Equal(OpStatus.Skipped, op.Status);
+                Assert.Null(op.Error);
+                Assert.NotNull(op.SkipReason);
+            }
+        );
     }
 
     [SymlinkFact]
     public void Manual_Staging_Skips_File_Links_Directory_Links_And_Linked_Destinations()
     {
         var root = Folder("root");
-        var source = Path.Combine(root, "source"); Directory.CreateDirectory(source);
-        var destination = Path.Combine(root, "destination"); Directory.CreateDirectory(destination);
+        var source = Path.Combine(root, "source");
+        Directory.CreateDirectory(source);
+        var destination = Path.Combine(root, "destination");
+        Directory.CreateDirectory(destination);
         var external = Folder("external");
         File.WriteAllText(Path.Combine(source, "regular"), "bytes");
         File.CreateSymbolicLink(Path.Combine(source, "link"), "missing");
@@ -339,11 +483,29 @@ public sealed class SymlinkTests : IDisposable
         var copy = PlanStaging.StageCopy(root, source, destination);
         Assert.Single(copy, op => op.Type == OpType.Copy);
         Assert.Equal(2, copy.Count(op => op.Type == OpType.SkipLink));
-        Assert.Equal(OpType.SkipLink, PlanStaging.StageTrash(root, Path.Combine(source, "link")).Single().Type);
-        Assert.Equal(OpType.SkipLink, PlanStaging.StageMove(root, Path.Combine(source, "linked-dir"), destination).Single().Type);
+        Assert.Equal(
+            OpType.SkipLink,
+            PlanStaging.StageTrash(root, Path.Combine(source, "link")).Single().Type
+        );
+        Assert.Equal(
+            OpType.SkipLink,
+            PlanStaging
+                .StageMove(root, Path.Combine(source, "linked-dir"), destination)
+                .Single()
+                .Type
+        );
         Directory.CreateSymbolicLink(Path.Combine(root, "dest-link"), external);
-        Assert.Equal(OpType.SkipLink, PlanStaging.StageCopy(root, Path.Combine(source, "regular"), Path.Combine(root, "dest-link")).Single().Type);
-        Assert.Equal(OpType.SkipLink, PlanStaging.StageMkdir(root, Path.Combine(root, "dest-link", "new")).Single().Type);
+        Assert.Equal(
+            OpType.SkipLink,
+            PlanStaging
+                .StageCopy(root, Path.Combine(source, "regular"), Path.Combine(root, "dest-link"))
+                .Single()
+                .Type
+        );
+        Assert.Equal(
+            OpType.SkipLink,
+            PlanStaging.StageMkdir(root, Path.Combine(root, "dest-link", "new")).Single().Type
+        );
         Assert.False(File.Exists(Path.Combine(external, "regular")));
     }
 
@@ -363,10 +525,18 @@ public sealed class SymlinkTests : IDisposable
             new PlanStaging.StagedOp(OpType.Copy, "source", "copied", 7, null),
         };
         using var db = Open("inventory", root);
-        PlanStaging.WriteToDatabase(db, PlanStaging.BuildPlanDoc("plan", "r", root, staged), "r", root);
+        PlanStaging.WriteToDatabase(
+            db,
+            PlanStaging.BuildPlanDoc("plan", "r", root, staged),
+            "r",
+            root
+        );
         Directory.CreateSymbolicLink(Path.Combine(root, "parent"), external);
         File.CreateSymbolicLink(Path.Combine(root, "leaf-link"), Path.Combine(external, "outside"));
-        File.CreateSymbolicLink(Path.Combine(root, "source-link"), Path.Combine(external, "outside"));
+        File.CreateSymbolicLink(
+            Path.Combine(root, "source-link"),
+            Path.Combine(external, "outside")
+        );
         var summary = new Executor(db).Execute("plan", stopOnError: true);
         Assert.Equal(new Executor.ExecSummary(1, 0, 4, 0), summary);
         Assert.Equal("content", File.ReadAllText(Path.Combine(root, "copied")));
@@ -387,8 +557,12 @@ public sealed class SymlinkTests : IDisposable
         var hash = db.GetHash(source.Id, "sha256")!.Digest;
         File.Delete(Path.Combine(root, "survivor"));
         File.CreateSymbolicLink(Path.Combine(root, "survivor"), "source");
-        var doc = PlanStaging.BuildPlanDoc("plan", "r", root,
-            [new PlanStaging.StagedOp(OpType.Trash, "source", null, source.Size, hash)]);
+        var doc = PlanStaging.BuildPlanDoc(
+            "plan",
+            "r",
+            root,
+            [new PlanStaging.StagedOp(OpType.Trash, "source", null, source.Size, hash)]
+        );
         PlanStaging.WriteToDatabase(db, doc, "r", root);
         Assert.Equal(1, new Executor(db).Execute("plan").Conflicts);
         Assert.Equal("same", File.ReadAllText(Path.Combine(root, "source")));
@@ -402,21 +576,101 @@ public sealed class SymlinkTests : IDisposable
         foreach (var db in new[] { left, right })
         {
             var scan = db.BeginScan("r");
-            db.UpsertFileEntry(new FileEntryRow(0, "r", "dir-link", "dir-link", 0, Database.UtcNow(), null, null,
-                scan, FileStatus.Ok, null, EntryKind.DirectoryLink, "../target", "/target", "Target unavailable."));
+            db.UpsertFileEntry(
+                new FileEntryRow(
+                    0,
+                    "r",
+                    "dir-link",
+                    "dir-link",
+                    0,
+                    Database.UtcNow(),
+                    null,
+                    null,
+                    scan,
+                    FileStatus.Ok,
+                    null,
+                    EntryKind.DirectoryLink,
+                    "../target",
+                    "/target",
+                    "Target unavailable."
+                )
+            );
             db.FinishScan(scan, ScanStatus.Completed);
         }
-        left.UpsertFileEntry(new FileEntryRow(0, "r", "only-link", "only-link", 0, Database.UtcNow(), null, null,
-            1, FileStatus.Ok, null, EntryKind.FileLink, "missing"));
-        left.UpsertFileEntry(new FileEntryRow(0, "r", "links-only/nested/link", "link", 0, Database.UtcNow(), null, null,
-            1, FileStatus.Ok, null, EntryKind.FileLink, "missing"));
-        left.UpsertFileEntry(new FileEntryRow(0, "r", "collision", "collision", 0, Database.UtcNow(), null, null,
-            1, FileStatus.Ok, null, EntryKind.FileLink, "missing"));
-        right.UpsertFileEntry(new FileEntryRow(0, "r", "collision", "collision", 3, Database.UtcNow(), null, null,
-            1, FileStatus.Ok, null));
+        left.UpsertFileEntry(
+            new FileEntryRow(
+                0,
+                "r",
+                "only-link",
+                "only-link",
+                0,
+                Database.UtcNow(),
+                null,
+                null,
+                1,
+                FileStatus.Ok,
+                null,
+                EntryKind.FileLink,
+                "missing"
+            )
+        );
+        left.UpsertFileEntry(
+            new FileEntryRow(
+                0,
+                "r",
+                "links-only/nested/link",
+                "link",
+                0,
+                Database.UtcNow(),
+                null,
+                null,
+                1,
+                FileStatus.Ok,
+                null,
+                EntryKind.FileLink,
+                "missing"
+            )
+        );
+        left.UpsertFileEntry(
+            new FileEntryRow(
+                0,
+                "r",
+                "collision",
+                "collision",
+                0,
+                Database.UtcNow(),
+                null,
+                null,
+                1,
+                FileStatus.Ok,
+                null,
+                EntryKind.FileLink,
+                "missing"
+            )
+        );
+        right.UpsertFileEntry(
+            new FileEntryRow(
+                0,
+                "r",
+                "collision",
+                "collision",
+                3,
+                Database.UtcNow(),
+                null,
+                null,
+                1,
+                FileStatus.Ok,
+                null
+            )
+        );
         var leftSnapshot = InventorySnapshot.Load(left.DbPath);
         var rightSnapshot = InventorySnapshot.Load(right.DbPath);
-        var comparison = InventoryComparison.Compare(leftSnapshot.Roots[0], "", rightSnapshot.Roots[0], "");
+        var comparison = InventoryComparison.Compare(
+            leftSnapshot.Roots[0],
+            "",
+            rightSnapshot.Roots[0],
+            ""
+        );
         Assert.Equal(ComparisonState.Skipped, comparison.Left["dir-link"]);
         Assert.Equal(ComparisonState.Skipped, comparison.Left["only-link"]);
         Assert.Equal(ComparisonState.Skipped, comparison.Left["links-only"]);
@@ -444,25 +698,51 @@ public sealed class SymlinkTests : IDisposable
     public void Older_Plan_Json_Without_SkipReason_Still_Imports()
     {
         var json = Path.Combine(_dir, "old.json");
-        File.WriteAllText(json, """
+        File.WriteAllText(
+            json,
+            """
             {"planId":"old","createdUtc":"before","estimatedBytesCopied":0,
              "sourceRoot":"r","sourcePath":"/root","targetRoot":"r","targetPath":"/root",
              "operations":[{"id":1,"type":"MKDIR","destinationRoot":"r","destinationPath":"new","expectedSize":0}]}
-            """);
+            """
+        );
         Assert.Null(PlanStaging.ImportJson(json).Operations.Single().SkipReason);
     }
 
     private void Junction(string path, string target)
     {
         var script = Path.Combine(_dir, "junction.ps1");
-        File.WriteAllText(script, "param([string]$LinkPath, [string]$TargetPath)\n$ErrorActionPreference = 'Stop'\nNew-Item -ItemType Junction -Path $LinkPath -Target $TargetPath | Out-Null\n");
+        File.WriteAllText(
+            script,
+            "param([string]$LinkPath, [string]$TargetPath)\n$ErrorActionPreference = 'Stop'\nNew-Item -ItemType Junction -Path $LinkPath -Target $TargetPath | Out-Null\n"
+        );
         var start = new ProcessStartInfo("powershell.exe")
         {
-            UseShellExecute = false, CreateNoWindow = true, WindowStyle = ProcessWindowStyle.Hidden,
-            RedirectStandardError = true, RedirectStandardOutput = true,
+            UseShellExecute = false,
+            CreateNoWindow = true,
+            WindowStyle = ProcessWindowStyle.Hidden,
+            RedirectStandardError = true,
+            RedirectStandardOutput = true,
         };
-        foreach (var arg in new[] { "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File", script,
-            "-LinkPath", path, "-TargetPath", target }) start.ArgumentList.Add(arg);
+        foreach (
+            var arg in new[]
+            {
+                "-NoProfile",
+                "-NonInteractive",
+                "-ExecutionPolicy",
+                "Bypass",
+                "-File",
+                script,
+                "-LinkPath",
+                path,
+                "-TargetPath",
+                target,
+            }
+        )
+        {
+            start.ArgumentList.Add(arg);
+        }
+
         using var process = Process.Start(start)!;
         var errors = process.StandardError.ReadToEnd();
         Assert.True(process.WaitForExit(30000), "Junction creation timed out.");
@@ -492,11 +772,31 @@ public sealed class SymlinkTests : IDisposable
         Assert.Equal(external, link.LinkTarget);
         Assert.Equal(external, link.TargetPath);
         Assert.NotNull(db.GetFileEntry("r", "broken")!.LinkNote);
-        Assert.All(db.ListFiles().Where(f => f.EntryKind != EntryKind.File), f =>
-        { Assert.Equal(FileStatus.Ok, f.Status); Assert.Equal(0, f.Size); Assert.Null(f.Error); });
-        var synthetic = new Scanner(db, _ => db.ListFiles().Select(f => new FsEntry(Path.Combine(root, f.RelativePath),
-            f.EntryKind == EntryKind.DirectoryLink, f.Size, DateTime.Parse(f.ModifiedUtc), DateTime.UtcNow, true,
-            f.EntryKind != EntryKind.File, null)).ToArray());
+        Assert.All(
+            db.ListFiles().Where(f => f.EntryKind != EntryKind.File),
+            f =>
+            {
+                Assert.Equal(FileStatus.Ok, f.Status);
+                Assert.Equal(0, f.Size);
+                Assert.Null(f.Error);
+            }
+        );
+        var synthetic = new Scanner(
+            db,
+            _ =>
+                db.ListFiles()
+                    .Select(f => new FsEntry(
+                        Path.Combine(root, f.RelativePath),
+                        f.EntryKind == EntryKind.DirectoryLink,
+                        f.Size,
+                        DateTime.Parse(f.ModifiedUtc),
+                        DateTime.UtcNow,
+                        true,
+                        f.EntryKind != EntryKind.File,
+                        null
+                    ))
+                    .ToArray()
+        );
         Assert.Equal((4, 0), synthetic.ScanRoot("r"));
         Assert.DoesNotContain(db.ListFiles(), f => f.RelativePath.Contains('/'));
         Assert.Single(Matcher.LoadFromDb(db, "sha256", "r"));
@@ -508,7 +808,8 @@ public sealed class SymlinkTests : IDisposable
         var root = Folder("root");
         var external = Folder("external");
         File.WriteAllText(Path.Combine(root, "source"), "content");
-        var original = Path.Combine(root, "parent"); Directory.CreateDirectory(original);
+        var original = Path.Combine(root, "parent");
+        Directory.CreateDirectory(original);
         File.WriteAllText(Path.Combine(original, "child"), "original");
         File.WriteAllText(Path.Combine(external, "child"), "external");
         using var db = Open("inventory", root);
@@ -521,14 +822,26 @@ public sealed class SymlinkTests : IDisposable
             new PlanStaging.StagedOp(OpType.Mkdir, "", "parent/new-dir", 0, null),
             new PlanStaging.StagedOp(OpType.Copy, "source", "copied", 7, null),
         };
-        PlanStaging.WriteToDatabase(db, PlanStaging.BuildPlanDoc("plan", "r", root, staged), "r", root);
-        File.Delete(Path.Combine(original, "child")); Directory.Delete(original);
+        PlanStaging.WriteToDatabase(
+            db,
+            PlanStaging.BuildPlanDoc("plan", "r", root, staged),
+            "r",
+            root
+        );
+        File.Delete(Path.Combine(original, "child"));
+        Directory.Delete(original);
         Junction(original, external);
         Assert.Equal((0, 2, 0), new Scanner(db).HashNeeded("r", false, 1));
         Assert.Equal(HashState.Stale, db.GetHash(child.Id, "sha256")!.State);
-        Assert.Equal(OpType.SkipLink, PlanStaging.StageCopy(root, Path.Combine(root, "source"), original).Single().Type);
+        Assert.Equal(
+            OpType.SkipLink,
+            PlanStaging.StageCopy(root, Path.Combine(root, "source"), original).Single().Type
+        );
         Assert.Equal(OpType.SkipLink, PlanStaging.StageTrash(root, original).Single().Type);
-        Assert.Equal(new Executor.ExecSummary(1, 0, 3, 0), new Executor(db).Execute("plan", stopOnError: true));
+        Assert.Equal(
+            new Executor.ExecSummary(1, 0, 3, 0),
+            new Executor(db).Execute("plan", stopOnError: true)
+        );
         Assert.Equal("content", File.ReadAllText(Path.Combine(root, "copied")));
         Assert.Equal("external", File.ReadAllText(Path.Combine(external, "child")));
         Assert.False(File.Exists(Path.Combine(external, "new")));
@@ -538,7 +851,8 @@ public sealed class SymlinkTests : IDisposable
     [Fact]
     public void Link_Metadata_Alone_Produces_Exportable_Skips_And_Protects_Target_Counterparts()
     {
-        var sourceRoot = Folder("source"); var targetRoot = Folder("target");
+        var sourceRoot = Folder("source");
+        var targetRoot = Folder("target");
         File.WriteAllText(Path.Combine(sourceRoot, "normal"), "content");
         File.WriteAllText(Path.Combine(sourceRoot, "blocked"), "content");
         File.WriteAllText(Path.Combine(sourceRoot, "preserved"), "content");
@@ -546,34 +860,95 @@ public sealed class SymlinkTests : IDisposable
         File.WriteAllText(Path.Combine(sourceRoot, "dir", "child"), "content");
         File.WriteAllText(Path.Combine(targetRoot, "blocked"), "external");
         File.WriteAllText(Path.Combine(targetRoot, "preserved"), "content");
-        using var source = Open("source", sourceRoot); using var target = Open("target", targetRoot);
-        ScanHash(source); ScanHash(target);
-        source.UpsertFileEntry(source.GetFileEntry("r", "preserved")! with { EntryKind = EntryKind.FileLink, LinkTarget = "missing", Size = 0 });
-        target.UpsertFileEntry(target.GetFileEntry("r", "blocked")! with { EntryKind = EntryKind.FileLink, LinkTarget = "outside", Size = 0 });
-        target.UpsertFileEntry(new FileEntryRow(0, "r", "dir", "dir", 0, Database.UtcNow(), null, null, 1,
-            FileStatus.Ok, null, EntryKind.DirectoryLink, "outside"));
+        using var source = Open("source", sourceRoot);
+        using var target = Open("target", targetRoot);
+        ScanHash(source);
+        ScanHash(target);
+        source.UpsertFileEntry(
+            source.GetFileEntry("r", "preserved")! with
+            {
+                EntryKind = EntryKind.FileLink,
+                LinkTarget = "missing",
+                Size = 0,
+            }
+        );
+        target.UpsertFileEntry(
+            target.GetFileEntry("r", "blocked")! with
+            {
+                EntryKind = EntryKind.FileLink,
+                LinkTarget = "outside",
+                Size = 0,
+            }
+        );
+        target.UpsertFileEntry(
+            new FileEntryRow(
+                0,
+                "r",
+                "dir",
+                "dir",
+                0,
+                Database.UtcNow(),
+                null,
+                null,
+                1,
+                FileStatus.Ok,
+                null,
+                EntryKind.DirectoryLink,
+                "outside"
+            )
+        );
         var planner = new Planner(target);
         var result = planner.PlanFromRoots(source, "r", "r", "plan");
-        Assert.Equal(1, result.Copy); Assert.Equal(0, result.Trash); Assert.Equal(5, result.SkippedLinks);
-        var path = Path.Combine(_dir, "plan.json"); File.WriteAllText(path, Planner.ToJson(planner.ExportPlan("plan")));
+        Assert.Equal(1, result.Copy);
+        Assert.Equal(0, result.Trash);
+        Assert.Equal(5, result.SkippedLinks);
+        var path = Path.Combine(_dir, "plan.json");
+        File.WriteAllText(path, Planner.ToJson(planner.ExportPlan("plan")));
         using var replay = Open("replay", targetRoot);
-        PlanStaging.WriteToDatabase(replay, PlanStaging.ImportJson(path) with { PlanId = "replay" }, "r", targetRoot);
+        PlanStaging.WriteToDatabase(
+            replay,
+            PlanStaging.ImportJson(path) with
+            {
+                PlanId = "replay",
+            },
+            "r",
+            targetRoot
+        );
         Assert.Equal(new Executor.ExecSummary(1, 0, 5, 0), new Executor(replay).Execute("replay"));
         Assert.Equal("content", File.ReadAllText(Path.Combine(targetRoot, "normal")));
         Assert.Equal("content", File.ReadAllText(Path.Combine(targetRoot, "preserved")));
         Assert.Equal("external", File.ReadAllText(Path.Combine(targetRoot, "blocked")));
         Assert.False(Directory.Exists(Path.Combine(targetRoot, "dir")));
-        Assert.All(replay.ListPlanOperations("replay").Where(op => op.Type == OpType.SkipLink), op =>
-        { Assert.Equal(OpStatus.Skipped, op.Status); Assert.NotNull(op.SkipReason); Assert.Null(op.Error); });
+        Assert.All(
+            replay.ListPlanOperations("replay").Where(op => op.Type == OpType.SkipLink),
+            op =>
+            {
+                Assert.Equal(OpStatus.Skipped, op.Status);
+                Assert.NotNull(op.SkipReason);
+                Assert.Null(op.Error);
+            }
+        );
     }
 
     [Fact]
     public void Entry_Kind_Transitions_Invalidate_All_Hashes_Even_When_Content_Metadata_Is_Unchanged()
     {
-        var root = Folder("root"); File.WriteAllText(Path.Combine(root, "file"), "same");
-        using var db = Open("inventory", root); ScanHash(db);
+        var root = Folder("root");
+        File.WriteAllText(Path.Combine(root, "file"), "same");
+        using var db = Open("inventory", root);
+        ScanHash(db);
         var entry = db.GetFileEntry("r", "file")!;
-        db.UpsertHash(new FileHashRow(entry.Id, "other", "old", entry.Size, entry.ModifiedUtc, Database.UtcNow(), HashState.Ok));
+        db.UpsertHash(
+            new FileHashRow(
+                entry.Id,
+                "other",
+                "old",
+                entry.Size,
+                entry.ModifiedUtc,
+                Database.UtcNow(),
+                HashState.Ok
+            )
+        );
         db.UpsertFileEntry(entry with { EntryKind = EntryKind.FileLink, LinkTarget = "missing" });
         Assert.Equal((0, 1, 0), new Scanner(db).HashNeeded("r", false, 1));
         Assert.Equal(HashState.Stale, db.GetHash(entry.Id, "sha256")!.State);
@@ -586,18 +961,26 @@ public sealed class SymlinkTests : IDisposable
     [JunctionFact]
     public void A_Survivor_Beneath_A_New_Junction_Cannot_Authorize_Trash()
     {
-        var root = Folder("root"); var external = Folder("external");
-        var parent = Path.Combine(root, "parent"); Directory.CreateDirectory(parent);
+        var root = Folder("root");
+        var external = Folder("external");
+        var parent = Path.Combine(root, "parent");
+        Directory.CreateDirectory(parent);
         File.WriteAllText(Path.Combine(root, "source"), "same");
         File.WriteAllText(Path.Combine(parent, "child"), "same");
         File.WriteAllText(Path.Combine(external, "child"), "same");
-        using var db = Open("inventory", root); ScanHash(db);
+        using var db = Open("inventory", root);
+        ScanHash(db);
         var source = db.GetFileEntry("r", "source")!;
         var hash = db.GetHash(source.Id, "sha256")!.Digest;
-        File.Delete(Path.Combine(parent, "child")); Directory.Delete(parent);
+        File.Delete(Path.Combine(parent, "child"));
+        Directory.Delete(parent);
         Junction(parent, external);
-        var doc = PlanStaging.BuildPlanDoc("plan", "r", root,
-            [new PlanStaging.StagedOp(OpType.Trash, "source", null, source.Size, hash)]);
+        var doc = PlanStaging.BuildPlanDoc(
+            "plan",
+            "r",
+            root,
+            [new PlanStaging.StagedOp(OpType.Trash, "source", null, source.Size, hash)]
+        );
         PlanStaging.WriteToDatabase(db, doc, "r", root);
         Assert.Equal(1, new Executor(db).Execute("plan").Conflicts);
         Assert.Equal("same", File.ReadAllText(Path.Combine(root, "source")));

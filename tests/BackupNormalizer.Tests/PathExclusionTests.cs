@@ -7,15 +7,25 @@ namespace BackupNormalizer.Tests;
 
 public sealed class PathExclusionTests : IDisposable
 {
-    private readonly string _directory = Path.Combine(Path.GetTempPath(), "bn-exclusions-" + Guid.NewGuid().ToString("N"));
+    private readonly string _directory = Path.Combine(
+        Path.GetTempPath(),
+        "bn-exclusions-" + Guid.NewGuid().ToString("N")
+    );
     private string Root => Path.Combine(_directory, "data");
     private string DbPath => Path.Combine(_directory, "inventory.db");
 
     public PathExclusionTests() => Directory.CreateDirectory(Root);
+
     public void Dispose()
     {
-        using var connection = new Microsoft.Data.Sqlite.SqliteConnection(new Microsoft.Data.Sqlite.SqliteConnectionStringBuilder
-        { DataSource = DbPath, Mode = Microsoft.Data.Sqlite.SqliteOpenMode.ReadOnly, ForeignKeys = true }.ToString());
+        using var connection = new Microsoft.Data.Sqlite.SqliteConnection(
+            new Microsoft.Data.Sqlite.SqliteConnectionStringBuilder
+            {
+                DataSource = DbPath,
+                Mode = Microsoft.Data.Sqlite.SqliteOpenMode.ReadOnly,
+                ForeignKeys = true,
+            }.ToString()
+        );
         Microsoft.Data.Sqlite.SqliteConnection.ClearPool(connection);
         Directory.Delete(_directory, true);
     }
@@ -61,7 +71,10 @@ public sealed class PathExclusionTests : IDisposable
         var enumerated = Scanner.EnumerateRecursive(Root, exclusions).ToList();
         Assert.Single(enumerated);
         Assert.EndsWith("keep.txt", enumerated[0].Path);
-        Assert.Equal((1, 0), new Scanner(db, usnMode: "off", excludedPathRegexes: exclusions.Patterns).ScanRoot("r"));
+        Assert.Equal(
+            (1, 0),
+            new Scanner(db, usnMode: "off", excludedPathRegexes: exclusions.Patterns).ScanRoot("r")
+        );
         Assert.Equal(FileStatus.Missing, db.GetFileEntry("r", "cache/nested/skip.txt")!.Status);
         Assert.Equal(FileStatus.Missing, db.GetFileEntry("r", "other/drop.tmp")!.Status);
         Assert.Equal(ScanStatus.Completed, db.LatestScanStatus("r"));
@@ -75,12 +88,43 @@ public sealed class PathExclusionTests : IDisposable
     {
         string keep = Write("keep.txt");
         using var db = Open();
-        var scanner = new Scanner(db, _ =>
-        [
-            new(Path.Combine(Root, "cache"), true, 0, default, default, true, false, "Access denied."),
-            new(Path.Combine(Root, "cache/hidden"), false, 0, default, default, true, true, null),
-            new(keep, false, 7, File.GetLastWriteTimeUtc(keep), File.GetCreationTimeUtc(keep), true, false, null)
-        ], excludedPathRegexes: ["^cache$"]);
+        var scanner = new Scanner(
+            db,
+            _ =>
+                [
+                    new(
+                        Path.Combine(Root, "cache"),
+                        true,
+                        0,
+                        default,
+                        default,
+                        true,
+                        false,
+                        "Access denied."
+                    ),
+                    new(
+                        Path.Combine(Root, "cache/hidden"),
+                        false,
+                        0,
+                        default,
+                        default,
+                        true,
+                        true,
+                        null
+                    ),
+                    new(
+                        keep,
+                        false,
+                        7,
+                        File.GetLastWriteTimeUtc(keep),
+                        File.GetCreationTimeUtc(keep),
+                        true,
+                        false,
+                        null
+                    ),
+                ],
+            excludedPathRegexes: ["^cache$"]
+        );
         Assert.Equal((1, 0), scanner.ScanRoot("r"));
         Assert.Single(db.ListFiles("r"));
         Assert.Empty(db.ListScanDiagnostics(db.LatestScan("r")!.Id));
@@ -92,9 +136,11 @@ public sealed class PathExclusionTests : IDisposable
         Write("unseen.txt");
         using var db = Open();
         new Scanner(db).ScanRoot("r");
-        var scanner = new Scanner(db, _ =>
-            [new(Root, true, 0, default, default, false, false, "Root enumeration denied.")],
-            excludedPathRegexes: ["^cache$"]);
+        var scanner = new Scanner(
+            db,
+            _ => [new(Root, true, 0, default, default, false, false, "Root enumeration denied.")],
+            excludedPathRegexes: ["^cache$"]
+        );
         Assert.Equal((0, 1), scanner.ScanRoot("r"));
         Assert.Equal(ScanStatus.Incomplete, db.LatestScanStatus("r"));
         Assert.Equal(FileStatus.Ok, db.GetFileEntry("r", "unseen.txt")!.Status);
@@ -121,7 +167,10 @@ public sealed class PathExclusionTests : IDisposable
         var returning = reopened.GetFileEntry("r", "cache/skip.txt")!;
         Assert.Equal(HashState.Stale, reopened.GetHash(returning.Id, "sha256")!.State);
         Assert.Equal((1, 1, 0), new Scanner(reopened).HashNeeded("r", parallelism: 1));
-        Assert.Equal(HasherFactory.Create(null).HashFile(excluded, 6), reopened.GetHash(returning.Id, "sha256")!.Digest);
+        Assert.Equal(
+            HasherFactory.Create(null).HashFile(excluded, 6),
+            reopened.GetHash(returning.Id, "sha256")!.Digest
+        );
     }
 
     [Fact]
@@ -131,8 +180,11 @@ public sealed class PathExclusionTests : IDisposable
         Write("cache/skip.txt");
         using var db = Open();
         new Scanner(db).ScanRoot("r");
-        var scanner = new Scanner(db, _ =>
-        [new(keep, false, 0, default, default, false, false, "Metadata unavailable.")], excludedPathRegexes: ["^cache$"]);
+        var scanner = new Scanner(
+            db,
+            _ => [new(keep, false, 0, default, default, false, false, "Metadata unavailable.")],
+            excludedPathRegexes: ["^cache$"]
+        );
         Assert.Equal((0, 1), scanner.ScanRoot("r"));
         Assert.Equal(FileStatus.Ok, db.GetFileEntry("r", "cache/skip.txt")!.Status);
         Assert.Equal((1, 1, 0), new Scanner(db).HashNeeded("r", parallelism: 1));
@@ -149,11 +201,17 @@ public sealed class PathExclusionTests : IDisposable
         var journal = new UsnScanTests.FakeJournal();
         journal.Parents[1] = Root;
         int enumerations = 0;
-        Scanner Create(IReadOnlyList<string>? patterns = null) => new(db, _ =>
-        {
-            enumerations++;
-            return Scanner.EnumerateRecursive(Root);
-        }, _ => journal, patterns);
+        Scanner Create(IReadOnlyList<string>? patterns = null) =>
+            new(
+                db,
+                _ =>
+                {
+                    enumerations++;
+                    return Scanner.EnumerateRecursive(Root);
+                },
+                _ => journal,
+                patterns
+            );
         Create().ScanRoot("r");
         Assert.Equal(1, enumerations);
         var changed = Create(["^cache$"]);
@@ -162,8 +220,11 @@ public sealed class PathExclusionTests : IDisposable
         Assert.Equal(2, enumerations);
         Assert.NotNull(db.GetScanCheckpoint("r"));
         journal.State = journal.State with { NextUsn = 200 };
-        journal.Records = [new(20, 1, 110, UsnReplay.Close | 1, FileAttributes.Normal, "keep.txt"),
-            new(21, 1, 111, UsnReplay.Close | 1, FileAttributes.Normal, "cache")];
+        journal.Records =
+        [
+            new(20, 1, 110, UsnReplay.Close | 1, FileAttributes.Normal, "keep.txt"),
+            new(21, 1, 111, UsnReplay.Close | 1, FileAttributes.Normal, "cache"),
+        ];
         var incremental = Create();
         Assert.Equal((1, 0), incremental.ScanRoot("r"));
         Assert.True(incremental.LastScanWasIncremental);
@@ -177,11 +238,20 @@ public sealed class PathExclusionTests : IDisposable
     public void Legacy_ReadOnly_Database_Has_Empty_Policy_And_Upgrade_Preserves_Inventory()
     {
         var options = new DbContextOptionsBuilder<BackupNormalizerDbContext>()
-            .UseSqlite(new Microsoft.Data.Sqlite.SqliteConnectionStringBuilder { DataSource = DbPath, Pooling = false }.ToString()).Options;
+            .UseSqlite(
+                new Microsoft.Data.Sqlite.SqliteConnectionStringBuilder
+                {
+                    DataSource = DbPath,
+                    Pooling = false,
+                }.ToString()
+            )
+            .Options;
         using (var old = new BackupNormalizerDbContext(options))
         {
             old.GetService<IMigrator>().Migrate("20261003132247_RecordScanDiagnostics");
-            old.Database.ExecuteSqlRaw("INSERT INTO StorageRoot (Id,Name,Path,CreatedUtc) VALUES ('r','r','offline','before')");
+            old.Database.ExecuteSqlRaw(
+                "INSERT INTO StorageRoot (Id,Name,Path,CreatedUtc) VALUES ('r','r','offline','before')"
+            );
         }
         byte[] before = File.ReadAllBytes(DbPath);
         using (var readOnly = Database.OpenReadOnly(DbPath, pooling: false))
@@ -203,7 +273,9 @@ public sealed class PathExclusionTests : IDisposable
         Assert.Throws<ArgumentException>(() => new Scanner(db, excludedPathRegexes: ["["]));
         Assert.Null(db.LatestScan("r"));
         var exclusions = new PathExclusions(["^(a+)+$"]);
-        Assert.Throws<InvalidOperationException>(() => exclusions.IsExcluded(new string('a', 2000) + "!"));
+        Assert.Throws<InvalidOperationException>(() =>
+            exclusions.IsExcluded(new string('a', 2000) + "!")
+        );
     }
 
     [Fact]
@@ -215,8 +287,12 @@ public sealed class PathExclusionTests : IDisposable
         Write("target/ignore/duplicate.txt");
         Write("target/onlytarget/duplicate.txt");
         using var db = Open();
-        db.UpsertRoot(new("s", "s", Path.Combine(Root, "source"), false, "fs", "sensitive", Database.UtcNow()));
-        db.UpsertRoot(new("t", "t", Path.Combine(Root, "target"), true, "fs", "sensitive", Database.UtcNow()));
+        db.UpsertRoot(
+            new("s", "s", Path.Combine(Root, "source"), false, "fs", "sensitive", Database.UtcNow())
+        );
+        db.UpsertRoot(
+            new("t", "t", Path.Combine(Root, "target"), true, "fs", "sensitive", Database.UtcNow())
+        );
         new Scanner(db, excludedPathRegexes: ["^ignore$"]).ScanRoot("s");
         new Scanner(db, excludedPathRegexes: ["^onlytarget$"]).ScanRoot("t");
         new Scanner(db).HashNeeded(parallelism: 1);
@@ -231,8 +307,14 @@ public sealed class PathExclusionTests : IDisposable
         Assert.Equal(0, diff.TargetOnly);
         var executed = new Executor(db).Execute("excluded");
         Assert.Equal(1, executed.Completed);
-        Assert.Equal("content", File.ReadAllText(Path.Combine(Root, "target/ignore/duplicate.txt")));
-        Assert.Equal("content", File.ReadAllText(Path.Combine(Root, "target/onlytarget/duplicate.txt")));
+        Assert.Equal(
+            "content",
+            File.ReadAllText(Path.Combine(Root, "target/ignore/duplicate.txt"))
+        );
+        Assert.Equal(
+            "content",
+            File.ReadAllText(Path.Combine(Root, "target/onlytarget/duplicate.txt"))
+        );
         Assert.False(File.Exists(Path.Combine(Root, "target/onlytarget/new.txt")));
     }
 }

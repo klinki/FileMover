@@ -2,7 +2,10 @@ namespace BackupNormalizer.Tests;
 
 public sealed class ScannerCancellationTests : IDisposable
 {
-    private readonly string _directory = Path.Combine(Path.GetTempPath(), "bn-cancellation-" + Guid.NewGuid().ToString("N"));
+    private readonly string _directory = Path.Combine(
+        Path.GetTempPath(),
+        "bn-cancellation-" + Guid.NewGuid().ToString("N")
+    );
     private readonly string _root;
     private readonly string _database;
 
@@ -21,7 +24,9 @@ public sealed class ScannerCancellationTests : IDisposable
     private Database Open()
     {
         var db = Database.OpenWritable(_database, pooling: false);
-        db.UpsertRoot(new StorageRootRow("r", "Files", _root, true, "unknown", "sensitive", Database.UtcNow()));
+        db.UpsertRoot(
+            new StorageRootRow("r", "Files", _root, true, "unknown", "sensitive", Database.UtcNow())
+        );
         return db;
     }
 
@@ -31,7 +36,9 @@ public sealed class ScannerCancellationTests : IDisposable
         using var db = Open();
         using var cancellation = new CancellationTokenSource();
         cancellation.Cancel();
-        Assert.Throws<OperationCanceledException>(() => new Scanner(db).ScanRoot("r", cancellationToken: cancellation.Token));
+        Assert.Throws<OperationCanceledException>(() =>
+            new Scanner(db).ScanRoot("r", cancellationToken: cancellation.Token)
+        );
         Assert.Null(db.LatestScan("r"));
     }
 
@@ -52,8 +59,9 @@ public sealed class ScannerCancellationTests : IDisposable
             cancellation.Cancel();
         }
 
-        Assert.Throws<OperationCanceledException>(() => new Scanner(db, Enumerate)
-            .ScanRoot("r", cancellationToken: cancellation.Token));
+        Assert.Throws<OperationCanceledException>(() =>
+            new Scanner(db, Enumerate).ScanRoot("r", cancellationToken: cancellation.Token)
+        );
         Assert.Equal(ScanStatus.Incomplete, db.LatestScanStatus("r"));
         Assert.Equal(FileStatus.Ok, db.GetFileEntry("r", "unseen.txt")!.Status);
         var status = db.GetInventoryStatus("r");
@@ -74,9 +82,21 @@ public sealed class ScannerCancellationTests : IDisposable
         var scanner = new Scanner(db, usnMode: "off");
         scanner.ScanRoot("r");
         using var cancellation = new CancellationTokenSource();
-        var progress = new InlineProgress(p => { if (p.BytesRead > 0) cancellation.Cancel(); });
-        Assert.Throws<OperationCanceledException>(() => scanner.HashNeeded("r", parallelism: 1,
-            progress: progress, cancellationToken: cancellation.Token));
+        var progress = new InlineProgress(p =>
+        {
+            if (p.BytesRead > 0)
+            {
+                cancellation.Cancel();
+            }
+        });
+        Assert.Throws<OperationCanceledException>(() =>
+            scanner.HashNeeded(
+                "r",
+                parallelism: 1,
+                progress: progress,
+                cancellationToken: cancellation.Token
+            )
+        );
         Assert.Null(db.GetHash(db.GetFileEntry("r", "large.bin")!.Id, "sha256"));
         Assert.Equal((1, 0, 0), scanner.HashNeeded("r", parallelism: 1));
     }

@@ -5,7 +5,10 @@ namespace BackupNormalizer.Tests;
 
 public sealed class UiInventoryJobTests : IDisposable
 {
-    private readonly string _directory = Path.Combine(Path.GetTempPath(), "bn-ui-jobs-" + Guid.NewGuid().ToString("N"));
+    private readonly string _directory = Path.Combine(
+        Path.GetTempPath(),
+        "bn-ui-jobs-" + Guid.NewGuid().ToString("N")
+    );
     private string RootPath => Path.Combine(_directory, "files");
     private string DatabasePath => Path.Combine(_directory, "inventory.db");
 
@@ -20,7 +23,17 @@ public sealed class UiInventoryJobTests : IDisposable
     private void CreateInventory()
     {
         using var db = Database.OpenWritable(DatabasePath, pooling: false);
-        db.UpsertRoot(new StorageRootRow("r", "Files", RootPath, true, "local", "sensitive", Database.UtcNow()));
+        db.UpsertRoot(
+            new StorageRootRow(
+                "r",
+                "Files",
+                RootPath,
+                true,
+                "local",
+                "sensitive",
+                Database.UtcNow()
+            )
+        );
     }
 
     private void ScanExistingFiles()
@@ -66,8 +79,22 @@ public sealed class UiInventoryJobTests : IDisposable
         CreateInventory();
         ScanExistingFiles();
 
-        var runner = new InventoryJobRunner(db => new Scanner(db, _ =>
-            [new FsEntry(Path.Combine(RootPath, "denied.txt"), false, 0, default, default, false, false, "Access denied.")]));
+        var runner = new InventoryJobRunner(db => new Scanner(
+            db,
+            _ =>
+                [
+                    new FsEntry(
+                        Path.Combine(RootPath, "denied.txt"),
+                        false,
+                        0,
+                        default,
+                        default,
+                        false,
+                        false,
+                        "Access denied."
+                    ),
+                ]
+        ));
         var result = await runner.RunAsync(Request(InventoryJobKind.ScanThenHash));
 
         Assert.Equal(InventoryJobOutcome.Incomplete, result.Outcome);
@@ -104,11 +131,17 @@ public sealed class UiInventoryJobTests : IDisposable
         var progress = new InlineProgress(value =>
         {
             if (value.Stage == InventoryJobStage.Hashing && value.BytesRead > 0)
+            {
                 cancellation.Cancel();
+            }
         });
 
         var runner = new InventoryJobRunner();
-        var canceled = await runner.RunAsync(Request(InventoryJobKind.HashNeeded), progress, cancellation.Token);
+        var canceled = await runner.RunAsync(
+            Request(InventoryJobKind.HashNeeded),
+            progress,
+            cancellation.Token
+        );
 
         Assert.Equal(InventoryJobOutcome.Canceled, canceled.Outcome);
         using (var verify = Database.OpenReadOnly(DatabasePath, pooling: false))
@@ -143,7 +176,8 @@ public sealed class UiInventoryJobTests : IDisposable
         string unavailable = Path.Combine(_directory, "offline-root");
 
         var result = await new InventoryJobRunner().RunAsync(
-            new InventoryJobRequest(DatabasePath, "r", unavailable, InventoryJobKind.Scan));
+            new InventoryJobRequest(DatabasePath, "r", unavailable, InventoryJobKind.Scan)
+        );
 
         Assert.Equal(InventoryJobOutcome.Failed, result.Outcome);
         Assert.Contains("root path is not available", result.Message);
@@ -173,7 +207,8 @@ public sealed class UiInventoryJobTests : IDisposable
         Assert.Equal(1, main.Right.SelectedInventoryRoot!.HealthStatus!.UsableHashes);
     }
 
-    private sealed class InlineProgress(Action<InventoryJobProgress> report) : IProgress<InventoryJobProgress>
+    private sealed class InlineProgress(Action<InventoryJobProgress> report)
+        : IProgress<InventoryJobProgress>
     {
         public void Report(InventoryJobProgress value) => report(value);
     }

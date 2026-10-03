@@ -12,11 +12,18 @@ public static class Elevation
     {
         try
         {
-            if (!OperatingSystem.IsWindows()) return false;
+            if (!OperatingSystem.IsWindows())
+            {
+                return false;
+            }
+
             using var identity = WindowsIdentity.GetCurrent();
             return new WindowsPrincipal(identity).IsInRole(WindowsBuiltInRole.Administrator);
         }
-        catch { return false; }
+        catch
+        {
+            return false;
+        }
     }
 
     /// <summary>
@@ -27,9 +34,15 @@ public static class Elevation
     /// </summary>
     public static int RelaunchElevated(string[] args)
     {
-        string? exe = Environment.ProcessPath
-            ?? throw new InvalidOperationException("cannot determine current executable for relaunch.");
-        var kept = args.Where(a => !string.Equals(a, "--elevate", StringComparison.OrdinalIgnoreCase)).ToArray();
+        string? exe =
+            Environment.ProcessPath
+            ?? throw new InvalidOperationException(
+                "cannot determine current executable for relaunch."
+            );
+        var kept = args.Where(a =>
+                !string.Equals(a, "--elevate", StringComparison.OrdinalIgnoreCase)
+            )
+            .ToArray();
         var psi = new ProcessStartInfo
         {
             FileName = exe,
@@ -47,22 +60,43 @@ public static class Elevation
         catch (Win32Exception ex)
         {
             throw new InvalidOperationException(
-                "UAC elevation was declined or unavailable. Continuing without administrator rights.", ex);
+                "UAC elevation was declined or unavailable. Continuing without administrator rights.",
+                ex
+            );
         }
     }
 
     public static string QuoteArg(string arg)
     {
-        if (arg.Length == 0) return "\"\"";
+        if (arg.Length == 0)
+        {
+            return "\"\"";
+        }
+
         bool needsQuotes = false;
         foreach (char c in arg)
-            if (char.IsWhiteSpace(c) || c == '"') { needsQuotes = true; break; }
-        if (!needsQuotes) return arg;
+        {
+            if (char.IsWhiteSpace(c) || c == '"')
+            {
+                needsQuotes = true;
+                break;
+            }
+        }
+
+        if (!needsQuotes)
+        {
+            return arg;
+        }
+
         var sb = new StringBuilder("\"");
         int backslashes = 0;
         foreach (char c in arg)
         {
-            if (c == '\\') { backslashes++; continue; }
+            if (c == '\\')
+            {
+                backslashes++;
+                continue;
+            }
             if (c == '"')
             {
                 sb.Append('\\', backslashes * 2 + 1);

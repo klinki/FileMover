@@ -9,7 +9,10 @@ namespace BackupNormalizer.Tests;
 
 public sealed class UiInventoryHealthTests : IDisposable
 {
-    private readonly string _fixture = Path.Combine(AppContext.BaseDirectory, "bn-ui-health-" + Guid.NewGuid().ToString("N"));
+    private readonly string _fixture = Path.Combine(
+        AppContext.BaseDirectory,
+        "bn-ui-health-" + Guid.NewGuid().ToString("N")
+    );
     private string DbPath => Path.Combine(_fixture, "inventory.db");
 
     public UiInventoryHealthTests() => Directory.CreateDirectory(_fixture);
@@ -27,20 +30,50 @@ public sealed class UiInventoryHealthTests : IDisposable
         const string started = "2026-10-03T12:00:00.0000000Z";
         using (var db = new Database(DbPath))
         {
-            db.UpsertRoot(new StorageRootRow("photos", "Photos", "E:\\Photos", false, "unknown", "insensitive", started));
+            db.UpsertRoot(
+                new StorageRootRow(
+                    "photos",
+                    "Photos",
+                    "E:\\Photos",
+                    false,
+                    "unknown",
+                    "insensitive",
+                    started
+                )
+            );
             long scanId = db.BeginScan("photos");
             db.FinishScan(scanId, ScanStatus.Incomplete);
-            db.SaveScanDiagnostics(scanId, "Recursive", 4, "USN journal unavailable; used full scan.",
-                [new ScanError("photos", "E:\\Photos\\locked.jpg", "Access denied.")]);
-            db.UpsertFileEntry(new FileEntryRow(0, "photos", "visible.jpg", "visible.jpg", 12,
-                started, null, null, scanId, FileStatus.Ok, null));
+            db.SaveScanDiagnostics(
+                scanId,
+                "Recursive",
+                4,
+                "USN journal unavailable; used full scan.",
+                [new ScanError("photos", "E:\\Photos\\locked.jpg", "Access denied.")]
+            );
+            db.UpsertFileEntry(
+                new FileEntryRow(
+                    0,
+                    "photos",
+                    "visible.jpg",
+                    "visible.jpg",
+                    12,
+                    started,
+                    null,
+                    null,
+                    scanId,
+                    FileStatus.Ok,
+                    null
+                )
+            );
         }
         SqliteConnection.ClearAllPools();
         byte[] before = File.ReadAllBytes(DbPath);
 
         var snapshot = InventorySnapshot.Load(DbPath);
-        var viewModel = new InventoryHealthViewModel(Assert.Single(snapshot.Roots),
-            new DateTimeOffset(2099, 1, 1, 0, 0, 0, TimeSpan.Zero));
+        var viewModel = new InventoryHealthViewModel(
+            Assert.Single(snapshot.Roots),
+            new DateTimeOffset(2099, 1, 1, 0, 0, 0, TimeSpan.Zero)
+        );
 
         Assert.Equal("Incomplete", viewModel.ScanStatus);
         Assert.EndsWith("days ago", viewModel.ScanAge);
@@ -66,12 +99,23 @@ public sealed class UiInventoryHealthTests : IDisposable
     public void Legacy_Snapshot_Shows_Unknown_Diagnostics_Without_Migration()
     {
         var options = new DbContextOptionsBuilder<BackupNormalizerDbContext>()
-            .UseSqlite(new SqliteConnectionStringBuilder { DataSource = DbPath, Pooling = false }.ToString()).Options;
+            .UseSqlite(
+                new SqliteConnectionStringBuilder
+                {
+                    DataSource = DbPath,
+                    Pooling = false,
+                }.ToString()
+            )
+            .Options;
         using (var context = new BackupNormalizerDbContext(options))
         {
             context.GetService<IMigrator>().Migrate("20261002173131_TrackUsnCheckpoints");
-            context.Database.ExecuteSqlRaw("INSERT INTO StorageRoot (Id,Name,Path,CreatedUtc) VALUES ('old','Old root','/offline','before')");
-            context.Database.ExecuteSqlRaw("INSERT INTO Scan (StorageRootId,StartedUtc,Status) VALUES ('old','before','Incomplete')");
+            context.Database.ExecuteSqlRaw(
+                "INSERT INTO StorageRoot (Id,Name,Path,CreatedUtc) VALUES ('old','Old root','/offline','before')"
+            );
+            context.Database.ExecuteSqlRaw(
+                "INSERT INTO Scan (StorageRootId,StartedUtc,Status) VALUES ('old','before','Incomplete')"
+            );
         }
         SqliteConnection.ClearAllPools();
         byte[] before = File.ReadAllBytes(DbPath);
@@ -81,7 +125,10 @@ public sealed class UiInventoryHealthTests : IDisposable
 
         Assert.Equal("Unknown (older inventory)", viewModel.ScanMode);
         Assert.Equal("Unknown (older inventory)", viewModel.ScanErrorCount);
-        Assert.Equal("Diagnostic count was not recorded by this inventory version.", viewModel.DiagnosticsSummary);
+        Assert.Equal(
+            "Diagnostic count was not recorded by this inventory version.",
+            viewModel.DiagnosticsSummary
+        );
         Assert.Empty(viewModel.Errors);
         Assert.Equal("Blocked", viewModel.PlanningReadiness);
         SqliteConnection.ClearAllPools();
@@ -93,7 +140,17 @@ public sealed class UiInventoryHealthTests : IDisposable
     {
         using (var db = new Database(DbPath))
         {
-            db.UpsertRoot(new StorageRootRow("photos", "Photos", "E:\\Photos", false, "unknown", "sensitive", Database.UtcNow()));
+            db.UpsertRoot(
+                new StorageRootRow(
+                    "photos",
+                    "Photos",
+                    "E:\\Photos",
+                    false,
+                    "unknown",
+                    "sensitive",
+                    Database.UtcNow()
+                )
+            );
             long scanId = db.BeginScan("photos");
             db.FinishScan(scanId, ScanStatus.Completed);
         }

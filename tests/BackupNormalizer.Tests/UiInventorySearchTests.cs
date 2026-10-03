@@ -7,7 +7,10 @@ public sealed class UiInventorySearchTests : IDisposable
 {
     private const string Modified = "2026-09-30T12:00:00.0000000Z";
     private const string Created = "2026-09-20T08:30:00.0000000Z";
-    private readonly string _directory = Path.Combine(Path.GetTempPath(), "bn-inventory-search-" + Guid.NewGuid().ToString("N"));
+    private readonly string _directory = Path.Combine(
+        Path.GetTempPath(),
+        "bn-inventory-search-" + Guid.NewGuid().ToString("N")
+    );
 
     public UiInventorySearchTests() => Directory.CreateDirectory(_directory);
 
@@ -20,7 +23,10 @@ public sealed class UiInventorySearchTests : IDisposable
     [InlineData("insensitive", "mixedname", true)]
     [InlineData("sensitive", "mixedname", false)]
     public void Search_Uses_Recorded_Case_Rules_And_Keeps_Matching_Parents_Navigable(
-        string sensitivity, string query, bool expectedMatch)
+        string sensitivity,
+        string query,
+        bool expectedMatch
+    )
     {
         string database = CreateDatabase("search", sensitivity);
         Add(database, "Photos/MixedName.txt");
@@ -28,7 +34,10 @@ public sealed class UiInventorySearchTests : IDisposable
 
         panel.SearchText = query;
         Assert.Equal(expectedMatch, panel.Entries.Any(e => e.Name == "Photos"));
-        if (!expectedMatch) return;
+        if (!expectedMatch)
+        {
+            return;
+        }
 
         Assert.True(panel.NavigateTo(panel.Entries.Single(e => e.Name == "Photos")));
         Assert.Contains(panel.Entries, e => e.IsParentEntry);
@@ -45,8 +54,14 @@ public sealed class UiInventorySearchTests : IDisposable
         Add(database, "group/unverified.txt", digest: null);
         Add(database, "group/conflict.txt");
         Add(database, "group/broken.txt", status: FileStatus.ScanError, digest: null);
-        Add(database, "group/shortcut", entryKind: EntryKind.FileLink,
-            linkTarget: "../target", targetPath: "/offline/filters/target", linkNote: "Target unavailable");
+        Add(
+            database,
+            "group/shortcut",
+            entryKind: EntryKind.FileLink,
+            linkTarget: "../target",
+            targetPath: "/offline/filters/target",
+            linkNote: "Target unavailable"
+        );
         byte[] original = File.ReadAllBytes(database);
         var panel = Load(database);
         var states = new Dictionary<string, ComparisonState>
@@ -58,13 +73,15 @@ public sealed class UiInventorySearchTests : IDisposable
         };
         panel.ApplyComparison(states, differencesOnly: false);
 
-        foreach (var (filter, expected) in new[]
-        {
-            ("Unverified", "unverified.txt"),
-            ("Conflicts", "conflict.txt"),
-            ("Scan errors", "broken.txt"),
-            ("Links", "shortcut"),
-        })
+        foreach (
+            var (filter, expected) in new[]
+            {
+                ("Unverified", "unverified.txt"),
+                ("Conflicts", "conflict.txt"),
+                ("Scan errors", "broken.txt"),
+                ("Links", "shortcut"),
+            }
+        )
         {
             panel.SelectedInventoryFilter = filter;
             Assert.Equal("group", Assert.Single(panel.Entries).Name);
@@ -87,8 +104,14 @@ public sealed class UiInventorySearchTests : IDisposable
     public void Selected_Details_Show_Recorded_Metadata_And_Clear_When_Search_Removes_Selection()
     {
         string database = CreateDatabase("details");
-        Add(database, "folder/shortcut", entryKind: EntryKind.FileLink,
-            linkTarget: "../ExactTarget", targetPath: "/offline/details/ExactTarget", linkNote: "Recorded note");
+        Add(
+            database,
+            "folder/shortcut",
+            entryKind: EntryKind.FileLink,
+            linkTarget: "../ExactTarget",
+            targetPath: "/offline/details/ExactTarget",
+            linkNote: "Recorded note"
+        );
         Add(database, "folder/verified.txt", digest: "deadbeef");
         var panel = Load(database);
         panel.NavigateTo(panel.Entries.Single(e => e.Name == "folder"));
@@ -100,8 +123,14 @@ public sealed class UiInventorySearchTests : IDisposable
         Assert.True(panel.HasSelectedInventoryEntry);
         Assert.Equal("shortcut", panel.SelectedDetailsName);
         Assert.Equal("/offline/details/folder/shortcut", panel.SelectedDetailsPath);
-        Assert.Equal(DateTimeOffset.Parse(Created).LocalDateTime.ToString("yyyy-MM-dd HH:mm:ss"), panel.SelectedDetailsCreated);
-        Assert.Equal(DateTimeOffset.Parse(Modified).LocalDateTime.ToString("yyyy-MM-dd HH:mm:ss"), panel.SelectedDetailsModified);
+        Assert.Equal(
+            DateTimeOffset.Parse(Created).LocalDateTime.ToString("yyyy-MM-dd HH:mm:ss"),
+            panel.SelectedDetailsCreated
+        );
+        Assert.Equal(
+            DateTimeOffset.Parse(Modified).LocalDateTime.ToString("yyyy-MM-dd HH:mm:ss"),
+            panel.SelectedDetailsModified
+        );
         Assert.Equal("file link", panel.SelectedDetailsKind);
         Assert.Equal("../ExactTarget", panel.SelectedDetailsLinkTarget);
         Assert.Equal("/offline/details/ExactTarget", panel.SelectedDetailsAbsoluteTarget);
@@ -121,22 +150,59 @@ public sealed class UiInventorySearchTests : IDisposable
     {
         string path = Path.Combine(_directory, name + ".db");
         using var db = Database.OpenWritable(path, pooling: false);
-        db.UpsertRoot(new StorageRootRow("disk", name, "/offline/" + name, false, "unknown", sensitivity, Modified));
+        db.UpsertRoot(
+            new StorageRootRow(
+                "disk",
+                name,
+                "/offline/" + name,
+                false,
+                "unknown",
+                sensitivity,
+                Modified
+            )
+        );
         long scan = db.BeginScan("disk");
         db.FinishScan(scan, ScanStatus.Completed);
         return path;
     }
 
-    private static void Add(string database, string relativePath, string? digest = "abc",
-        string status = FileStatus.Ok, string entryKind = EntryKind.File, string? linkTarget = null,
-        string? targetPath = null, string? linkNote = null)
+    private static void Add(
+        string database,
+        string relativePath,
+        string? digest = "abc",
+        string status = FileStatus.Ok,
+        string entryKind = EntryKind.File,
+        string? linkTarget = null,
+        string? targetPath = null,
+        string? linkNote = null
+    )
     {
         using var db = Database.OpenWritable(database, pooling: false);
-        long id = db.UpsertFileEntry(new FileEntryRow(0, "disk", relativePath, relativePath.Split('/')[^1], 42,
-            Modified, Created, null, 1, status, status == FileStatus.Ok ? null : "scan failed",
-            entryKind, linkTarget, targetPath, linkNote));
+        long id = db.UpsertFileEntry(
+            new FileEntryRow(
+                0,
+                "disk",
+                relativePath,
+                relativePath.Split('/')[^1],
+                42,
+                Modified,
+                Created,
+                null,
+                1,
+                status,
+                status == FileStatus.Ok ? null : "scan failed",
+                entryKind,
+                linkTarget,
+                targetPath,
+                linkNote
+            )
+        );
         if (digest != null && status == FileStatus.Ok)
-            db.UpsertHash(new FileHashRow(id, "sha256", digest, 42, Modified, Modified, HashState.Ok));
+        {
+            db.UpsertHash(
+                new FileHashRow(id, "sha256", digest, 42, Modified, Modified, HashState.Ok)
+            );
+        }
     }
 
     private static FilePanelViewModel Load(string database)

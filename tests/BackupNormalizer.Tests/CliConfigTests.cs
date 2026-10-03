@@ -1,5 +1,5 @@
-using System.Text.Json;
 using System.Diagnostics;
+using System.Text.Json;
 using BackupNormalizer;
 using Microsoft.Data.Sqlite;
 
@@ -8,7 +8,10 @@ namespace BackupNormalizer.Tests;
 [Collection("Console")]
 public sealed class CliConfigTests : IDisposable
 {
-    private readonly string _directory = Path.Combine(Path.GetTempPath(), "bn-config-" + Guid.NewGuid().ToString("N"));
+    private readonly string _directory = Path.Combine(
+        Path.GetTempPath(),
+        "bn-config-" + Guid.NewGuid().ToString("N")
+    );
     private readonly Dictionary<string, string?> _environment = new();
     private string Root => Path.Combine(_directory, "data");
     private string DbPath => Path.Combine(_directory, "inventory.db");
@@ -17,7 +20,17 @@ public sealed class CliConfigTests : IDisposable
     public CliConfigTests()
     {
         Directory.CreateDirectory(Root);
-        foreach (string name in new[] { "BN_CONFIG", "BN_DB", "BN_MFT", "BN_USN", "BN_HASH_ALGO", "BN_PARALLELISM" })
+        foreach (
+            string name in new[]
+            {
+                "BN_CONFIG",
+                "BN_DB",
+                "BN_MFT",
+                "BN_USN",
+                "BN_HASH_ALGO",
+                "BN_PARALLELISM",
+            }
+        )
         {
             _environment[name] = Environment.GetEnvironmentVariable(name);
             Environment.SetEnvironmentVariable(name, null);
@@ -26,11 +39,21 @@ public sealed class CliConfigTests : IDisposable
 
     public void Dispose()
     {
-        foreach (var pair in _environment) Environment.SetEnvironmentVariable(pair.Key, pair.Value);
+        foreach (var pair in _environment)
+        {
+            Environment.SetEnvironmentVariable(pair.Key, pair.Value);
+        }
+
         foreach (string path in Directory.EnumerateFiles(_directory, "*.db"))
         {
-            using var connection = new SqliteConnection(new SqliteConnectionStringBuilder
-            { DataSource = path, Mode = SqliteOpenMode.ReadWriteCreate, ForeignKeys = true }.ToString());
+            using var connection = new SqliteConnection(
+                new SqliteConnectionStringBuilder
+                {
+                    DataSource = path,
+                    Mode = SqliteOpenMode.ReadWriteCreate,
+                    ForeignKeys = true,
+                }.ToString()
+            );
             SqliteConnection.ClearPool(connection);
         }
         Directory.Delete(_directory, true);
@@ -50,11 +73,23 @@ public sealed class CliConfigTests : IDisposable
             int code = Cli.Run(args);
             return (code, output.ToString(), error.ToString());
         }
-        finally { Console.SetOut(originalOut); Console.SetError(originalError); Log.Json = originalJson; }
+        finally
+        {
+            Console.SetOut(originalOut);
+            Console.SetError(originalError);
+            Log.Json = originalJson;
+        }
     }
 
-    private void SaveConfig(string[]? patterns = null) => new AppConfig
-    { Database = DbPath, UsnMode = "off", HashParallelism = 3, NoProgress = true, ExcludedPathRegexes = patterns }.Save(ConfigPath);
+    private void SaveConfig(string[]? patterns = null) =>
+        new AppConfig
+        {
+            Database = DbPath,
+            UsnMode = "off",
+            HashParallelism = 3,
+            NoProgress = true,
+            ExcludedPathRegexes = patterns,
+        }.Save(ConfigPath);
 
     private void Register()
     {
@@ -66,11 +101,18 @@ public sealed class CliConfigTests : IDisposable
     {
         var start = new ProcessStartInfo("dotnet")
         {
-            WorkingDirectory = _directory, UseShellExecute = false, CreateNoWindow = true,
-            RedirectStandardOutput = true, RedirectStandardError = true
+            WorkingDirectory = _directory,
+            UseShellExecute = false,
+            CreateNoWindow = true,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
         };
         start.ArgumentList.Add(typeof(Cli).Assembly.Location);
-        foreach (string argument in args) start.ArgumentList.Add(argument);
+        foreach (string argument in args)
+        {
+            start.ArgumentList.Add(argument);
+        }
+
         using var process = Process.Start(start)!;
         var output = process.StandardOutput.ReadToEndAsync();
         var error = process.StandardError.ReadToEndAsync();
@@ -86,7 +128,9 @@ public sealed class CliConfigTests : IDisposable
     public void Implicit_Settings_File_Takes_Priority_Over_Legacy_File()
     {
         SaveConfig(["^cache$"]);
-        new AppConfig { Database = "./legacy.db" }.Save(Path.Combine(_directory, "backup-normalizer.json"));
+        new AppConfig { Database = "./legacy.db" }.Save(
+            Path.Combine(_directory, "backup-normalizer.json")
+        );
         var shown = RunInDirectory("config", "show");
         Assert.Equal(0, shown.Code);
         using var json = JsonDocument.Parse(shown.Output);
@@ -100,10 +144,14 @@ public sealed class CliConfigTests : IDisposable
     public void Explicit_Config_Overrides_Implicit_Settings_And_Environment(bool beforeCommand)
     {
         File.WriteAllText(ConfigPath, "{invalid implicit config");
-        Environment.SetEnvironmentVariable("BN_CONFIG", Path.Combine(_directory, "missing-environment.json"));
+        Environment.SetEnvironmentVariable(
+            "BN_CONFIG",
+            Path.Combine(_directory, "missing-environment.json")
+        );
         string explicitPath = Path.Combine(_directory, "other.json");
         new AppConfig { Database = "./explicit.db" }.Save(explicitPath);
-        var shown = beforeCommand ? RunInDirectory("--config", explicitPath, "config", "show")
+        var shown = beforeCommand
+            ? RunInDirectory("--config", explicitPath, "config", "show")
             : RunInDirectory("config", "show", "--config", explicitPath);
         Assert.Equal(0, shown.Code);
         using var json = JsonDocument.Parse(shown.Output);
@@ -135,7 +183,9 @@ public sealed class CliConfigTests : IDisposable
     [Fact]
     public void Missing_Settings_File_Uses_Legacy_Config_When_Present()
     {
-        new AppConfig { Database = "./legacy.db" }.Save(Path.Combine(_directory, "backup-normalizer.json"));
+        new AppConfig { Database = "./legacy.db" }.Save(
+            Path.Combine(_directory, "backup-normalizer.json")
+        );
         var shown = RunInDirectory("config", "show");
         Assert.Equal(0, shown.Code);
         using var json = JsonDocument.Parse(shown.Output);
@@ -148,7 +198,10 @@ public sealed class CliConfigTests : IDisposable
         var shown = RunInDirectory("config", "show");
         Assert.Equal(0, shown.Code);
         using var json = JsonDocument.Parse(shown.Output);
-        Assert.Equal(new AppConfig().Database, json.RootElement.GetProperty("database").GetString());
+        Assert.Equal(
+            new AppConfig().Database,
+            json.RootElement.GetProperty("database").GetString()
+        );
     }
 
     [Fact]
@@ -237,7 +290,10 @@ public sealed class CliConfigTests : IDisposable
         File.WriteAllText(ConfigPath, "{\"HashParallelism\":4,\"MftMode\":\"OFF\"}");
         Assert.Equal(4, AppConfig.Load(ConfigPath).HashParallelism);
         File.WriteAllText(ConfigPath, "{\"excludedPathRegex\":[\"cache\"]}");
-        Assert.Contains("excludedPathRegex", Assert.Throws<InvalidOperationException>(() => AppConfig.Load(ConfigPath)).Message);
+        Assert.Contains(
+            "excludedPathRegex",
+            Assert.Throws<InvalidOperationException>(() => AppConfig.Load(ConfigPath)).Message
+        );
     }
 
     [Fact]
@@ -251,10 +307,37 @@ public sealed class CliConfigTests : IDisposable
         Register();
         Assert.Equal(0, Run("scan", "r", "--config", ConfigPath).Code);
         using (var db = Database.OpenReadOnly(DbPath, pooling: false))
-            Assert.Equal(new[] { "cache/child.txt", "keep.txt" }, db.ListFiles("r").Where(f => f.Status == FileStatus.Ok).Select(f => f.RelativePath).Order());
-        Assert.Equal(0, Run("scan", "r", "--config", ConfigPath, "--exclude-path-regex", "^cache$", "--exclude-path-regex", "^keep\\.txt$").Code);
+        {
+            Assert.Equal(
+                new[] { "cache/child.txt", "keep.txt" },
+                db.ListFiles("r")
+                    .Where(f => f.Status == FileStatus.Ok)
+                    .Select(f => f.RelativePath)
+                    .Order()
+            );
+        }
+
+        Assert.Equal(
+            0,
+            Run(
+                "scan",
+                "r",
+                "--config",
+                ConfigPath,
+                "--exclude-path-regex",
+                "^cache$",
+                "--exclude-path-regex",
+                "^keep\\.txt$"
+            ).Code
+        );
         using (var db = Database.OpenReadOnly(DbPath, pooling: false))
-            Assert.Equal("skip.tmp", Assert.Single(db.ListFiles("r"), f => f.Status == FileStatus.Ok).RelativePath);
+        {
+            Assert.Equal(
+                "skip.tmp",
+                Assert.Single(db.ListFiles("r"), f => f.Status == FileStatus.Ok).RelativePath
+            );
+        }
+
         Assert.Equal(0, Run("scan", "r", "--config", ConfigPath, "--no-exclusions").Code);
         using var all = Database.OpenReadOnly(DbPath, pooling: false);
         Assert.Equal(3, all.ListFiles("r").Count(f => f.Status == FileStatus.Ok));
@@ -271,7 +354,18 @@ public sealed class CliConfigTests : IDisposable
         Assert.False(File.Exists(DbPath));
         Assert.Equal(2, Run("scan", "r", "--config", ConfigPath, "--exclude-path-regex").Code);
         Assert.Equal(2, Run("scan", "r", "--config").Code);
-        Assert.Equal(2, Run("scan", "r", "--config", ConfigPath, "--no-exclusions", "--exclude-path-regex", "cache").Code);
+        Assert.Equal(
+            2,
+            Run(
+                "scan",
+                "r",
+                "--config",
+                ConfigPath,
+                "--no-exclusions",
+                "--exclude-path-regex",
+                "cache"
+            ).Code
+        );
     }
 
     [Fact]

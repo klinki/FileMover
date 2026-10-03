@@ -3,18 +3,19 @@ using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.IO;
 using System.Linq;
+using BackupNormalizer.Ui.Models;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
-using BackupNormalizer.Ui.Models;
 
 namespace BackupNormalizer.Ui.ViewModels;
 
 /// <summary>One ready drive for the TC-style drive bar.</summary>
 public sealed record DriveView(string Root, string Label, long FreeBytes, long TotalBytes)
 {
-    public string Display => string.IsNullOrEmpty(Label) || Label == Root
-        ? $"{Root} {FormatBytes(FreeBytes)} free"
-        : $"{Root} ({Label}) {FormatBytes(FreeBytes)} free";
+    public string Display =>
+        string.IsNullOrEmpty(Label) || Label == Root
+            ? $"{Root} {FormatBytes(FreeBytes)} free"
+            : $"{Root} ({Label}) {FormatBytes(FreeBytes)} free";
 
     public string Tooltip =>
         $"{Root}{Environment.NewLine}{Label}{Environment.NewLine}{FormatBytes(FreeBytes)} free of {FormatBytes(TotalBytes)}";
@@ -23,11 +24,30 @@ public sealed record DriveView(string Root, string Label, long FreeBytes, long T
     {
         double value = bytes;
         string unit = "B";
-        if (value >= 1024.0 * 1024 * 1024) { value /= 1024.0 * 1024 * 1024; unit = "GB"; }
-        else if (value >= 1024.0 * 1024) { value /= 1024.0 * 1024; unit = "MB"; }
-        else if (value >= 1024.0) { value /= 1024.0; unit = "KB"; }
-        else return $"{bytes} B";
-        return string.Create(System.Globalization.CultureInfo.InvariantCulture, $"{value:F1} {unit}");
+        if (value >= 1024.0 * 1024 * 1024)
+        {
+            value /= 1024.0 * 1024 * 1024;
+            unit = "GB";
+        }
+        else if (value >= 1024.0 * 1024)
+        {
+            value /= 1024.0 * 1024;
+            unit = "MB";
+        }
+        else if (value >= 1024.0)
+        {
+            value /= 1024.0;
+            unit = "KB";
+        }
+        else
+        {
+            return $"{bytes} B";
+        }
+
+        return string.Create(
+            System.Globalization.CultureInfo.InvariantCulture,
+            $"{value:F1} {unit}"
+        );
     }
 }
 
@@ -42,31 +62,114 @@ public sealed partial class FileEntryItem : ObservableObject
     public string? LinkTarget { get; init; }
     public string? TargetPath { get; init; }
     public string? LinkNote { get; init; }
-    public string Tooltip => IsLink ? $"{Name}\n{KindText}\nTarget: {LinkTarget ?? "unavailable"}\nPath: {TargetPath ?? "unavailable"}\n{LinkNote}" : Name;
+    public string Tooltip =>
+        IsLink
+            ? $"{Name}\n{KindText}\nTarget: {LinkTarget ?? "unavailable"}\nPath: {TargetPath ?? "unavailable"}\n{LinkNote}"
+            : Name;
     public long Size { get; }
     public DateTime Modified { get; }
     public string BaseName => IsDirectory ? Name : Path.GetFileNameWithoutExtension(Name);
     public string Extension => IsDirectory ? "" : Path.GetExtension(Name).TrimStart('.');
-    public string SizeText => IsParentEntry ? "" : IsLink ? KindText : IsDirectory ? "<DIR>" : Size.ToString("N0");
-    public string ModifiedText => IsParentEntry || Modified == DateTime.MinValue ? "" : Modified.ToString("yyyy-MM-dd HH:mm");
-    public string KindText => EntryKind switch
-    {
-        BackupNormalizer.EntryKind.FileLink => "file link",
-        BackupNormalizer.EntryKind.DirectoryLink => "directory link",
-        BackupNormalizer.EntryKind.ReparsePoint => "reparse point",
-        _ => IsDirectory ? "dir" : "file",
-    };
+    public string SizeText =>
+        IsParentEntry ? ""
+        : IsLink ? KindText
+        : IsDirectory ? "<DIR>"
+        : Size.ToString("N0");
+    public string ModifiedText =>
+        IsParentEntry || Modified == DateTime.MinValue ? "" : Modified.ToString("yyyy-MM-dd HH:mm");
+    public string KindText =>
+        EntryKind switch
+        {
+            BackupNormalizer.EntryKind.FileLink => "file link",
+            BackupNormalizer.EntryKind.DirectoryLink => "directory link",
+            BackupNormalizer.EntryKind.ReparsePoint => "reparse point",
+            _ => IsDirectory ? "dir" : "file",
+        };
 
     private static readonly HashSet<string> ArchiveExts = new(StringComparer.OrdinalIgnoreCase)
-        { ".zip", ".rar", ".7z", ".tar", ".gz", ".tgz", ".bz2", ".xz", ".cab", ".iso", ".jar", ".war" };
+    {
+        ".zip",
+        ".rar",
+        ".7z",
+        ".tar",
+        ".gz",
+        ".tgz",
+        ".bz2",
+        ".xz",
+        ".cab",
+        ".iso",
+        ".jar",
+        ".war",
+    };
     private static readonly HashSet<string> ImageExts = new(StringComparer.OrdinalIgnoreCase)
-        { ".jpg", ".jpeg", ".png", ".gif", ".bmp", ".tif", ".tiff", ".webp", ".svg", ".ico", ".heic", ".heif", ".dng", ".cr2", ".nef" };
+    {
+        ".jpg",
+        ".jpeg",
+        ".png",
+        ".gif",
+        ".bmp",
+        ".tif",
+        ".tiff",
+        ".webp",
+        ".svg",
+        ".ico",
+        ".heic",
+        ".heif",
+        ".dng",
+        ".cr2",
+        ".nef",
+    };
     private static readonly HashSet<string> VideoExts = new(StringComparer.OrdinalIgnoreCase)
-        { ".mp4", ".mkv", ".avi", ".mov", ".wmv", ".flv", ".webm", ".m4v", ".mpg", ".mpeg", ".ts", ".mts", ".3gp" };
+    {
+        ".mp4",
+        ".mkv",
+        ".avi",
+        ".mov",
+        ".wmv",
+        ".flv",
+        ".webm",
+        ".m4v",
+        ".mpg",
+        ".mpeg",
+        ".ts",
+        ".mts",
+        ".3gp",
+    };
     private static readonly HashSet<string> TextExts = new(StringComparer.OrdinalIgnoreCase)
-        { ".txt", ".md", ".markdown", ".log", ".csv", ".tsv", ".json", ".xml", ".yml", ".yaml", ".ini", ".cfg", ".toml",
-          ".cs", ".csproj", ".sln", ".xaml", ".axaml", ".py", ".js", ".ts", ".html", ".css", ".sh", ".ps1", ".sql",
-          ".java", ".c", ".h", ".cpp", ".go", ".rs" };
+    {
+        ".txt",
+        ".md",
+        ".markdown",
+        ".log",
+        ".csv",
+        ".tsv",
+        ".json",
+        ".xml",
+        ".yml",
+        ".yaml",
+        ".ini",
+        ".cfg",
+        ".toml",
+        ".cs",
+        ".csproj",
+        ".sln",
+        ".xaml",
+        ".axaml",
+        ".py",
+        ".js",
+        ".ts",
+        ".html",
+        ".css",
+        ".sh",
+        ".ps1",
+        ".sql",
+        ".java",
+        ".c",
+        ".h",
+        ".cpp",
+        ".go",
+        ".rs",
+    };
 
     private string DottedExt => IsDirectory ? "" : Path.GetExtension(Name);
     public bool IsFolder => IsDirectory && !IsParentEntry;
@@ -81,28 +184,48 @@ public sealed partial class FileEntryItem : ObservableObject
     public partial bool IsMarked { get; set; }
 
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(ComparisonText), nameof(IsOnlyLeft), nameof(IsOnlyRight), nameof(IsDifferent), nameof(IsUnverified), nameof(IsEqual))]
+    [NotifyPropertyChangedFor(
+        nameof(ComparisonText),
+        nameof(IsOnlyLeft),
+        nameof(IsOnlyRight),
+        nameof(IsDifferent),
+        nameof(IsUnverified),
+        nameof(IsEqual)
+    )]
     public partial ComparisonState Comparison { get; set; }
 
     public bool IsOnlyLeft => Comparison == ComparisonState.OnlyLeft;
     public bool IsOnlyRight => Comparison == ComparisonState.OnlyRight;
-    public bool IsDifferent => Comparison is ComparisonState.Different or ComparisonState.TypeConflict or ComparisonState.ScanError;
+    public bool IsDifferent =>
+        Comparison
+            is ComparisonState.Different
+                or ComparisonState.TypeConflict
+                or ComparisonState.ScanError;
     public bool IsUnverified => Comparison == ComparisonState.Unverified;
     public bool IsEqual => Comparison == ComparisonState.Equal;
-    public string ComparisonText => Comparison switch
-    {
-        ComparisonState.Equal => "Equal",
-        ComparisonState.Different => "Different",
-        ComparisonState.OnlyLeft => "Only left",
-        ComparisonState.OnlyRight => "Only right",
-        ComparisonState.Unverified => "Unverified",
-        ComparisonState.TypeConflict => "Type conflict",
-        ComparisonState.ScanError => "Scan error",
-        ComparisonState.Skipped => "Skipped link",
-        _ => "",
-    };
+    public string ComparisonText =>
+        Comparison switch
+        {
+            ComparisonState.Equal => "Equal",
+            ComparisonState.Different => "Different",
+            ComparisonState.OnlyLeft => "Only left",
+            ComparisonState.OnlyRight => "Only right",
+            ComparisonState.Unverified => "Unverified",
+            ComparisonState.TypeConflict => "Type conflict",
+            ComparisonState.ScanError => "Scan error",
+            ComparisonState.Skipped => "Skipped link",
+            _ => "",
+        };
 
-    public FileEntryItem(string name, string fullPath, bool isDir, long size, DateTime modified, bool isParent = false, bool isVirtual = false)
+    public FileEntryItem(
+        string name,
+        string fullPath,
+        bool isDir,
+        long size,
+        DateTime modified,
+        bool isParent = false,
+        bool isVirtual = false
+    )
     {
         Name = name;
         FullPath = fullPath;
@@ -149,7 +272,8 @@ public sealed partial class FilePanelViewModel : ObservableObject
 
     partial void OnSelectedDriveChanged(DriveView? value)
     {
-        if (SuppressDriveNavigation || value == null) return;
+        if (SuppressDriveNavigation || value == null)
+            return;
         GoToDrive(value);
     }
 
@@ -159,21 +283,56 @@ public sealed partial class FilePanelViewModel : ObservableObject
     /// <summary>Rebuilds the drive bar; only ready drives get a button.</summary>
     public void RefreshDrives()
     {
-        if (IsDatabase) return;
+        if (IsDatabase)
+        {
+            return;
+        }
+
         Drives.Clear();
         try
         {
-            foreach (var drive in DriveInfo.GetDrives().Where(d =>
+            foreach (
+                var drive in DriveInfo
+                    .GetDrives()
+                    .Where(d =>
+                    {
+                        try
+                        {
+                            return d.IsReady;
+                        }
+                        catch
+                        {
+                            return false;
+                        }
+                    })
+                    .OrderBy(d => d.Name, StringComparer.Ordinal)
+            )
             {
-                try { return d.IsReady; } catch { return false; }
-            }).OrderBy(d => d.Name, StringComparer.Ordinal))
-            {
-                long free, total;
-                try { free = drive.AvailableFreeSpace; total = drive.TotalSize; }
-                catch { continue; }
-                if (total <= 0) continue; // pseudo-volumes and unready mounts
+                long free,
+                    total;
+                try
+                {
+                    free = drive.AvailableFreeSpace;
+                    total = drive.TotalSize;
+                }
+                catch
+                {
+                    continue;
+                }
+                if (total <= 0)
+                {
+                    continue; // pseudo-volumes and unready mounts
+                }
+
                 string label;
-                try { label = drive.VolumeLabel; } catch { label = ""; }
+                try
+                {
+                    label = drive.VolumeLabel;
+                }
+                catch
+                {
+                    label = "";
+                }
                 Drives.Add(new DriveView(drive.Name, label, free, total));
             }
         }
@@ -186,23 +345,45 @@ public sealed partial class FilePanelViewModel : ObservableObject
         DriveView? match = null;
         foreach (var drive in Drives)
         {
-            var cmp = OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
-            if (CurrentPath.StartsWith(drive.Root, cmp) && (match == null || drive.Root.Length > match.Root.Length))
+            var cmp = OperatingSystem.IsWindows()
+                ? StringComparison.OrdinalIgnoreCase
+                : StringComparison.Ordinal;
+            if (
+                CurrentPath.StartsWith(drive.Root, cmp)
+                && (match == null || drive.Root.Length > match.Root.Length)
+            )
+            {
                 match = drive;
+            }
         }
-        DriveStatus = match == null
-            ? ""
-            : $"{DriveView.FormatBytes(match.FreeBytes)} free of {DriveView.FormatBytes(match.TotalBytes)}";
+        DriveStatus =
+            match == null
+                ? ""
+                : $"{DriveView.FormatBytes(match.FreeBytes)} free of {DriveView.FormatBytes(match.TotalBytes)}";
         SuppressDriveNavigation = true;
-        try { SelectedDrive = match; }
-        finally { SuppressDriveNavigation = false; }
+        try
+        {
+            SelectedDrive = match;
+        }
+        finally
+        {
+            SuppressDriveNavigation = false;
+        }
     }
 
     [RelayCommand]
     public void GoToDrive(DriveView? drive)
     {
-        if (IsDatabase) return;
-        if (drive == null || !Directory.Exists(drive.Root)) return;
+        if (IsDatabase)
+        {
+            return;
+        }
+
+        if (drive == null || !Directory.Exists(drive.Root))
+        {
+            return;
+        }
+
         CurrentPath = drive.Root;
         Refresh();
     }
@@ -215,21 +396,36 @@ public sealed partial class FilePanelViewModel : ObservableObject
     {
         string trimmed = path.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
         if (string.IsNullOrEmpty(trimmed))
+        {
             return null; // Unix root "/" trims to ""
+        }
         // Windows drive root ("C:\") trims to "C:", which has no parent.
         if (trimmed.Length == 2 && trimmed[1] == ':' && OperatingSystem.IsWindows())
+        {
             return null;
+        }
+
         return Directory.GetParent(trimmed);
     }
 
-    private bool IsVirtualLocation(string path)
-        => VirtualDirs.Contains(path)
-            || VirtualDirs.Any(v => v.StartsWith(path.TrimEnd(Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar,
-                OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal));
+    private bool IsVirtualLocation(string path) =>
+        VirtualDirs.Contains(path)
+        || VirtualDirs.Any(v =>
+            v.StartsWith(
+                path.TrimEnd(Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar,
+                OperatingSystem.IsWindows()
+                    ? StringComparison.OrdinalIgnoreCase
+                    : StringComparison.Ordinal
+            )
+        );
 
     public void Refresh()
     {
-        if (IsDatabase) { RefreshInventory(); return; }
+        if (IsDatabase)
+        {
+            RefreshInventory();
+            return;
+        }
         Entries.Clear();
         SelectedEntry = null;
         MarkAnchor = null;
@@ -243,8 +439,21 @@ public sealed partial class FilePanelViewModel : ObservableObject
             }
             // ".." up-row: always first, hidden at filesystem root.
             if (ParentOf(CurrentPath) is { } parent)
-                Entries.Add(new FileEntryItem("..", parent.FullName, true, 0, DateTime.MinValue, isParent: true));
-            int dirs = 0, files = 0;
+            {
+                Entries.Add(
+                    new FileEntryItem(
+                        "..",
+                        parent.FullName,
+                        true,
+                        0,
+                        DateTime.MinValue,
+                        isParent: true
+                    )
+                );
+            }
+
+            int dirs = 0,
+                files = 0;
             if (onDisk)
             {
                 foreach (var d in Directory.GetDirectories(CurrentPath).OrderBy(x => x))
@@ -252,8 +461,14 @@ public sealed partial class FilePanelViewModel : ObservableObject
                     try
                     {
                         var di = new DirectoryInfo(d);
-                        if (di.Attributes.HasFlag(FileAttributes.ReparsePoint)) continue; // like scanner: no follow
-                        Entries.Add(new FileEntryItem(di.Name, di.FullName, true, 0, di.LastWriteTime));
+                        if (di.Attributes.HasFlag(FileAttributes.ReparsePoint))
+                        {
+                            continue; // like scanner: no follow
+                        }
+
+                        Entries.Add(
+                            new FileEntryItem(di.Name, di.FullName, true, 0, di.LastWriteTime)
+                        );
                         dirs++;
                     }
                     catch { }
@@ -263,23 +478,50 @@ public sealed partial class FilePanelViewModel : ObservableObject
                     try
                     {
                         var fi = new FileInfo(f);
-                        if (fi.Attributes.HasFlag(FileAttributes.ReparsePoint)) continue;
-                        Entries.Add(new FileEntryItem(fi.Name, fi.FullName, false, fi.Length, fi.LastWriteTime));
+                        if (fi.Attributes.HasFlag(FileAttributes.ReparsePoint))
+                        {
+                            continue;
+                        }
+
+                        Entries.Add(
+                            new FileEntryItem(
+                                fi.Name,
+                                fi.FullName,
+                                false,
+                                fi.Length,
+                                fi.LastWriteTime
+                            )
+                        );
                         files++;
                     }
                     catch { }
                 }
             }
             // Staged virtual children of the current directory.
-            string prefix = CurrentPath.TrimEnd(Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar;
-            var cmp = OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
+            string prefix =
+                CurrentPath.TrimEnd(Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar;
+            var cmp = OperatingSystem.IsWindows()
+                ? StringComparison.OrdinalIgnoreCase
+                : StringComparison.Ordinal;
             int staged = 0;
             foreach (var v in VirtualDirs.OrderBy(x => x))
             {
-                if (!v.StartsWith(prefix, cmp)) continue;
+                if (!v.StartsWith(prefix, cmp))
+                {
+                    continue;
+                }
+
                 string rest = v.Substring(prefix.Length);
-                if (rest.Length == 0 || rest.Contains(Path.DirectorySeparatorChar)) continue; // not a direct child
-                if (Entries.Any(e => e.IsDirectory && string.Equals(e.Name, rest, cmp))) continue; // real one wins
+                if (rest.Length == 0 || rest.Contains(Path.DirectorySeparatorChar))
+                {
+                    continue; // not a direct child
+                }
+
+                if (Entries.Any(e => e.IsDirectory && string.Equals(e.Name, rest, cmp)))
+                {
+                    continue; // real one wins
+                }
+
                 Entries.Add(new FileEntryItem(rest, v, true, 0, DateTime.UtcNow, isVirtual: true));
                 staged++;
             }
@@ -297,7 +539,9 @@ public sealed partial class FilePanelViewModel : ObservableObject
     public void ApplySort(string column)
     {
         if (string.Equals(SortColumn, column, StringComparison.OrdinalIgnoreCase))
+        {
             SortAscending = !SortAscending;
+        }
         else
         {
             SortColumn = column;
@@ -319,26 +563,57 @@ public sealed partial class FilePanelViewModel : ObservableObject
         IOrderedEnumerable<FileEntryItem> ordered = SortColumn switch
         {
             "Size" => SortAscending
-                ? rest.OrderBy(e => e.IsDirectory ? 0 : 1).ThenBy(e => e.Size).ThenBy(e => e.BaseName, StringComparer.OrdinalIgnoreCase)
-                : rest.OrderBy(e => e.IsDirectory ? 0 : 1).ThenByDescending(e => e.Size).ThenBy(e => e.BaseName, StringComparer.OrdinalIgnoreCase),
+                ? rest.OrderBy(e => e.IsDirectory ? 0 : 1)
+                    .ThenBy(e => e.Size)
+                    .ThenBy(e => e.BaseName, StringComparer.OrdinalIgnoreCase)
+                : rest.OrderBy(e => e.IsDirectory ? 0 : 1)
+                    .ThenByDescending(e => e.Size)
+                    .ThenBy(e => e.BaseName, StringComparer.OrdinalIgnoreCase),
             "Modified" => SortAscending
-                ? rest.OrderBy(e => e.IsDirectory ? 0 : 1).ThenBy(e => e.Modified).ThenBy(e => e.BaseName, StringComparer.OrdinalIgnoreCase)
-                : rest.OrderBy(e => e.IsDirectory ? 0 : 1).ThenByDescending(e => e.Modified).ThenBy(e => e.BaseName, StringComparer.OrdinalIgnoreCase),
+                ? rest.OrderBy(e => e.IsDirectory ? 0 : 1)
+                    .ThenBy(e => e.Modified)
+                    .ThenBy(e => e.BaseName, StringComparer.OrdinalIgnoreCase)
+                : rest.OrderBy(e => e.IsDirectory ? 0 : 1)
+                    .ThenByDescending(e => e.Modified)
+                    .ThenBy(e => e.BaseName, StringComparer.OrdinalIgnoreCase),
             _ => SortAscending
-                ? rest.OrderBy(e => e.IsDirectory ? 0 : 1).ThenBy(strKey, StringComparer.OrdinalIgnoreCase).ThenBy(e => e.Extension, StringComparer.OrdinalIgnoreCase)
-                : rest.OrderBy(e => e.IsDirectory ? 0 : 1).ThenByDescending(strKey, StringComparer.OrdinalIgnoreCase).ThenBy(e => e.Extension, StringComparer.OrdinalIgnoreCase),
+                ? rest.OrderBy(e => e.IsDirectory ? 0 : 1)
+                    .ThenBy(strKey, StringComparer.OrdinalIgnoreCase)
+                    .ThenBy(e => e.Extension, StringComparer.OrdinalIgnoreCase)
+                : rest.OrderBy(e => e.IsDirectory ? 0 : 1)
+                    .ThenByDescending(strKey, StringComparer.OrdinalIgnoreCase)
+                    .ThenBy(e => e.Extension, StringComparer.OrdinalIgnoreCase),
         };
         var sorted = ordered.ToList();
         Entries.Clear();
-        if (pin != null) Entries.Add(pin);
-        foreach (var e in sorted) Entries.Add(e);
+        if (pin != null)
+        {
+            Entries.Add(pin);
+        }
+
+        foreach (var e in sorted)
+        {
+            Entries.Add(e);
+        }
     }
 
     public bool NavigateTo(FileEntryItem entry)
     {
-        if (entry.IsParentEntry) { GoUp(); return true; }
-        if (!entry.IsDirectory || entry.IsLink) return false;
-        if (IsDatabase) { NavigateInventory(entry.FullPath); return true; }
+        if (entry.IsParentEntry)
+        {
+            GoUp();
+            return true;
+        }
+        if (!entry.IsDirectory || entry.IsLink)
+        {
+            return false;
+        }
+
+        if (IsDatabase)
+        {
+            NavigateInventory(entry.FullPath);
+            return true;
+        }
         CurrentPath = entry.FullPath;
         Refresh();
         return true;
@@ -348,7 +623,11 @@ public sealed partial class FilePanelViewModel : ObservableObject
     {
         if (IsDatabase)
         {
-            if (InventoryPath.Length > 0) NavigateInventory(InventoryParent(InventoryPath));
+            if (InventoryPath.Length > 0)
+            {
+                NavigateInventory(InventoryParent(InventoryPath));
+            }
+
             return;
         }
         if (ParentOf(CurrentPath) is { } parent)
@@ -360,7 +639,11 @@ public sealed partial class FilePanelViewModel : ObservableObject
 
     public void ToggleMark(FileEntryItem item)
     {
-        if (item.IsParentEntry) return;
+        if (item.IsParentEntry)
+        {
+            return;
+        }
+
         item.IsMarked = !item.IsMarked;
     }
 
@@ -381,7 +664,11 @@ public sealed partial class FilePanelViewModel : ObservableObject
     /// <summary>Applies the latched rubber-band mode to an encountered row.</summary>
     public void RubberTo(FileEntryItem item, bool select)
     {
-        if (item.IsParentEntry) return;
+        if (item.IsParentEntry)
+        {
+            return;
+        }
+
         item.IsMarked = select;
     }
 
@@ -407,15 +694,22 @@ public sealed partial class FilePanelViewModel : ObservableObject
             SelectedEntry = item;
             return;
         }
-        FileEntryItem? anchor = MarkAnchor ?? SelectedEntry ?? Entries.FirstOrDefault(e => !e.IsParentEntry);
+        FileEntryItem? anchor =
+            MarkAnchor ?? SelectedEntry ?? Entries.FirstOrDefault(e => !e.IsParentEntry);
         int anchorIdx = anchor != null ? Entries.IndexOf(anchor) : -1;
-        if (anchorIdx < 0) anchorIdx = itemIdx;
+        if (anchorIdx < 0)
+        {
+            anchorIdx = itemIdx;
+        }
+
         int lo = Math.Min(anchorIdx, itemIdx);
         int hi = Math.Max(anchorIdx, itemIdx);
         for (int i = lo; i <= hi; i++)
         {
             if (!Entries[i].IsParentEntry)
+            {
                 Entries[i].IsMarked = true;
+            }
         }
         SelectedEntry = item;
     }
@@ -431,33 +725,55 @@ public sealed partial class FilePanelViewModel : ObservableObject
 
     public void ShiftArrow(int delta)
     {
-        if (Entries.Count == 0) return;
+        if (Entries.Count == 0)
+        {
+            return;
+        }
+
         var previous = SelectedEntry;
-        int curIdx = previous != null ? Entries.IndexOf(previous) : (delta > 0 ? -1 : Entries.Count);
+        int curIdx =
+            previous != null ? Entries.IndexOf(previous) : (delta > 0 ? -1 : Entries.Count);
         if (curIdx < 0 || curIdx >= Entries.Count)
+        {
             curIdx = delta > 0 ? -1 : Entries.Count;
+        }
         // Clamp relative to the position before moving so a large delta lands on the edge.
         int newIdx = Math.Clamp(curIdx + delta, 0, Entries.Count - 1);
         if (MarkAnchor == null)
+        {
             MarkAnchor = previous;
+        }
+
         SelectedEntry = Entries[newIdx];
         if (!SelectedEntry.IsParentEntry)
+        {
             ToggleMark(SelectedEntry);
+        }
     }
 
     public IReadOnlyList<FileEntryItem> StagingSet()
     {
         var marked = Entries.Where(e => e.IsMarked && !e.IsParentEntry).ToList();
-        if (marked.Count > 0) return marked;
+        if (marked.Count > 0)
+        {
+            return marked;
+        }
+
         if (SelectedEntry != null && !SelectedEntry.IsParentEntry)
+        {
             return new List<FileEntryItem> { SelectedEntry };
+        }
+
         return Array.Empty<FileEntryItem>();
     }
 
     public void ClearMarks()
     {
         foreach (var e in Entries)
+        {
             e.IsMarked = false;
+        }
+
         MarkAnchor = null;
     }
 
@@ -465,7 +781,11 @@ public sealed partial class FilePanelViewModel : ObservableObject
     public void MarkAll()
     {
         foreach (var e in Entries)
+        {
             if (!e.IsParentEntry)
+            {
                 e.IsMarked = true;
+            }
+        }
     }
 }

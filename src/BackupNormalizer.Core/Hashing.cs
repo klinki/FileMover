@@ -6,6 +6,7 @@ public interface IContentHasher
 {
     string AlgorithmName { get; }
     string HashFile(string absPath, long expectedSize, Action<long>? onBytesRead = null);
+
     /// <summary>Reports the bytes read in each chunk, rather than a cumulative count.</summary>
     string HashStream(Stream s, Action<long>? onBytesRead = null);
 }
@@ -17,7 +18,14 @@ public sealed class Sha256Hasher : IContentHasher
 
     public string HashFile(string absPath, long expectedSize, Action<long>? onBytesRead = null)
     {
-        using var fs = new FileStream(absPath, FileMode.Open, FileAccess.Read, FileShare.Read, BufSize, FileOptions.SequentialScan);
+        using var fs = new FileStream(
+            absPath,
+            FileMode.Open,
+            FileAccess.Read,
+            FileShare.Read,
+            BufSize,
+            FileOptions.SequentialScan
+        );
         return HashStream(fs, onBytesRead);
     }
 
@@ -53,7 +61,9 @@ public static class HasherFactory
             // For MVP we use SHA-256 bytes but label rows with requested algorithm
             // only if caller explicitly wants strict naming. We keep "sha256" to
             // avoid claiming BLAKE3 identity falsely (Invariant 2/3 safety).
-            Console.Error.WriteLine("warning: blake3 requested but this build uses sha256 fallback (spec §3.3 acceptable)");
+            Console.Error.WriteLine(
+                "warning: blake3 requested but this build uses sha256 fallback (spec §3.3 acceptable)"
+            );
         }
         return new Sha256Hasher();
     }
@@ -71,7 +81,14 @@ public static class HasherFactory
         {
             const int Block = 1 * 1024 * 1024;
             using var sha = SHA256.Create();
-            using var fs = new FileStream(absPath, FileMode.Open, FileAccess.Read, FileShare.Read, 1 << 20, FileOptions.SequentialScan);
+            using var fs = new FileStream(
+                absPath,
+                FileMode.Open,
+                FileAccess.Read,
+                FileShare.Read,
+                1 << 20,
+                FileOptions.SequentialScan
+            );
             var buf = new byte[Block];
             void Feed(long offset, int len)
             {
@@ -80,7 +97,11 @@ public static class HasherFactory
                 while (total < len)
                 {
                     int n = fs.Read(buf, total, len - total);
-                    if (n == 0) break;
+                    if (n == 0)
+                    {
+                        break;
+                    }
+
                     total += n;
                 }
                 sha.TransformBlock(buf, 0, total, null, 0);
@@ -88,7 +109,11 @@ public static class HasherFactory
             if (size <= 3L * Block)
             {
                 fs.Seek(0, SeekOrigin.Begin);
-                int n; while ((n = fs.Read(buf, 0, buf.Length)) > 0) sha.TransformBlock(buf, 0, n, null, 0);
+                int n;
+                while ((n = fs.Read(buf, 0, buf.Length)) > 0)
+                {
+                    sha.TransformBlock(buf, 0, n, null, 0);
+                }
             }
             else
             {
@@ -99,6 +124,9 @@ public static class HasherFactory
             sha.TransformFinalBlock(Array.Empty<byte>(), 0, 0);
             return "partial-sha256:" + Convert.ToHexString(sha.Hash!).ToLowerInvariant();
         }
-        catch { return null; }
+        catch
+        {
+            return null;
+        }
     }
 }

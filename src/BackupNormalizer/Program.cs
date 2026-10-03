@@ -1,6 +1,7 @@
-﻿using BackupNormalizer;
+using BackupNormalizer;
 
-var cliArgs = args.Where(a => !string.Equals(a, "--elevate", StringComparison.OrdinalIgnoreCase)).ToArray();
+var cliArgs = args.Where(a => !string.Equals(a, "--elevate", StringComparison.OrdinalIgnoreCase))
+    .ToArray();
 bool elevateRequested = cliArgs.Length != args.Length;
 if (elevateRequested && OperatingSystem.IsWindows() && !Elevation.IsWindowsAdmin())
 {

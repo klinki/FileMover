@@ -9,11 +9,15 @@ namespace BackupNormalizer.Tests;
 [Collection("Console")]
 public sealed class DatabaseExportTests : IDisposable
 {
-    private readonly string _fixture = Path.Combine(AppContext.BaseDirectory, "bn-export-" + Guid.NewGuid().ToString("N"));
+    private readonly string _fixture = Path.Combine(
+        AppContext.BaseDirectory,
+        "bn-export-" + Guid.NewGuid().ToString("N")
+    );
     private string Source => Path.Combine(_fixture, "source.db");
     private string Destination => Path.Combine(_fixture, "portable.db");
 
     public DatabaseExportTests() => Directory.CreateDirectory(_fixture);
+
     public void Dispose()
     {
         SqliteConnection.ClearAllPools();
@@ -32,11 +36,43 @@ public sealed class DatabaseExportTests : IDisposable
         var scanner = new Scanner(db, usnMode: "off");
         scanner.ScanRoot("r");
         scanner.HashNeeded("r");
-        db.SaveScanCheckpoint(new ScanCheckpointRow("r", root, "volume", "root", "journal", 100, db.LatestScan("r")!.Id));
-        db.UpsertRoot(new StorageRootRow("bad", "bad", Path.Combine(_fixture, "absent-root"), false, "fs", "unknown", Database.UtcNow()));
+        db.SaveScanCheckpoint(
+            new ScanCheckpointRow(
+                "r",
+                root,
+                "volume",
+                "root",
+                "journal",
+                100,
+                db.LatestScan("r")!.Id
+            )
+        );
+        db.UpsertRoot(
+            new StorageRootRow(
+                "bad",
+                "bad",
+                Path.Combine(_fixture, "absent-root"),
+                false,
+                "fs",
+                "unknown",
+                Database.UtcNow()
+            )
+        );
         Assert.Throws<DirectoryNotFoundException>(() => scanner.ScanRoot("bad"));
         db.InsertPlan("p", "source.db", "s", "source", "r", root, 0);
-        db.InsertOperation("p", 1, OpType.SkipLink, SourceScope.Source, "s", "link", "r", "link", 0, null, skipReason: "source link");
+        db.InsertOperation(
+            "p",
+            1,
+            OpType.SkipLink,
+            SourceScope.Source,
+            "s",
+            "link",
+            "r",
+            "link",
+            0,
+            null,
+            skipReason: "source link"
+        );
         db.AddExecutionLog(1, "INFO", "preserved", Database.UtcNow());
         Assert.True(File.Exists(Source + "-wal"));
 
@@ -47,9 +83,15 @@ public sealed class DatabaseExportTests : IDisposable
         using var exported = Database.OpenReadOnly(Destination, pooling: false);
         Assert.Equal(db.ListRoots(), exported.ListRoots());
         Assert.Equal(db.ListFiles(), exported.ListFiles());
-        Assert.Equal(db.GetHash(db.ListFiles()[0].Id, "sha256"), exported.GetHash(db.ListFiles()[0].Id, "sha256"));
+        Assert.Equal(
+            db.GetHash(db.ListFiles()[0].Id, "sha256"),
+            exported.GetHash(db.ListFiles()[0].Id, "sha256")
+        );
         Assert.Equal(db.GetScanDetails("r"), exported.GetScanDetails("r"));
-        Assert.Equal(db.ListScanDiagnostics(db.LatestScan("bad")!.Id), exported.ListScanDiagnostics(db.LatestScan("bad")!.Id));
+        Assert.Equal(
+            db.ListScanDiagnostics(db.LatestScan("bad")!.Id),
+            exported.ListScanDiagnostics(db.LatestScan("bad")!.Id)
+        );
         Assert.Equal(db.GetScanCheckpoint("r"), exported.GetScanCheckpoint("r"));
         Assert.Equal(db.GetPlan("p"), exported.GetPlan("p"));
         Assert.Equal(db.ListPlanOperations("p"), exported.ListPlanOperations("p"));
@@ -57,7 +99,17 @@ public sealed class DatabaseExportTests : IDisposable
         Assert.Equal(db.AppliedMigrations(), exported.AppliedMigrations());
         Assert.Empty(Directory.GetFiles(_fixture, ".bn-export-*"));
         using var transaction = db.BeginTransaction();
-        db.UpsertRoot(new StorageRootRow("uncommitted", "uncommitted", root, false, "fs", "unknown", Database.UtcNow()));
+        db.UpsertRoot(
+            new StorageRootRow(
+                "uncommitted",
+                "uncommitted",
+                root,
+                false,
+                "fs",
+                "unknown",
+                Database.UtcNow()
+            )
+        );
         string second = Path.Combine(_fixture, "second.db");
         Database.ExportSnapshot(Source, second);
         using var snapshot = Database.OpenReadOnly(second, pooling: false);
@@ -69,11 +121,20 @@ public sealed class DatabaseExportTests : IDisposable
     public void Legacy_Schema_Is_Exported_Without_Migrating_Source_Or_Destination()
     {
         var options = new DbContextOptionsBuilder<BackupNormalizerDbContext>()
-            .UseSqlite(new SqliteConnectionStringBuilder { DataSource = Source, Pooling = false }.ToString()).Options;
+            .UseSqlite(
+                new SqliteConnectionStringBuilder
+                {
+                    DataSource = Source,
+                    Pooling = false,
+                }.ToString()
+            )
+            .Options;
         using (var old = new BackupNormalizerDbContext(options))
         {
             old.GetService<IMigrator>().Migrate("20260925052612_InitialCreate");
-            old.Database.ExecuteSqlRaw("INSERT INTO StorageRoot (Id,Name,Path,CreatedUtc) VALUES ('r','r','unavailable','before')");
+            old.Database.ExecuteSqlRaw(
+                "INSERT INTO StorageRoot (Id,Name,Path,CreatedUtc) VALUES ('r','r','unavailable','before')"
+            );
         }
         byte[] original = File.ReadAllBytes(Source);
         Database.ExportSnapshot(Source, Destination);
@@ -93,7 +154,9 @@ public sealed class DatabaseExportTests : IDisposable
         Assert.Equal("preserve", File.ReadAllText(Destination));
         Assert.Throws<ArgumentException>(() => Database.ExportSnapshot(Source, Source));
         Assert.Throws<ArgumentException>(() => Database.ExportSnapshot(Source, Source + "-wal"));
-        Assert.Throws<FileNotFoundException>(() => Database.ExportSnapshot(Source + ".missing", Path.Combine(_fixture, "absent.db")));
+        Assert.Throws<FileNotFoundException>(() =>
+            Database.ExportSnapshot(Source + ".missing", Path.Combine(_fixture, "absent.db"))
+        );
         string companionOutput = Path.Combine(_fixture, "companion-output.db");
         File.WriteAllText(companionOutput + "-wal", "preserve companion");
         Assert.Throws<IOException>(() => Database.ExportSnapshot(Source, companionOutput));
@@ -120,6 +183,9 @@ public sealed class DatabaseExportTests : IDisposable
             Assert.True(File.Exists(Destination));
             Assert.Equal(2, Cli.Run(["db", "export", "--db", Source]));
         }
-        finally { Console.SetOut(original); }
+        finally
+        {
+            Console.SetOut(original);
+        }
     }
 }

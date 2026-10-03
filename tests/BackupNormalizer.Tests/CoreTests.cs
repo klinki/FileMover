@@ -1,4 +1,5 @@
 using BackupNormalizer;
+
 namespace BackupNormalizer.Tests;
 
 public sealed class PathTests
@@ -23,7 +24,10 @@ public sealed class PathTests
             Assert.Equal("sub/f.txt", Paths.GetRelative(root, full));
             Assert.Equal(full, Paths.CombineRoot(root, "sub/f.txt"));
         }
-        finally { Directory.Delete(root, true); }
+        finally
+        {
+            Directory.Delete(root, true);
+        }
     }
 }
 
@@ -55,23 +59,41 @@ public sealed class MatcherTests
         var groups = Matcher.BuildGroups(files);
         Assert.Equal(2, groups.Count);
     }
-
 }
 
 public sealed class HashCacheTests : IDisposable
 {
-    private readonly string _dir = Path.Combine(Path.GetTempPath(), "bn-" + Guid.NewGuid().ToString("N"));
+    private readonly string _dir = Path.Combine(
+        Path.GetTempPath(),
+        "bn-" + Guid.NewGuid().ToString("N")
+    );
     private readonly string _db;
-    public HashCacheTests() { Directory.CreateDirectory(_dir); _db = Path.Combine(_dir, "t.db"); }
-    public void Dispose() { try { Directory.Delete(_dir, true); } catch { } }
+
+    public HashCacheTests()
+    {
+        Directory.CreateDirectory(_dir);
+        _db = Path.Combine(_dir, "t.db");
+    }
+
+    public void Dispose()
+    {
+        try
+        {
+            Directory.Delete(_dir, true);
+        }
+        catch { }
+    }
 
     [Fact]
     public void Hash_Reused_When_Mtime_And_Size_Match()
     {
-        var dataDir = Path.Combine(_dir, "data"); Directory.CreateDirectory(dataDir);
+        var dataDir = Path.Combine(_dir, "data");
+        Directory.CreateDirectory(dataDir);
         File.WriteAllText(Path.Combine(dataDir, "a.txt"), "hello");
         using var db = new Database(_db);
-        db.UpsertRoot(new StorageRootRow("r", "r", dataDir, true, "fs", "unknown", Database.UtcNow()));
+        db.UpsertRoot(
+            new StorageRootRow("r", "r", dataDir, true, "fs", "unknown", Database.UtcNow())
+        );
         var sc = new Scanner(db);
         sc.ScanRoot("r");
         var r1 = sc.HashNeeded("r", true, 1);

@@ -60,17 +60,39 @@ public sealed class UsnParserTests
         byte[] buffer = Buffer((110, "name"));
         switch (corruption)
         {
-            case "length": BinaryPrimitives.WriteUInt32LittleEndian(buffer.AsSpan(8), 2000); break;
-            case "alignment": BinaryPrimitives.WriteUInt32LittleEndian(buffer.AsSpan(8), 61); break;
-            case "version": BinaryPrimitives.WriteUInt16LittleEndian(buffer.AsSpan(12), 3); break;
-            case "name-offset": BinaryPrimitives.WriteUInt16LittleEndian(buffer.AsSpan(66), 4); break;
-            case "name-length": BinaryPrimitives.WriteUInt16LittleEndian(buffer.AsSpan(64), 500); break;
-            case "odd-name": BinaryPrimitives.WriteUInt16LittleEndian(buffer.AsSpan(64), 3); break;
-            case "zero-id": BinaryPrimitives.WriteUInt64LittleEndian(buffer.AsSpan(16), 0); break;
-            case "zero-parent": BinaryPrimitives.WriteUInt64LittleEndian(buffer.AsSpan(24), 0); break;
-            case "cursor": BinaryPrimitives.WriteInt64LittleEndian(buffer, 90); break;
-            case "before-start": BinaryPrimitives.WriteInt64LittleEndian(buffer.AsSpan(32), 99); break;
-            case "at-end": BinaryPrimitives.WriteInt64LittleEndian(buffer.AsSpan(32), 200); break;
+            case "length":
+                BinaryPrimitives.WriteUInt32LittleEndian(buffer.AsSpan(8), 2000);
+                break;
+            case "alignment":
+                BinaryPrimitives.WriteUInt32LittleEndian(buffer.AsSpan(8), 61);
+                break;
+            case "version":
+                BinaryPrimitives.WriteUInt16LittleEndian(buffer.AsSpan(12), 3);
+                break;
+            case "name-offset":
+                BinaryPrimitives.WriteUInt16LittleEndian(buffer.AsSpan(66), 4);
+                break;
+            case "name-length":
+                BinaryPrimitives.WriteUInt16LittleEndian(buffer.AsSpan(64), 500);
+                break;
+            case "odd-name":
+                BinaryPrimitives.WriteUInt16LittleEndian(buffer.AsSpan(64), 3);
+                break;
+            case "zero-id":
+                BinaryPrimitives.WriteUInt64LittleEndian(buffer.AsSpan(16), 0);
+                break;
+            case "zero-parent":
+                BinaryPrimitives.WriteUInt64LittleEndian(buffer.AsSpan(24), 0);
+                break;
+            case "cursor":
+                BinaryPrimitives.WriteInt64LittleEndian(buffer, 90);
+                break;
+            case "before-start":
+                BinaryPrimitives.WriteInt64LittleEndian(buffer.AsSpan(32), 99);
+                break;
+            case "at-end":
+                BinaryPrimitives.WriteInt64LittleEndian(buffer.AsSpan(32), 200);
+                break;
         }
         Assert.Throws<IOException>(() => NtfsUsnJournal.DecodeBuffer(buffer, buffer.Length, 100));
     }
@@ -103,8 +125,18 @@ public sealed class UsnParserTests
     [Fact]
     public void Repeated_Or_Unordered_Record_Positions_Are_Rejected()
     {
-        foreach (var buffer in new[] { Buffer((110, "first"), (110, "second")), Buffer((120, "first"), (110, "second")) })
-            Assert.Throws<IOException>(() => NtfsUsnJournal.DecodeBuffer(buffer, buffer.Length, 100));
+        foreach (
+            var buffer in new[]
+            {
+                Buffer((110, "first"), (110, "second")),
+                Buffer((120, "first"), (110, "second")),
+            }
+        )
+        {
+            Assert.Throws<IOException>(() =>
+                NtfsUsnJournal.DecodeBuffer(buffer, buffer.Length, 100)
+            );
+        }
     }
 
     [Fact]
@@ -114,6 +146,9 @@ public sealed class UsnParserTests
         Assert.Empty(NtfsUsnJournal.DecodeBuffer(empty, empty.Length, 100).Records);
         var buffer = Buffer((110, "x"));
         BinaryPrimitives.WriteUInt16LittleEndian(buffer.AsSpan(68), 0xd800);
-        Assert.Equal("\ud800", Assert.Single(NtfsUsnJournal.DecodeBuffer(buffer, buffer.Length, 100).Records).Name);
+        Assert.Equal(
+            "\ud800",
+            Assert.Single(NtfsUsnJournal.DecodeBuffer(buffer, buffer.Length, 100).Records).Name
+        );
     }
 }

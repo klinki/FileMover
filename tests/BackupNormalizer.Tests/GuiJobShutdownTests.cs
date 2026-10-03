@@ -11,7 +11,10 @@ public sealed class GuiJobShutdownTests
     [Fact]
     public async Task Closing_The_Main_Window_Cancels_And_Awaits_The_Job()
     {
-        string directory = Path.Combine(Path.GetTempPath(), "bn-gui-job-close-" + Guid.NewGuid().ToString("N"));
+        string directory = Path.Combine(
+            Path.GetTempPath(),
+            "bn-gui-job-close-" + Guid.NewGuid().ToString("N")
+        );
         string root = Path.Combine(directory, "files");
         string database = Path.Combine(directory, "inventory.db");
         Directory.CreateDirectory(root);
@@ -23,7 +26,17 @@ public sealed class GuiJobShutdownTests
             File.WriteAllBytes(Path.Combine(root, "large.bin"), new byte[8 * 1024 * 1024]);
             using (var db = Database.OpenWritable(database, pooling: false))
             {
-                db.UpsertRoot(new StorageRootRow("r", "Files", root, true, "unknown", "sensitive", Database.UtcNow()));
+                db.UpsertRoot(
+                    new StorageRootRow(
+                        "r",
+                        "Files",
+                        root,
+                        true,
+                        "unknown",
+                        "sensitive",
+                        Database.UtcNow()
+                    )
+                );
                 new Scanner(db, usnMode: "off").ScanRoot("r");
             }
             var snapshot = InventorySnapshot.Load(database);
@@ -60,7 +73,11 @@ public sealed class GuiJobShutdownTests
         }
         finally
         {
-            if (window != null) UiTestHost.Run(() => window.Close());
+            if (window != null)
+            {
+                UiTestHost.Run(() => window.Close());
+            }
+
             Directory.Delete(directory, true);
         }
     }

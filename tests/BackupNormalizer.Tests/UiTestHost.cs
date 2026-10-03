@@ -18,7 +18,8 @@ internal static class UiTestHost
 
     private static readonly Thread UiThread = new(() =>
     {
-        AppBuilder.Configure<BackupNormalizer.Ui.App>()
+        AppBuilder
+            .Configure<BackupNormalizer.Ui.App>()
             .UseHeadless(new AvaloniaHeadlessPlatformOptions())
             .SetupWithoutStarting();
         foreach (var work in Queue.GetConsumingEnumerable())
@@ -29,10 +30,15 @@ internal static class UiTestHost
                 Dispatcher.UIThread.RunJobs();
                 work.Done.SetResult(null);
             }
-            catch (Exception ex) { work.Done.SetResult(ex); }
+            catch (Exception ex)
+            {
+                work.Done.SetResult(ex);
+            }
         }
     })
-    { IsBackground = true };
+    {
+        IsBackground = true,
+    };
 
     private static readonly Lock StartLock = new();
 
@@ -40,12 +46,18 @@ internal static class UiTestHost
     {
         lock (StartLock)
         {
-            if (!UiThread.IsAlive) UiThread.Start();
+            if (!UiThread.IsAlive)
+            {
+                UiThread.Start();
+            }
         }
         var done = new TaskCompletionSource<Exception?>();
         Queue.Add(new UiWork(action, done));
         var error = done.Task.GetAwaiter().GetResult();
-        if (error != null) throw new Xunit.Sdk.XunitException("UI thread failed: " + error);
+        if (error != null)
+        {
+            throw new Xunit.Sdk.XunitException("UI thread failed: " + error);
+        }
     }
 }
 

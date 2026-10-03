@@ -4,9 +4,21 @@ namespace BackupNormalizer.Tests;
 
 public sealed class IntegrationTests : IDisposable
 {
-    private readonly string _dir = Path.Combine(Path.GetTempPath(), "bn-it-" + Guid.NewGuid().ToString("N"));
+    private readonly string _dir = Path.Combine(
+        Path.GetTempPath(),
+        "bn-it-" + Guid.NewGuid().ToString("N")
+    );
+
     public IntegrationTests() => Directory.CreateDirectory(_dir);
-    public void Dispose() { try { Directory.Delete(_dir, true); } catch { } }
+
+    public void Dispose()
+    {
+        try
+        {
+            Directory.Delete(_dir, true);
+        }
+        catch { }
+    }
 
     private static void Write(string root, string relative, string contents)
     {
@@ -27,8 +39,10 @@ public sealed class IntegrationTests : IDisposable
     [Fact]
     public void Diff_Plan_Execute_And_Resume_Across_Two_Databases()
     {
-        var source = Path.Combine(_dir, "source"); Directory.CreateDirectory(source);
-        var target = Path.Combine(_dir, "target"); Directory.CreateDirectory(target);
+        var source = Path.Combine(_dir, "source");
+        Directory.CreateDirectory(source);
+        var target = Path.Combine(_dir, "target");
+        Directory.CreateDirectory(target);
         Write(source, "Photos/a.jpg", "bytes");
         Write(target, "Old/a.jpg", "bytes");
         var sourceDbPath = Path.Combine(_dir, "source.db");
@@ -45,7 +59,13 @@ public sealed class IntegrationTests : IDisposable
         var result = new Planner(targetDb).PlanFromRoots(sourceDb, "disk", "disk", "plan");
         Assert.Equal(1, result.Move);
         Assert.Equal(0, result.Copy);
-        Assert.Equal("Target", new Planner(targetDb).ExportPlan("plan").Operations.Single(o => o.Type == "MOVE").SourceKind);
+        Assert.Equal(
+            "Target",
+            new Planner(targetDb)
+                .ExportPlan("plan")
+                .Operations.Single(o => o.Type == "MOVE")
+                .SourceKind
+        );
 
         var execution = new Executor(targetDb).Execute("plan");
         Assert.Equal(0, execution.Conflicts + execution.Failed);
@@ -57,8 +77,10 @@ public sealed class IntegrationTests : IDisposable
     [Fact]
     public void Same_Database_Can_Compare_Disjoint_Roots()
     {
-        var source = Path.Combine(_dir, "s"); Directory.CreateDirectory(source);
-        var target = Path.Combine(_dir, "t"); Directory.CreateDirectory(target);
+        var source = Path.Combine(_dir, "s");
+        Directory.CreateDirectory(source);
+        var target = Path.Combine(_dir, "t");
+        Directory.CreateDirectory(target);
         Write(source, "a.txt", "payload");
         var dbPath = Path.Combine(_dir, "both.db");
         Scan(dbPath, "source", source);
@@ -75,8 +97,10 @@ public sealed class IntegrationTests : IDisposable
     [Fact]
     public void Changed_Destination_Is_Preserved_As_Conflict()
     {
-        var source = Path.Combine(_dir, "s2"); Directory.CreateDirectory(source);
-        var target = Path.Combine(_dir, "t2"); Directory.CreateDirectory(target);
+        var source = Path.Combine(_dir, "s2");
+        Directory.CreateDirectory(source);
+        var target = Path.Combine(_dir, "t2");
+        Directory.CreateDirectory(target);
         Write(source, "a.txt", "good");
         Write(target, "a.txt", "evil");
         var sourceDbPath = Path.Combine(_dir, "s2.db");
@@ -94,9 +118,12 @@ public sealed class IntegrationTests : IDisposable
     [Fact]
     public void Diff_Direction_And_Selected_Roots_Are_Independent()
     {
-        var left = Path.Combine(_dir, "left"); Directory.CreateDirectory(left);
-        var right = Path.Combine(_dir, "right"); Directory.CreateDirectory(right);
-        var unrelated = Path.Combine(_dir, "unrelated"); Directory.CreateDirectory(unrelated);
+        var left = Path.Combine(_dir, "left");
+        Directory.CreateDirectory(left);
+        var right = Path.Combine(_dir, "right");
+        Directory.CreateDirectory(right);
+        var unrelated = Path.Combine(_dir, "unrelated");
+        Directory.CreateDirectory(unrelated);
         Write(left, "left.txt", "one");
         Write(right, "right.txt", "two");
         Write(unrelated, "left.txt", "one");
@@ -119,8 +146,10 @@ public sealed class IntegrationTests : IDisposable
     [Fact]
     public void Missing_Source_At_Execution_Produces_Conflict()
     {
-        var source = Path.Combine(_dir, "missing-source"); Directory.CreateDirectory(source);
-        var target = Path.Combine(_dir, "missing-target"); Directory.CreateDirectory(target);
+        var source = Path.Combine(_dir, "missing-source");
+        Directory.CreateDirectory(source);
+        var target = Path.Combine(_dir, "missing-target");
+        Directory.CreateDirectory(target);
         Write(source, "copy.txt", "payload");
         var sourceDbPath = Path.Combine(_dir, "missing-source.db");
         var targetDbPath = Path.Combine(_dir, "missing-target.db");
@@ -138,8 +167,10 @@ public sealed class IntegrationTests : IDisposable
     [Fact]
     public void Keep_Verifies_Target_Again_At_Execution()
     {
-        var source = Path.Combine(_dir, "keep-source"); Directory.CreateDirectory(source);
-        var target = Path.Combine(_dir, "keep-target"); Directory.CreateDirectory(target);
+        var source = Path.Combine(_dir, "keep-source");
+        Directory.CreateDirectory(source);
+        var target = Path.Combine(_dir, "keep-target");
+        Directory.CreateDirectory(target);
         Write(source, "a.txt", "good");
         Write(target, "a.txt", "good");
         var sourceDbPath = Path.Combine(_dir, "keep-source.db");
@@ -156,8 +187,10 @@ public sealed class IntegrationTests : IDisposable
     [Fact]
     public void Move_Resume_Accepts_Landed_File_After_Crash()
     {
-        var source = Path.Combine(_dir, "resume-source"); Directory.CreateDirectory(source);
-        var target = Path.Combine(_dir, "resume-target"); Directory.CreateDirectory(target);
+        var source = Path.Combine(_dir, "resume-source");
+        Directory.CreateDirectory(source);
+        var target = Path.Combine(_dir, "resume-target");
+        Directory.CreateDirectory(target);
         Write(source, "new.txt", "same");
         Write(target, "old.txt", "same");
         var sourceDbPath = Path.Combine(_dir, "resume-source.db");

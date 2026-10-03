@@ -1,5 +1,5 @@
-﻿using Avalonia;
 using System;
+using Avalonia;
 
 namespace BackupNormalizer.Ui;
 
@@ -20,8 +20,9 @@ sealed class Program
     }
 
     // Avalonia configuration, don't remove; also used by visual designer.
-    public static AppBuilder BuildAvaloniaApp()
-        => AppBuilder.Configure<App>()
+    public static AppBuilder BuildAvaloniaApp() =>
+        AppBuilder
+            .Configure<App>()
             .UsePlatformDetect()
 #if DEBUG
             .WithDeveloperTools()

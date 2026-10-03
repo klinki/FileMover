@@ -11,13 +11,21 @@ namespace BackupNormalizer.Tests;
 
 public sealed class InventoryPanelTests : IDisposable
 {
-    private readonly string _dir = Path.Combine(Path.GetTempPath(), "bn-inventory-ui-" + Guid.NewGuid().ToString("N"));
+    private readonly string _dir = Path.Combine(
+        Path.GetTempPath(),
+        "bn-inventory-ui-" + Guid.NewGuid().ToString("N")
+    );
     private const string Modified = "2026-09-30T12:00:00.0000000Z";
 
     public InventoryPanelTests() => Directory.CreateDirectory(_dir);
+
     public void Dispose()
     {
-        foreach (var path in Directory.GetFiles(_dir, "*.db")) ReleasePools(path);
+        foreach (var path in Directory.GetFiles(_dir, "*.db"))
+        {
+            ReleasePools(path);
+        }
+
         Directory.Delete(_dir, true);
     }
 
@@ -25,33 +33,81 @@ public sealed class InventoryPanelTests : IDisposable
     {
         foreach (var mode in new[] { SqliteOpenMode.ReadWriteCreate, SqliteOpenMode.ReadOnly })
         {
-            using var connection = new SqliteConnection(new SqliteConnectionStringBuilder
-                { DataSource = path, Mode = mode, ForeignKeys = true }.ToString());
+            using var connection = new SqliteConnection(
+                new SqliteConnectionStringBuilder
+                {
+                    DataSource = path,
+                    Mode = mode,
+                    ForeignKeys = true,
+                }.ToString()
+            );
             SqliteConnection.ClearPool(connection);
         }
     }
 
-    private string CreateDatabase(string name, string rootId = "disk", string sensitivity = "sensitive", string scanStatus = ScanStatus.Completed)
+    private string CreateDatabase(
+        string name,
+        string rootId = "disk",
+        string sensitivity = "sensitive",
+        string scanStatus = ScanStatus.Completed
+    )
     {
         string path = Path.Combine(_dir, name + ".db");
         using var db = new Database(path);
-        db.UpsertRoot(new StorageRootRow(rootId, name, "/offline/" + name, false, "unknown", sensitivity, Modified));
+        db.UpsertRoot(
+            new StorageRootRow(
+                rootId,
+                name,
+                "/offline/" + name,
+                false,
+                "unknown",
+                sensitivity,
+                Modified
+            )
+        );
         long scan = db.BeginScan(rootId);
         db.FinishScan(scan, scanStatus);
         return path;
     }
 
-    private static long Add(string path, string relative, long size = 1, string? digest = "aaa",
-        string rootId = "disk", string status = FileStatus.Ok, string hashState = HashState.Ok)
+    private static long Add(
+        string path,
+        string relative,
+        long size = 1,
+        string? digest = "aaa",
+        string rootId = "disk",
+        string status = FileStatus.Ok,
+        string hashState = HashState.Ok
+    )
     {
         using var db = new Database(path);
-        long id = db.UpsertFileEntry(new FileEntryRow(0, rootId, relative, relative.Split('/')[^1], size,
-            Modified, null, null, 1, status, status == FileStatus.Ok ? null : "scan failed"));
-        if (digest != null) db.UpsertHash(new FileHashRow(id, "sha256", digest, size, Modified, Modified, hashState));
+        long id = db.UpsertFileEntry(
+            new FileEntryRow(
+                0,
+                rootId,
+                relative,
+                relative.Split('/')[^1],
+                size,
+                Modified,
+                null,
+                null,
+                1,
+                status,
+                status == FileStatus.Ok ? null : "scan failed"
+            )
+        );
+        if (digest != null)
+        {
+            db.UpsertHash(
+                new FileHashRow(id, "sha256", digest, size, Modified, Modified, hashState)
+            );
+        }
+
         return id;
     }
 
-    private static InventoryRoot Root(string path, string id = "disk") => InventorySnapshot.Load(path).Roots.Single(r => r.Root.Id == id);
+    private static InventoryRoot Root(string path, string id = "disk") =>
+        InventorySnapshot.Load(path).Roots.Single(r => r.Root.Id == id);
 
     [Fact]
     public void Snapshot_Reconstructs_Offline_Tree_Without_Modifying_Database()
@@ -72,7 +128,9 @@ public sealed class InventoryPanelTests : IDisposable
         Assert.Equal("Photos", panel.InventoryPath);
         panel.NavigateTo(panel.Entries.Single(e => e.Name == "2026"));
         Assert.Equal(42, panel.Entries.Single(e => e.Name == "image.jpg").Size);
-        panel.GoUp(); panel.GoUp(); panel.GoUp();
+        panel.GoUp();
+        panel.GoUp();
+        panel.GoUp();
         Assert.Equal("", panel.InventoryPath);
         Assert.Equal(original, File.ReadAllBytes(path));
         using var exclusive = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.None);
@@ -84,7 +142,20 @@ public sealed class InventoryPanelTests : IDisposable
     {
         string path = CreateDatabase("multi", rootId: "first");
         using (var db = new Database(path))
-            db.UpsertRoot(new StorageRootRow("second", "Other drive", "Q:\\Offline", false, "unknown", "insensitive", Modified));
+        {
+            db.UpsertRoot(
+                new StorageRootRow(
+                    "second",
+                    "Other drive",
+                    "Q:\\Offline",
+                    false,
+                    "unknown",
+                    "insensitive",
+                    Modified
+                )
+            );
+        }
+
         Add(path, "first.txt", rootId: "first");
         Add(path, "second.txt", rootId: "second");
         var panel = new FilePanelViewModel();
@@ -98,7 +169,8 @@ public sealed class InventoryPanelTests : IDisposable
     [Fact]
     public void Comparison_Classifies_Content_And_Propagates_Nested_Differences()
     {
-        string left = CreateDatabase("left"), right = CreateDatabase("right");
+        string left = CreateDatabase("left"),
+            right = CreateDatabase("right");
         foreach (var path in new[] { left, right })
         {
             Add(path, "equal/ok.txt");
@@ -128,10 +200,16 @@ public sealed class InventoryPanelTests : IDisposable
     [InlineData("insensitive", "insensitive", ComparisonState.Equal)]
     [InlineData("sensitive", "insensitive", ComparisonState.OnlyLeft)]
     [InlineData("unknown", "unknown", ComparisonState.OnlyLeft)]
-    public void Comparison_Uses_Recorded_Case_Sensitivity(string leftCase, string rightCase, ComparisonState expected)
+    public void Comparison_Uses_Recorded_Case_Sensitivity(
+        string leftCase,
+        string rightCase,
+        ComparisonState expected
+    )
     {
-        string left = CreateDatabase("left", sensitivity: leftCase), right = CreateDatabase("right", sensitivity: rightCase);
-        Add(left, "PHOTO.jpg"); Add(right, "photo.jpg");
+        string left = CreateDatabase("left", sensitivity: leftCase),
+            right = CreateDatabase("right", sensitivity: rightCase);
+        Add(left, "PHOTO.jpg");
+        Add(right, "photo.jpg");
         var comparison = InventoryComparison.Compare(Root(left), "", Root(right), "");
         Assert.Equal(expected, comparison.Left["PHOTO.jpg"]);
     }
@@ -139,9 +217,12 @@ public sealed class InventoryPanelTests : IDisposable
     [Fact]
     public void Comparison_Supports_Different_Subfolder_Bases_And_Type_Conflicts()
     {
-        string left = CreateDatabase("left"), right = CreateDatabase("right");
-        Add(left, "Photos/file.txt"); Add(right, "Backup/file.txt");
-        Add(left, "Photos/collision/sub.txt"); Add(right, "Backup/collision");
+        string left = CreateDatabase("left"),
+            right = CreateDatabase("right");
+        Add(left, "Photos/file.txt");
+        Add(right, "Backup/file.txt");
+        Add(left, "Photos/collision/sub.txt");
+        Add(right, "Backup/collision");
         var comparison = InventoryComparison.Compare(Root(left), "Photos", Root(right), "Backup");
         Assert.Equal(ComparisonState.Equal, comparison.Left["Photos/file.txt"]);
         Assert.Equal(ComparisonState.TypeConflict, comparison.Left["Photos/collision"]);
@@ -152,8 +233,10 @@ public sealed class InventoryPanelTests : IDisposable
     [Fact]
     public void Incomplete_Scans_And_Scan_Errors_Are_Visible()
     {
-        string left = CreateDatabase("left", scanStatus: ScanStatus.Incomplete), right = CreateDatabase("right");
-        Add(left, "broken.txt", status: FileStatus.ScanError); Add(right, "broken.txt");
+        string left = CreateDatabase("left", scanStatus: ScanStatus.Incomplete),
+            right = CreateDatabase("right");
+        Add(left, "broken.txt", status: FileStatus.ScanError);
+        Add(right, "broken.txt");
         var comparison = InventoryComparison.Compare(Root(left), "", Root(right), "");
         Assert.Equal(ComparisonState.ScanError, comparison.Left["broken.txt"]);
         Assert.Contains("Warning", comparison.Summary);
@@ -162,9 +245,12 @@ public sealed class InventoryPanelTests : IDisposable
     [Fact]
     public async Task Two_Databases_With_Equal_Root_Ids_Compare_And_Link_Navigation()
     {
-        string left = CreateDatabase("left"), right = CreateDatabase("right");
-        Add(left, "shared/equal.txt"); Add(right, "shared/equal.txt");
-        Add(left, "shared/extra.txt"); Add(left, "left-only/child.txt");
+        string left = CreateDatabase("left"),
+            right = CreateDatabase("right");
+        Add(left, "shared/equal.txt");
+        Add(right, "shared/equal.txt");
+        Add(left, "shared/extra.txt");
+        Add(left, "left-only/child.txt");
         var vm = new MainViewModel();
         await vm.LoadDatabaseAsync("Left", left);
         await vm.LoadDatabaseAsync("Right", right);
@@ -215,7 +301,17 @@ public sealed class InventoryPanelTests : IDisposable
         string path = CreateDatabase("multi", rootId: "first");
         using (var db = new Database(path))
         {
-            db.UpsertRoot(new StorageRootRow("second", "Second", "/offline/second", false, "unknown", "sensitive", Modified));
+            db.UpsertRoot(
+                new StorageRootRow(
+                    "second",
+                    "Second",
+                    "/offline/second",
+                    false,
+                    "unknown",
+                    "sensitive",
+                    Modified
+                )
+            );
             long scan = db.BeginScan("second");
             db.FinishScan(scan, ScanStatus.Completed);
         }
@@ -243,7 +339,10 @@ public sealed class InventoryPanelTests : IDisposable
         var vm = new MainViewModel();
         await vm.LoadDatabaseAsync("Left", path);
         vm.Left.SelectedEntry = Assert.Single(vm.Left.Entries);
-        vm.StageCopy(); vm.StageMove(); vm.StageTrash(); vm.StageMkdirFromDialog("new");
+        vm.StageCopy();
+        vm.StageMove();
+        vm.StageTrash();
+        vm.StageMkdirFromDialog("new");
         vm.StageMovePaths(new[] { "file.txt" }, _dir);
         Assert.Empty(vm.Staged);
         Assert.Empty(vm.VirtualDirs);
@@ -269,8 +368,10 @@ public sealed class InventoryPanelTests : IDisposable
     [Fact]
     public async Task Refresh_Reloads_Inventory_And_Swap_Preserves_Source_And_Path()
     {
-        string left = CreateDatabase("left"), right = CreateDatabase("right");
-        Add(left, "sub/a.txt"); Add(right, "b.txt");
+        string left = CreateDatabase("left"),
+            right = CreateDatabase("right");
+        Add(left, "sub/a.txt");
+        Add(right, "b.txt");
         var vm = new MainViewModel();
         await vm.LoadDatabaseAsync("Left", left);
         await vm.LoadDatabaseAsync("Right", right);
@@ -293,12 +394,24 @@ public sealed class HeadlessInventoryPanelTests
     [Theory]
     [InlineData(860, 560)]
     [InlineData(1280, 800)]
-    public void Database_Controls_Status_Column_And_Highlights_Render_In_Both_Panels(int width, int height)
+    public void Database_Controls_Status_Column_And_Highlights_Render_In_Both_Panels(
+        int width,
+        int height
+    )
     {
-        var left = new InventoryRoot(new StorageRootRow("disk", "PC", "G:\\Photos", false, "unknown", "sensitive", ""), ScanStatus.Completed);
-        var right = new InventoryRoot(new StorageRootRow("disk", "NAS", "/share/Photos", false, "unknown", "sensitive", ""), ScanStatus.Completed);
+        var left = new InventoryRoot(
+            new StorageRootRow("disk", "PC", "G:\\Photos", false, "unknown", "sensitive", ""),
+            ScanStatus.Completed
+        );
+        var right = new InventoryRoot(
+            new StorageRootRow("disk", "NAS", "/share/Photos", false, "unknown", "sensitive", ""),
+            ScanStatus.Completed
+        );
         foreach (var root in new[] { left, right })
+        {
             root.Nodes[""] = new InventoryNode("", "", true, root.Comparer);
+        }
+
         var folder = new InventoryNode("Only here", "Only here", true, left.Comparer);
         left.Nodes["Only here"] = folder;
         left.Nodes[""].Children[folder.Name] = folder;
@@ -310,21 +423,53 @@ public sealed class HeadlessInventoryPanelTests
             vm.Right.LoadSnapshot(new InventorySnapshot("nas.db", new[] { right }));
             vm.IsComparisonEnabled = true;
             vm.Left.ApplyComparison(comparison.Left, false);
-            var window = new MainWindow { DataContext = vm, Width = width, Height = height };
+            var window = new MainWindow
+            {
+                DataContext = vm,
+                Width = width,
+                Height = height,
+            };
             window.Show();
             Dispatcher.UIThread.RunJobs();
             Thread.Sleep(50);
             Dispatcher.UIThread.RunJobs();
-            var grids = window.GetLogicalDescendants().OfType<DataGrid>().Where(g => g.IsEffectivelyVisible).ToList();
+            var grids = window
+                .GetLogicalDescendants()
+                .OfType<DataGrid>()
+                .Where(g => g.IsEffectivelyVisible)
+                .ToList();
             Assert.Equal(2, grids.Count);
-            Assert.All(grids, g => Assert.True(g.Columns.Single(c => Equals(c.Header, "Comparison")).IsVisible));
-            Assert.All(grids, g => Assert.True(g.Columns.Single(c => Equals(c.Tag, "Name")).ActualWidth >= 100));
-            Assert.All(grids, g => Assert.Equal(g.Bounds.Width >= 600, g.Columns.Single(c => Equals(c.Tag, "Modified")).IsVisible));
-            var buttons = window.GetVisualDescendants().OfType<Button>().Where(b => Equals(b.Content, "Load database...")).ToList();
+            Assert.All(
+                grids,
+                g => Assert.True(g.Columns.Single(c => Equals(c.Header, "Comparison")).IsVisible)
+            );
+            Assert.All(
+                grids,
+                g => Assert.True(g.Columns.Single(c => Equals(c.Tag, "Name")).ActualWidth >= 100)
+            );
+            Assert.All(
+                grids,
+                g =>
+                    Assert.Equal(
+                        g.Bounds.Width >= 600,
+                        g.Columns.Single(c => Equals(c.Tag, "Modified")).IsVisible
+                    )
+            );
+            var buttons = window
+                .GetVisualDescendants()
+                .OfType<Button>()
+                .Where(b => Equals(b.Content, "Load database..."))
+                .ToList();
             Assert.Equal(2, buttons.Count);
             Assert.Contains(buttons, b => Equals(b.Tag, "Right"));
-            Assert.Contains(window.GetVisualDescendants().OfType<TextBlock>(), t => t.Text == "Only left");
-            Assert.Contains(window.GetVisualDescendants().OfType<Border>(), b => b.Classes.Contains("onlyLeft") && b.Background != null);
+            Assert.Contains(
+                window.GetVisualDescendants().OfType<TextBlock>(),
+                t => t.Text == "Only left"
+            );
+            Assert.Contains(
+                window.GetVisualDescendants().OfType<Border>(),
+                b => b.Classes.Contains("onlyLeft") && b.Background != null
+            );
             window.Close();
         });
     }

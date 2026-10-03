@@ -15,26 +15,38 @@ public partial class DatabasePlanReviewWindow : Window
 
     private async void OnExportJson(object? sender, RoutedEventArgs e)
     {
-        if (DataContext is not DatabasePlanReviewViewModel viewModel) return;
+        if (DataContext is not DatabasePlanReviewViewModel viewModel)
+        {
+            return;
+        }
+
         try
         {
-            var file = await StorageProvider.SaveFilePickerAsync(new FilePickerSaveOptions
-            {
-                Title = "Export executor-compatible plan JSON",
-                SuggestedFileName = viewModel.SuggestedJsonName,
-                DefaultExtension = ".json",
-                ShowOverwritePrompt = true,
-                FileTypeChoices = new[]
+            var file = await StorageProvider.SaveFilePickerAsync(
+                new FilePickerSaveOptions
                 {
-                    new FilePickerFileType("JSON plan") { Patterns = new[] { "*.json" } },
-                    FilePickerFileTypes.All,
-                },
-            });
-            if (file == null) return;
+                    Title = "Export executor-compatible plan JSON",
+                    SuggestedFileName = viewModel.SuggestedJsonName,
+                    DefaultExtension = ".json",
+                    ShowOverwritePrompt = true,
+                    FileTypeChoices = new[]
+                    {
+                        new FilePickerFileType("JSON plan") { Patterns = new[] { "*.json" } },
+                        FilePickerFileTypes.All,
+                    },
+                }
+            );
+            if (file == null)
+            {
+                return;
+            }
+
             string? localPath = file.TryGetLocalPath();
             if (string.IsNullOrWhiteSpace(localPath))
             {
-                viewModel.ReportExportError("The selected location does not expose a local file path.");
+                viewModel.ReportExportError(
+                    "The selected location does not expose a local file path."
+                );
                 return;
             }
             viewModel.ExportJson(localPath);

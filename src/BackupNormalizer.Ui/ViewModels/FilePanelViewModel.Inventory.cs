@@ -13,7 +13,13 @@ public sealed partial class FilePanelViewModel
     public event Action? SourceChanged;
 
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(IsDatabase), nameof(IsLive), nameof(SourceLabel), nameof(ShowDriveButtons), nameof(ShowDriveCombo))]
+    [NotifyPropertyChangedFor(
+        nameof(IsDatabase),
+        nameof(IsLive),
+        nameof(SourceLabel),
+        nameof(ShowDriveButtons),
+        nameof(ShowDriveCombo)
+    )]
     public partial InventorySnapshot? Snapshot { get; set; }
 
     [ObservableProperty]
@@ -36,14 +42,19 @@ public sealed partial class FilePanelViewModel
 
     partial void OnSelectedInventoryRootChanged(InventoryRoot? value)
     {
-        if (_changingSource || value == null) return;
+        if (_changingSource || value == null)
+            return;
         _comparisonStates = null;
         _differencesOnly = false;
         NavigateInventory("");
         SourceChanged?.Invoke();
     }
 
-    public void LoadSnapshot(InventorySnapshot snapshot, string? rootId = null, string relativePath = "")
+    public void LoadSnapshot(
+        InventorySnapshot snapshot,
+        string? rootId = null,
+        string relativePath = ""
+    )
     {
         _changingSource = true;
         try
@@ -52,11 +63,19 @@ public sealed partial class FilePanelViewModel
             _comparisonStates = null;
             _differencesOnly = false;
             InventoryRoots.Clear();
-            foreach (var root in snapshot.Roots) InventoryRoots.Add(root);
-            SelectedInventoryRoot = InventoryRoots.FirstOrDefault(r => r.Root.Id == rootId) ?? InventoryRoots[0];
+            foreach (var root in snapshot.Roots)
+            {
+                InventoryRoots.Add(root);
+            }
+
+            SelectedInventoryRoot =
+                InventoryRoots.FirstOrDefault(r => r.Root.Id == rootId) ?? InventoryRoots[0];
             NavigateInventory(relativePath);
         }
-        finally { _changingSource = false; }
+        finally
+        {
+            _changingSource = false;
+        }
         SourceChanged?.Invoke();
     }
 
@@ -75,7 +94,10 @@ public sealed partial class FilePanelViewModel
             RefreshDrives();
             Refresh();
         }
-        finally { _changingSource = false; }
+        finally
+        {
+            _changingSource = false;
+        }
         SourceChanged?.Invoke();
     }
 
@@ -95,15 +117,24 @@ public sealed partial class FilePanelViewModel
         InventoryPath = path;
         string root = SelectedInventoryRoot?.Root.Path ?? "";
         char separator = root.Contains('\\') || (root.Length > 1 && root[1] == ':') ? '\\' : '/';
-        CurrentPath = path.Length == 0 ? root : root.TrimEnd('/', '\\') + separator + path.Replace('/', separator);
+        CurrentPath =
+            path.Length == 0
+                ? root
+                : root.TrimEnd('/', '\\') + separator + path.Replace('/', separator);
         RefreshInventory();
     }
 
-    public void ApplyComparison(IReadOnlyDictionary<string, ComparisonState>? states, bool differencesOnly)
+    public void ApplyComparison(
+        IReadOnlyDictionary<string, ComparisonState>? states,
+        bool differencesOnly
+    )
     {
         _comparisonStates = states;
         _differencesOnly = differencesOnly;
-        if (IsDatabase) RefreshInventory();
+        if (IsDatabase)
+        {
+            RefreshInventory();
+        }
     }
 
     private void RefreshInventory()
@@ -112,31 +143,89 @@ public sealed partial class FilePanelViewModel
         Entries.Clear();
         SelectedEntry = null;
         MarkAnchor = null;
-        if (SelectedInventoryRoot is not { } root) return;
+        if (SelectedInventoryRoot is not { } root)
+        {
+            return;
+        }
+
         if (InventoryPath.Length > 0)
-            Entries.Add(new FileEntryItem("..", InventoryParent(InventoryPath), true, 0, DateTime.MinValue, isParent: true));
+        {
+            Entries.Add(
+                new FileEntryItem(
+                    "..",
+                    InventoryParent(InventoryPath),
+                    true,
+                    0,
+                    DateTime.MinValue,
+                    isParent: true
+                )
+            );
+        }
+
         if (!root.Nodes.TryGetValue(InventoryPath, out var directory) || !directory.IsDirectory)
         {
             Status = "Folder not indexed on this side.";
             return;
         }
-        bool needsDescendantMatches = SearchText.Length > 0 || SelectedInventoryFilter != "All" || _differencesOnly;
-        var visiblePaths = needsDescendantMatches ? FindVisibleInventoryPaths(directory, root) : null;
-        int folders = 0, files = 0, links = 0;
+        bool needsDescendantMatches =
+            SearchText.Length > 0 || SelectedInventoryFilter != "All" || _differencesOnly;
+        var visiblePaths = needsDescendantMatches
+            ? FindVisibleInventoryPaths(directory, root)
+            : null;
+        int folders = 0,
+            files = 0,
+            links = 0;
         foreach (var node in directory.Children.Values)
         {
-            if (visiblePaths != null && !visiblePaths.Contains(node.RelativePath)) continue;
-            var state = _comparisonStates != null && _comparisonStates.TryGetValue(node.RelativePath, out var found)
-                ? found : ComparisonState.None;
-            Entries.Add(new FileEntryItem(node.Name, node.RelativePath, node.IsDirectory, node.Size, node.Modified)
-                { Comparison = state, EntryKind = node.EntryKind, LinkTarget = node.LinkTarget,
-                    TargetPath = node.TargetPath, LinkNote = node.LinkNote });
-            if (node.IsLink) links++; else if (node.IsDirectory) folders++; else files++;
+            if (visiblePaths != null && !visiblePaths.Contains(node.RelativePath))
+            {
+                continue;
+            }
+
+            var state =
+                _comparisonStates != null
+                && _comparisonStates.TryGetValue(node.RelativePath, out var found)
+                    ? found
+                    : ComparisonState.None;
+            Entries.Add(
+                new FileEntryItem(
+                    node.Name,
+                    node.RelativePath,
+                    node.IsDirectory,
+                    node.Size,
+                    node.Modified
+                )
+                {
+                    Comparison = state,
+                    EntryKind = node.EntryKind,
+                    LinkTarget = node.LinkTarget,
+                    TargetPath = node.TargetPath,
+                    LinkNote = node.LinkNote,
+                }
+            );
+            if (node.IsLink)
+            {
+                links++;
+            }
+            else if (node.IsDirectory)
+            {
+                folders++;
+            }
+            else
+            {
+                files++;
+            }
         }
         SortEntries();
         if (selectedPath != null)
-            SelectedEntry = Entries.FirstOrDefault(e => root.Comparer.Equals(e.FullPath, selectedPath));
-        Status = $"{folders} dirs, {files} files, {links} links | Scan: {root.ScanStatus ?? "not scanned"}";
+        {
+            SelectedEntry = Entries.FirstOrDefault(e =>
+                root.Comparer.Equals(e.FullPath, selectedPath)
+            );
+        }
+
+        Status =
+            $"{folders} dirs, {files} files, {links} links | Scan: {root.ScanStatus ?? "not scanned"}";
         DriveStatus = "";
     }
 }

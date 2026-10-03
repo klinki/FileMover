@@ -4,9 +4,24 @@ namespace BackupNormalizer.Tests;
 
 public sealed class PanelViewTests : IDisposable
 {
-    private readonly string _dir = Path.Combine(Path.GetTempPath(), "bn-panel-" + Guid.NewGuid().ToString("N"));
-    public PanelViewTests() { Directory.CreateDirectory(_dir); }
-    public void Dispose() { try { Directory.Delete(_dir, true); } catch { } }
+    private readonly string _dir = Path.Combine(
+        Path.GetTempPath(),
+        "bn-panel-" + Guid.NewGuid().ToString("N")
+    );
+
+    public PanelViewTests()
+    {
+        Directory.CreateDirectory(_dir);
+    }
+
+    public void Dispose()
+    {
+        try
+        {
+            Directory.Delete(_dir, true);
+        }
+        catch { }
+    }
 
     private static void W(string root, string rel, string content)
     {
@@ -118,9 +133,24 @@ public sealed class PanelViewTests : IDisposable
 
 public sealed class PanelSelectionTests : IDisposable
 {
-    private readonly string _dir = Path.Combine(Path.GetTempPath(), "bn-panelsel-" + Guid.NewGuid().ToString("N"));
-    public PanelSelectionTests() { Directory.CreateDirectory(_dir); }
-    public void Dispose() { try { Directory.Delete(_dir, true); } catch { } }
+    private readonly string _dir = Path.Combine(
+        Path.GetTempPath(),
+        "bn-panelsel-" + Guid.NewGuid().ToString("N")
+    );
+
+    public PanelSelectionTests()
+    {
+        Directory.CreateDirectory(_dir);
+    }
+
+    public void Dispose()
+    {
+        try
+        {
+            Directory.Delete(_dir, true);
+        }
+        catch { }
+    }
 
     private static void W(string root, string rel, string content)
     {
@@ -133,7 +163,11 @@ public sealed class PanelSelectionTests : IDisposable
     {
         var sub = Path.Combine(_dir, Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(sub);
-        foreach (var f in files) W(sub, f, "data:" + f);
+        foreach (var f in files)
+        {
+            W(sub, f, "data:" + f);
+        }
+
         var panel = new FilePanelViewModel { CurrentPath = sub };
         panel.Refresh();
         return panel;
@@ -384,26 +418,47 @@ public sealed class MainWindowStaticInitTests
         // constructor without needing a display or Avalonia application instance.
         var ex = Record.Exception(() =>
             System.Runtime.CompilerServices.RuntimeHelpers.RunClassConstructor(
-                typeof(BackupNormalizer.Ui.Views.MainWindow).TypeHandle));
+                typeof(BackupNormalizer.Ui.Views.MainWindow).TypeHandle
+            )
+        );
         Assert.Null(ex);
     }
 }
 
 public sealed class MainViewModelPanelTests : IDisposable
 {
-    private readonly string _dir = Path.Combine(Path.GetTempPath(), "bn-vmpanel-" + Guid.NewGuid().ToString("N"));
-    public MainViewModelPanelTests() { Directory.CreateDirectory(_dir); }
-    public void Dispose() { try { Directory.Delete(_dir, true); } catch { } }
+    private readonly string _dir = Path.Combine(
+        Path.GetTempPath(),
+        "bn-vmpanel-" + Guid.NewGuid().ToString("N")
+    );
+
+    public MainViewModelPanelTests()
+    {
+        Directory.CreateDirectory(_dir);
+    }
+
+    public void Dispose()
+    {
+        try
+        {
+            Directory.Delete(_dir, true);
+        }
+        catch { }
+    }
 
     [Fact]
     public void SwapPanels_Swaps_Paths_And_Refreshes()
     {
-        var a = Path.Combine(_dir, "a"); Directory.CreateDirectory(a);
-        var b = Path.Combine(_dir, "b"); Directory.CreateDirectory(b);
+        var a = Path.Combine(_dir, "a");
+        Directory.CreateDirectory(a);
+        var b = Path.Combine(_dir, "b");
+        Directory.CreateDirectory(b);
         File.WriteAllText(Path.Combine(a, "f.txt"), "x");
         var vm = new MainViewModel { BasePath = _dir };
-        vm.Left.CurrentPath = a; vm.Left.Refresh();
-        vm.Right.CurrentPath = b; vm.Right.Refresh();
+        vm.Left.CurrentPath = a;
+        vm.Left.Refresh();
+        vm.Right.CurrentPath = b;
+        vm.Right.Refresh();
         vm.SwapPanels();
         Assert.Equal(b, vm.Left.CurrentPath);
         Assert.Equal(a, vm.Right.CurrentPath);
@@ -413,9 +468,11 @@ public sealed class MainViewModelPanelTests : IDisposable
     [Fact]
     public void RefreshActive_Reloads_Active_Panel_Only()
     {
-        var a = Path.Combine(_dir, "a"); Directory.CreateDirectory(a);
+        var a = Path.Combine(_dir, "a");
+        Directory.CreateDirectory(a);
         var vm = new MainViewModel { BasePath = _dir };
-        vm.Left.CurrentPath = a; vm.Left.Refresh();
+        vm.Left.CurrentPath = a;
+        vm.Left.Refresh();
         Assert.Empty(vm.Left.Entries.Where(e => !e.IsParentEntry));
         File.WriteAllText(Path.Combine(a, "new.txt"), "x");
         vm.RefreshActive(); // left is active by default
@@ -425,9 +482,24 @@ public sealed class MainViewModelPanelTests : IDisposable
 
 public sealed class VirtualDirTests : IDisposable
 {
-    private readonly string _dir = Path.Combine(Path.GetTempPath(), "bn-virtual-" + Guid.NewGuid().ToString("N"));
-    public VirtualDirTests() { Directory.CreateDirectory(_dir); }
-    public void Dispose() { try { Directory.Delete(_dir, true); } catch { } }
+    private readonly string _dir = Path.Combine(
+        Path.GetTempPath(),
+        "bn-virtual-" + Guid.NewGuid().ToString("N")
+    );
+
+    public VirtualDirTests()
+    {
+        Directory.CreateDirectory(_dir);
+    }
+
+    public void Dispose()
+    {
+        try
+        {
+            Directory.Delete(_dir, true);
+        }
+        catch { }
+    }
 
     [Fact]
     public void Virtual_Child_Appears_Sorted_With_Dirs_And_Navigates()
@@ -467,13 +539,16 @@ public sealed class VirtualDirTests : IDisposable
         Directory.CreateDirectory(sub);
         var vm = new MainViewModel { BasePath = _dir };
         vm.ApplyBase();
-        vm.Left.CurrentPath = sub; vm.Left.Refresh();
-        vm.Right.CurrentPath = _dir; vm.Right.Refresh();
+        vm.Left.CurrentPath = sub;
+        vm.Left.Refresh();
+        vm.Right.CurrentPath = _dir;
+        vm.Right.Refresh();
         vm.StageMkdirFromDialog("newdir");
         Assert.Contains(vm.Staged, o => o.Type == "MKDIR");
         Assert.Contains(vm.Left.Entries, e => e.Name == "newdir" && e.IsVirtual);
         // Other panel navigates in and sees it too once refreshed there.
-        vm.Right.CurrentPath = sub; vm.Right.Refresh();
+        vm.Right.CurrentPath = sub;
+        vm.Right.Refresh();
         Assert.Contains(vm.Right.Entries, e => e.Name == "newdir" && e.IsVirtual);
         // Invalid + duplicate names refused without staging.
         int before = vm.Staged.Count;
@@ -497,9 +572,24 @@ public sealed class StagedOpItemTests
 
 public sealed class StagedRemovalTests : IDisposable
 {
-    private readonly string _dir = Path.Combine(Path.GetTempPath(), "bn-stagedrm-" + Guid.NewGuid().ToString("N"));
-    public StagedRemovalTests() { Directory.CreateDirectory(_dir); }
-    public void Dispose() { try { Directory.Delete(_dir, true); } catch { } }
+    private readonly string _dir = Path.Combine(
+        Path.GetTempPath(),
+        "bn-stagedrm-" + Guid.NewGuid().ToString("N")
+    );
+
+    public StagedRemovalTests()
+    {
+        Directory.CreateDirectory(_dir);
+    }
+
+    public void Dispose()
+    {
+        try
+        {
+            Directory.Delete(_dir, true);
+        }
+        catch { }
+    }
 
     [Fact]
     public void RemoveStaged_Removes_Item_And_Updates_Summary()
@@ -517,9 +607,24 @@ public sealed class StagedRemovalTests : IDisposable
 
 public sealed class DriveBarTests : IDisposable
 {
-    private readonly string _dir = Path.Combine(Path.GetTempPath(), "bn-drivebar-" + Guid.NewGuid().ToString("N"));
-    public DriveBarTests() { Directory.CreateDirectory(_dir); }
-    public void Dispose() { try { Directory.Delete(_dir, true); } catch { } }
+    private readonly string _dir = Path.Combine(
+        Path.GetTempPath(),
+        "bn-drivebar-" + Guid.NewGuid().ToString("N")
+    );
+
+    public DriveBarTests()
+    {
+        Directory.CreateDirectory(_dir);
+    }
+
+    public void Dispose()
+    {
+        try
+        {
+            Directory.Delete(_dir, true);
+        }
+        catch { }
+    }
 
     [Fact]
     public void RefreshDrives_Lists_Ready_Drives_With_Space()
@@ -527,13 +632,16 @@ public sealed class DriveBarTests : IDisposable
         var panel = new FilePanelViewModel { CurrentPath = _dir };
         panel.RefreshDrives();
         Assert.NotEmpty(panel.Drives);
-        Assert.All(panel.Drives, d =>
-        {
-            Assert.False(string.IsNullOrEmpty(d.Root));
-            Assert.True(d.TotalBytes > 0);
-            Assert.True(d.FreeBytes >= 0 && d.FreeBytes <= d.TotalBytes);
-            Assert.Contains("free", d.Display);
-        });
+        Assert.All(
+            panel.Drives,
+            d =>
+            {
+                Assert.False(string.IsNullOrEmpty(d.Root));
+                Assert.True(d.TotalBytes > 0);
+                Assert.True(d.FreeBytes >= 0 && d.FreeBytes <= d.TotalBytes);
+                Assert.Contains("free", d.Display);
+            }
+        );
     }
 
     [Fact]
@@ -561,13 +669,25 @@ public sealed class DriveBarTests : IDisposable
 
 public sealed class DriveComboTests : IDisposable
 {
-    private readonly string _dir = Path.Combine(Path.GetTempPath(), "bn-drivecombo-" + Guid.NewGuid().ToString("N"));
+    private readonly string _dir = Path.Combine(
+        Path.GetTempPath(),
+        "bn-drivecombo-" + Guid.NewGuid().ToString("N")
+    );
+
     public DriveComboTests()
     {
         Directory.CreateDirectory(Path.Combine(_dir, "sub"));
         File.WriteAllText(Path.Combine(_dir, "sub", "f.txt"), "x");
     }
-    public void Dispose() { try { Directory.Delete(_dir, true); } catch { } }
+
+    public void Dispose()
+    {
+        try
+        {
+            Directory.Delete(_dir, true);
+        }
+        catch { }
+    }
 
     [Fact]
     public void Selecting_Drive_Navigates_To_Its_Root()
@@ -606,23 +726,42 @@ public sealed class ScanProgressTests : IDisposable
         public void Report(ScanProgress value) => report(value);
     }
 
-    private readonly string _dir = Path.Combine(Path.GetTempPath(), "bn-scanprog-" + Guid.NewGuid().ToString("N"));
+    private readonly string _dir = Path.Combine(
+        Path.GetTempPath(),
+        "bn-scanprog-" + Guid.NewGuid().ToString("N")
+    );
+
     public ScanProgressTests()
     {
         Directory.CreateDirectory(_dir);
         for (int i = 0; i < 10; i++)
+        {
             File.WriteAllText(Path.Combine(_dir, $"f{i}.txt"), "x");
+        }
     }
-    public void Dispose() { try { Directory.Delete(_dir, true); } catch { } }
+
+    public void Dispose()
+    {
+        try
+        {
+            Directory.Delete(_dir, true);
+        }
+        catch { }
+    }
 
     [Fact]
     public void Progress_Reports_Increasing_Counts_And_Final_Total()
     {
-        string dbp = Path.Combine(Path.GetTempPath(), "bn-scanprog-" + Guid.NewGuid().ToString("N") + ".db");
+        string dbp = Path.Combine(
+            Path.GetTempPath(),
+            "bn-scanprog-" + Guid.NewGuid().ToString("N") + ".db"
+        );
         try
         {
             using var db = new Database(dbp);
-            db.UpsertRoot(new StorageRootRow("r", "r", _dir, true, "fs", "unknown", Database.UtcNow()));
+            db.UpsertRoot(
+                new StorageRootRow("r", "r", _dir, true, "fs", "unknown", Database.UtcNow())
+            );
             Assert.Equal(0, db.CountFiles("r"));
             var seen = new List<ScanProgress>();
             var sc = new Scanner(db);
@@ -632,23 +771,45 @@ public sealed class ScanProgressTests : IDisposable
             Assert.NotEmpty(seen);
             Assert.Equal(10, seen.Max(p => p.Scanned));
             for (int i = 1; i < seen.Count; i++)
+            {
                 Assert.True(seen[i].Scanned >= seen[i - 1].Scanned);
+            }
+
             Assert.Equal(10, db.CountFiles("r"));
         }
-        finally { try { File.Delete(dbp); } catch { } }
+        finally
+        {
+            try
+            {
+                File.Delete(dbp);
+            }
+            catch { }
+        }
     }
 
     [Fact]
     public void No_Progress_Callback_Changes_Nothing()
     {
-        string dbp = Path.Combine(Path.GetTempPath(), "bn-scanprog2-" + Guid.NewGuid().ToString("N") + ".db");
+        string dbp = Path.Combine(
+            Path.GetTempPath(),
+            "bn-scanprog2-" + Guid.NewGuid().ToString("N") + ".db"
+        );
         try
         {
             using var db = new Database(dbp);
-            db.UpsertRoot(new StorageRootRow("r", "r", _dir, true, "fs", "unknown", Database.UtcNow()));
+            db.UpsertRoot(
+                new StorageRootRow("r", "r", _dir, true, "fs", "unknown", Database.UtcNow())
+            );
             var (scanned, errors) = new Scanner(db).ScanRoot("r");
             Assert.Equal((10, 0), (scanned, errors));
         }
-        finally { try { File.Delete(dbp); } catch { } }
+        finally
+        {
+            try
+            {
+                File.Delete(dbp);
+            }
+            catch { }
+        }
     }
 }

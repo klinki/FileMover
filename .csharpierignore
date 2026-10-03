@@ -1,0 +1,12 @@
+# Keep formatting focused on handwritten C#.
+*.axaml
+*.config
+*.csproj
+*.props
+*.slnx
+*.targets
+*.xaml
+*.xml
+src/BackupNormalizer.Core/Migrations/
+.idea/
+TestResults/

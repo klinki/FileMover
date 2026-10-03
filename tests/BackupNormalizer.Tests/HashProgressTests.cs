@@ -7,7 +7,10 @@ namespace BackupNormalizer.Tests;
 [Collection("Console")]
 public sealed class HashProgressTests : IDisposable
 {
-    private readonly string _dir = Path.Combine(Path.GetTempPath(), "bn-hash-progress-" + Guid.NewGuid().ToString("N"));
+    private readonly string _dir = Path.Combine(
+        Path.GetTempPath(),
+        "bn-hash-progress-" + Guid.NewGuid().ToString("N")
+    );
     private readonly string _root;
     private readonly string _dbPath;
 
@@ -20,10 +23,14 @@ public sealed class HashProgressTests : IDisposable
 
     public void Dispose()
     {
-        using var connection = new SqliteConnection(new SqliteConnectionStringBuilder
-        {
-            DataSource = _dbPath, Mode = SqliteOpenMode.ReadWriteCreate, ForeignKeys = true
-        }.ToString());
+        using var connection = new SqliteConnection(
+            new SqliteConnectionStringBuilder
+            {
+                DataSource = _dbPath,
+                Mode = SqliteOpenMode.ReadWriteCreate,
+                ForeignKeys = true,
+            }.ToString()
+        );
         SqliteConnection.ClearPool(connection);
         Directory.Delete(_dir, true);
     }
@@ -36,7 +43,9 @@ public sealed class HashProgressTests : IDisposable
     private Database Scan()
     {
         var db = new Database(_dbPath);
-        db.UpsertRoot(new StorageRootRow("r", "r", _root, true, "fs", "unknown", Database.UtcNow()));
+        db.UpsertRoot(
+            new StorageRootRow("r", "r", _root, true, "fs", "unknown", Database.UtcNow())
+        );
         Assert.Equal(0, new Scanner(db).ScanRoot("r").errors);
         return db;
     }
@@ -49,11 +58,14 @@ public sealed class HashProgressTests : IDisposable
         using var stream = new MemoryStream(bytes);
         var chunks = new List<long>();
 
-        string digest = new Sha256Hasher().HashStream(stream, count =>
-        {
-            chunks.Add(count);
-            Assert.InRange(stream.Position, 1, stream.Length);
-        });
+        string digest = new Sha256Hasher().HashStream(
+            stream,
+            count =>
+            {
+                chunks.Add(count);
+                Assert.InRange(stream.Position, 1, stream.Length);
+            }
+        );
 
         Assert.Equal(Convert.ToHexString(SHA256.HashData(bytes)).ToLowerInvariant(), digest);
         Assert.True(chunks.Count > 1);
@@ -66,7 +78,11 @@ public sealed class HashProgressTests : IDisposable
     {
         var bytes = new byte[8 * 1024 * 1024 + 17];
         Random.Shared.NextBytes(bytes);
-        for (int i = 0; i < 3; i++) File.WriteAllBytes(Path.Combine(_root, $"{i}.bin"), bytes);
+        for (int i = 0; i < 3; i++)
+        {
+            File.WriteAllBytes(Path.Combine(_root, $"{i}.bin"), bytes);
+        }
+
         using var db = Scan();
         var snapshots = new List<HashProgress>();
 
@@ -75,7 +91,10 @@ public sealed class HashProgressTests : IDisposable
         Assert.Equal((3, 0, 0), result);
         Assert.Equal(0, snapshots[0].Processed);
         Assert.Equal(0, snapshots[0].BytesRead);
-        Assert.Contains(snapshots, p => p.BytesRead > 0 && p.Processed == 0 && p.CurrentPath.EndsWith(".bin"));
+        Assert.Contains(
+            snapshots,
+            p => p.BytesRead > 0 && p.Processed == 0 && p.CurrentPath.EndsWith(".bin")
+        );
         Assert.All(snapshots, p => Assert.Equal(3, p.TotalFiles));
         for (int i = 1; i < snapshots.Count; i++)
         {
@@ -105,7 +124,12 @@ public sealed class HashProgressTests : IDisposable
         // Make its cached hash stale so the scanner attempts to read the locked file.
         File.AppendAllText(locked, "changed");
         scanner.ScanRoot("r");
-        using var held = new FileStream(locked, FileMode.Open, FileAccess.ReadWrite, FileShare.None);
+        using var held = new FileStream(
+            locked,
+            FileMode.Open,
+            FileAccess.ReadWrite,
+            FileShare.None
+        );
         var snapshots = new List<HashProgress>();
 
         var result = scanner.HashNeeded(null, false, 2, new InlineProgress(snapshots.Add));
@@ -125,15 +149,21 @@ public sealed class HashProgressTests : IDisposable
         using var db = Scan();
         var snapshots = new List<HashProgress>();
 
-        Assert.Equal((0, 0, 0), new Scanner(db).HashNeeded("r", progress: new InlineProgress(snapshots.Add)));
+        Assert.Equal(
+            (0, 0, 0),
+            new Scanner(db).HashNeeded("r", progress: new InlineProgress(snapshots.Add))
+        );
 
         Assert.NotEmpty(snapshots);
-        Assert.All(snapshots, p =>
-        {
-            Assert.Equal(0, p.TotalFiles);
-            Assert.Equal(0, p.Processed);
-            Assert.Equal(0, p.BytesRead);
-        });
+        Assert.All(
+            snapshots,
+            p =>
+            {
+                Assert.Equal(0, p.TotalFiles);
+                Assert.Equal(0, p.Processed);
+                Assert.Equal(0, p.BytesRead);
+            }
+        );
     }
 
     [Fact]
@@ -142,8 +172,12 @@ public sealed class HashProgressTests : IDisposable
         File.WriteAllText(Path.Combine(_root, "a.txt"), "content");
         using var db = Scan();
 
-        var result = new Scanner(db).HashNeeded("r", true, 1,
-            new InlineProgress(_ => throw new InvalidOperationException("observer failure")));
+        var result = new Scanner(db).HashNeeded(
+            "r",
+            true,
+            1,
+            new InlineProgress(_ => throw new InvalidOperationException("observer failure"))
+        );
 
         Assert.Equal((1, 0, 0), result);
         Assert.Equal(HashState.Ok, db.GetHash(db.ListFiles()[0].Id, "sha256")!.State);
@@ -166,10 +200,16 @@ public sealed class HashProgressTests : IDisposable
                 : ["hash", "r", "--all", "--db", _dbPath, "--no-progress"];
             Assert.Equal(0, Cli.Run(args));
         }
-        finally { Console.SetOut(original); }
+        finally
+        {
+            Console.SetOut(original);
+        }
 
         string label = needed ? "--needed" : "r";
         string skipped = needed ? "reused" : "skipped";
-        Assert.Equal($"hash {label}: 1 hashed, 0 {skipped}, 0 unstable{Environment.NewLine}", output.ToString());
+        Assert.Equal(
+            $"hash {label}: 1 hashed, 0 {skipped}, 0 unstable{Environment.NewLine}",
+            output.ToString()
+        );
     }
 }

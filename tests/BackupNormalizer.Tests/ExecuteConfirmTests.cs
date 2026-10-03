@@ -5,9 +5,24 @@ namespace BackupNormalizer.Tests;
 [Collection("Console")]
 public sealed class ExecuteConfirmTests : IDisposable
 {
-    private readonly string _dir = Path.Combine(Path.GetTempPath(), "bn-confirm-" + Guid.NewGuid().ToString("N"));
-    public ExecuteConfirmTests() { Directory.CreateDirectory(_dir); }
-    public void Dispose() { try { Directory.Delete(_dir, true); } catch { } }
+    private readonly string _dir = Path.Combine(
+        Path.GetTempPath(),
+        "bn-confirm-" + Guid.NewGuid().ToString("N")
+    );
+
+    public ExecuteConfirmTests()
+    {
+        Directory.CreateDirectory(_dir);
+    }
+
+    public void Dispose()
+    {
+        try
+        {
+            Directory.Delete(_dir, true);
+        }
+        catch { }
+    }
 
     private static void W(string root, string rel, string content)
     {
@@ -19,7 +34,9 @@ public sealed class ExecuteConfirmTests : IDisposable
     private static void ScanHash(string dbPath, string rootId, string path)
     {
         using var db = new Database(dbPath);
-        db.UpsertRoot(new StorageRootRow(rootId, rootId, path, true, "fs", "unknown", Database.UtcNow()));
+        db.UpsertRoot(
+            new StorageRootRow(rootId, rootId, path, true, "fs", "unknown", Database.UtcNow())
+        );
         var sc = new Scanner(db);
         sc.ScanRoot(rootId);
         sc.HashNeeded(rootId, true, 1);
@@ -27,9 +44,11 @@ public sealed class ExecuteConfirmTests : IDisposable
 
     private string SetupPlan(string tag)
     {
-        var canon = Path.Combine(_dir, tag + "-c"); Directory.CreateDirectory(canon);
+        var canon = Path.Combine(_dir, tag + "-c");
+        Directory.CreateDirectory(canon);
         W(canon, "a.txt", "confirm-bytes");
-        var target = Path.Combine(_dir, tag + "-t"); Directory.CreateDirectory(target);
+        var target = Path.Combine(_dir, tag + "-t");
+        Directory.CreateDirectory(target);
         W(target, "Old/a.txt", "confirm-bytes");
         string cdb = Path.Combine(_dir, tag + "-c.db");
         string tdb = Path.Combine(_dir, tag + "-t.db");
@@ -41,7 +60,13 @@ public sealed class ExecuteConfirmTests : IDisposable
         return tdb;
     }
 
-    private static int RunExecute(string db, string plan, string stdin, out string stdout, params string[] extra)
+    private static int RunExecute(
+        string db,
+        string plan,
+        string stdin,
+        out string stdout,
+        params string[] extra
+    )
     {
         var oldIn = Console.In;
         var oldOut = Console.Out;
@@ -87,7 +112,15 @@ public sealed class ExecuteConfirmTests : IDisposable
     public void Execute_Yes_Flag_Skips_Prompt()
     {
         string tdb = SetupPlan("flag");
-        int rc = RunExecute(tdb, "flag", "", out _, "--yes", "--target-path", Path.Combine(_dir, "flag-t"));
+        int rc = RunExecute(
+            tdb,
+            "flag",
+            "",
+            out _,
+            "--yes",
+            "--target-path",
+            Path.Combine(_dir, "flag-t")
+        );
         Assert.Equal(0, rc);
         Assert.True(File.Exists(Path.Combine(_dir, "flag-t", "a.txt")));
     }
