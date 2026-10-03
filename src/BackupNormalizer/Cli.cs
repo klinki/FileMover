@@ -265,7 +265,8 @@ public static class Cli
             string line = $"hash {label}: {p.Processed:N0}/{p.TotalFiles:N0} files ({percent}%) | {mib:N1} MiB, {speed:N0} MiB/s | {p.Elapsed:hh\\:mm\\:ss}";
             try
             {
-                int width = Math.Max(1, Console.WindowWidth - 1);
+                int columns = Console.WindowWidth;
+                int width = columns > 1 ? columns - 1 : 120;
                 int pathWidth = width - line.Length - 3;
                 if (p.CurrentPath.Length > 0 && pathWidth > 1)
                 {

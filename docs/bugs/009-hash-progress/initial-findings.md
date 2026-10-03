@@ -23,3 +23,7 @@ Confirmed by inspecting the CLI and hashing call chain. The regression checks wi
 
 - No progress parameter on `HashNeeded`, `HashFile`, or `HashStream`.
 - The hash CLI has only completion summaries and no progress renderer.
+
+## Container follow-up, 2026-10-01
+
+After attempt 001, `docker run -t` with disconnected input showed an initial progress line containing only `h`. The renderer clamps a zero reported terminal width to one column. Attempt 002 adds a fallback width for this container configuration.
