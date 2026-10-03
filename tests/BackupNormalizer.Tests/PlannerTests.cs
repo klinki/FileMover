@@ -100,6 +100,61 @@ public sealed class PlannerTests : IDisposable
     }
 
     [Fact]
+    public void Unhashed_Source_Error_Identifies_Root_Path_And_Database()
+    {
+        var source = Path.Combine(_dir, "unhashed-source"); Directory.CreateDirectory(source);
+        var target = Path.Combine(_dir, "unhashed-target"); Directory.CreateDirectory(target);
+        const string relative = "DriverData/dld/stash/generated/thumbnails/hybrid/159.db";
+        Write(source, relative, "generated");
+        using var sd = CreateDatabase(Path.Combine(_dir, "g.db"), "disk", source, hash: false);
+        using var td = CreateDatabase(Path.Combine(_dir, "d.db"), "disk", target);
+
+        var error = Assert.Throws<InvalidOperationException>(() =>
+            new Planner(td).PlanFromRoots(sd, "disk", "disk", "unhashed"));
+
+        Assert.Contains(relative, error.Message);
+        Assert.Contains("source root 'disk'", error.Message);
+        Assert.Contains(Path.GetFullPath(source), error.Message);
+        Assert.Contains(sd.DbPath, error.Message);
+        Assert.Contains("is not fully hashed", error.Message);
+        Assert.False(td.PlanExists("unhashed"));
+    }
+
+    [Fact]
+    public void Rescanning_Existing_Source_With_Exclusions_Allows_Unhashed_Generated_Files()
+    {
+        var source = Path.Combine(_dir, "excluded-source"); Directory.CreateDirectory(source);
+        var target = Path.Combine(_dir, "excluded-target"); Directory.CreateDirectory(target);
+        const string relative = "DriverData/dld/stash/generated/thumbnails/hybrid/159.db";
+        string[] patterns = ["(^|/)stash/generated(/|$)"];
+        Write(source, relative, "source generated");
+        Write(source, "keep.txt", "keep");
+        Write(target, relative, "target generated");
+        using var sd = CreateDatabase(Path.Combine(_dir, "excluded-g.db"), "g", source, hash: false);
+        using var td = CreateDatabase(Path.Combine(_dir, "excluded-d.db"), "d", target);
+
+        Assert.Equal((1, 1, 0), new Scanner(sd, excludedPathRegexes: patterns).HashNeeded("g", parallelism: 1));
+        Assert.Empty(sd.GetExcludedPathRegexes("g"));
+        Assert.Throws<InvalidOperationException>(() => new Planner(td).PlanFromRoots(sd, "g", "d", "before-rescan"));
+
+        Assert.Equal((1, 0), new Scanner(sd, excludedPathRegexes: patterns).ScanRoot("g"));
+        Assert.Equal(FileStatus.Missing, sd.GetFileEntry("g", relative)!.Status);
+        Assert.Equal(ScanStatus.Completed, sd.LatestScanStatus("g"));
+        Assert.Equal(patterns, sd.GetExcludedPathRegexes("g"));
+        var result = new Planner(td).PlanFromRoots(sd, "g", "d", "after-rescan");
+        Assert.Equal(1, result.Copy);
+        Assert.Equal(0, result.Trash);
+        var operations = new Planner(td).ExportPlan("after-rescan").Operations;
+        Assert.DoesNotContain(operations, op => op.SourcePath == relative || op.DestinationPath == relative);
+
+        var executed = new Executor(td).Execute("after-rescan");
+        Assert.Equal(0, executed.Failed + executed.Conflicts);
+        Assert.Equal("keep", File.ReadAllText(Path.Combine(target, "keep.txt")));
+        Assert.Equal("source generated", File.ReadAllText(Paths.CombineRoot(source, relative)));
+        Assert.Equal("target generated", File.ReadAllText(Paths.CombineRoot(target, relative)));
+    }
+
+    [Fact]
     public void Complete_Rescan_Marks_Removed_Files_Missing()
     {
         var root = Path.Combine(_dir, "rescan"); Directory.CreateDirectory(root);

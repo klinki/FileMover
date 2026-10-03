@@ -110,7 +110,9 @@ public sealed class Planner
                 continue;
             }
             if (want.Hash == null)
-                throw new InvalidOperationException($"source file '{want.RelativePath}' is not fully hashed; hash the source root before planning");
+                throw new InvalidOperationException($"source file '{want.RelativePath}' in source root '{sourceRootId}' " +
+                    $"at '{Path.GetFullPath(sourceRoot.Path)}' (database '{sourceDb.DbPath}') is not fully hashed; " +
+                    "hash the source root before planning");
 
             if (current.TryGetValue(want.RelativePath, out var existing))
             {

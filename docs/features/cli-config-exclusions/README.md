@@ -87,6 +87,35 @@ additional config exclusions; it cannot clear saved rules without a rescan.
 Removing rules brings files back through a full scan, and returning files lose
 their old cached hashes.
 
+### Apply exclusions to an existing database
+
+Add the rule to the configuration, then rescan the existing root. For example,
+the following settings omit `stash/generated` wherever it appears beneath
+the selected root:
+
+```json
+{
+  "excludedPathRegexes": ["(^|/)stash/generated(/|$)"]
+}
+```
+
+```powershell
+./BackupNormalizer.exe scan g --db ./g.db
+./BackupNormalizer.exe hash g --needed --db ./g.db
+```
+
+Save these settings in `settings.json` in the working directory, or select
+the file with `--config`. A changed rule forces a full scan automatically.
+Wait for a successful scan, then hash any remaining files that need it and
+create a new plan. Keep the database; existing hashes for unchanged included
+files are reused.
+
+Adding a rule to the JSON file without rescanning does not change planning.
+Hashing alone skips matching files but does not save the root's new scope.
+The rescan records the scope in the database so future plans preserve matching
+paths in both roots. Scan each root whose own inventory should omit those
+paths.
+
 New diff and automatic plan runs preserve paths excluded by either selected
 root. Excluded files cannot supply move candidates or duplicate survivors, and
 matching destinations remain untouched. Existing plans keep their recorded
