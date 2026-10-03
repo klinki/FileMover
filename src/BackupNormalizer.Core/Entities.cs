@@ -18,6 +18,19 @@ public sealed class ScanEntity
     public string StartedUtc { get; set; } = string.Empty;
     public string? CompletedUtc { get; set; }
     public string Status { get; set; } = string.Empty;
+    public string? Mode { get; set; }
+    public int? ScannedCount { get; set; }
+    public int? ErrorCount { get; set; }
+    public string? FallbackReason { get; set; }
+}
+
+public sealed class ScanDiagnosticEntity
+{
+    public long Id { get; set; }
+    public long ScanId { get; set; }
+    public string Path { get; set; } = string.Empty;
+    public string Message { get; set; } = string.Empty;
+    public string RecordedUtc { get; set; } = string.Empty;
 }
 
 public sealed class ScanCheckpointEntity

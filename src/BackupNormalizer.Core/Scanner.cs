@@ -75,6 +75,8 @@ public sealed class Scanner
         var previousScan = _db.LatestScan(rootId);
         long scanId = _db.BeginScan(rootId);
         int scanned = 0, errors = 0;
+        string scanMode = "NotStarted";
+        var diagnostics = new List<ScanError>();
         var startedAt = DateTime.UtcNow;
         string currentDir = root.Path;
         void Report()
@@ -85,7 +87,9 @@ public sealed class Scanner
         void ReportError(string path, string message)
         {
             errors++;
-            try { onError?.Invoke(new ScanError(rootId, path, message)); }
+            var diagnostic = new ScanError(rootId, path, message);
+            diagnostics.Add(diagnostic);
+            try { onError?.Invoke(diagnostic); }
             catch { } // Diagnostic observers must not change scan results.
         }
         NtfsMftEnumerator.NtfsVolume? mft = null;
@@ -134,6 +138,7 @@ public sealed class Scanner
                 {
                     entries = PrepareIncrementalEntries(root.Path, changes, missing);
                     LastScanWasIncremental = true;
+                    scanMode = "USN";
                     LastScanFallbackReason = null;
                 }
                 catch (IOException ex)
@@ -149,11 +154,13 @@ public sealed class Scanner
             else entries = FullEntries();
             IEnumerable<FsEntry> FullEntries()
             {
+                scanMode = "Recursive";
                 if (_enumerate != null) return _enumerate(root.Path);
                 if (NtfsMftEnumerator.TryCreate(root.Path, _mftMode, out var volume, out string? note))
                 {
                     if (note != null) Log.Info(note);
                     mft = volume;
+                    scanMode = "MFT";
                     string volumeRoot = Path.GetPathRoot(Path.GetFullPath(root.Path))!;
                     return volume!.EnumerateFiles(volumeRoot, root.Path)
                         .Select(f => new FsEntry(f.FullPath, f.IsDirectory, f.Size, f.ModifiedUtc, f.CreatedUtc,
@@ -326,6 +333,8 @@ public sealed class Scanner
         finally
         {
             scanTransaction?.Dispose();
+            try { _db.SaveScanDiagnostics(scanId, scanMode, scanned, LastScanFallbackReason, diagnostics); }
+            catch (Exception ex) { Log.Error($"Cannot save scan #{scanId} diagnostics: {ex.Message}"); }
             journal?.Dispose();
             mft?.Dispose();
         }

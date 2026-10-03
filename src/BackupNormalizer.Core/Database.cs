@@ -11,7 +11,7 @@ public sealed record FileEntryRow(long Id, string StorageRootId, string Relative
     string EntryKind = BackupNormalizer.EntryKind.File, string? LinkTarget = null, string? TargetPath = null, string? LinkNote = null);
 public sealed record FileHashRow(long FileEntryId, string Algorithm, string Digest, long SizeAtHash, string ModifiedUtcAtHash, string CalculatedUtc, string State);
 
-public sealed class Database : IDisposable
+public sealed partial class Database : IDisposable
 {
     private readonly bool _readOnly;
     private readonly bool _hasLinkMetadata;

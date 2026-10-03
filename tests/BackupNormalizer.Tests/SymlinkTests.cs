@@ -277,7 +277,7 @@ public sealed class SymlinkTests : IDisposable
         Assert.False(node.HasScanError);
         Assert.Equal(bytes, File.ReadAllBytes(path));
         using var upgraded = new Database(path);
-        Assert.Equal(4, upgraded.AppliedMigrations().Count);
+        Assert.Equal(5, upgraded.AppliedMigrations().Count);
         Assert.Equal(ScanStatus.Incomplete, upgraded.LatestScanStatus("r"));
         Assert.Equal(FileStatus.Ok, upgraded.GetFileEntry("r", "link")!.Status);
         Assert.Equal(EntryKind.ReparsePoint, upgraded.GetFileEntry("r", "link")!.EntryKind);

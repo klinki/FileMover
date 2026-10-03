@@ -452,6 +452,9 @@ public sealed class UsnScanTests : IDisposable
         Assert.Null(db.GetScanCheckpoint("r"));
         Assert.Equal(ScanStatus.Failed, db.LatestScanStatus("r"));
         Assert.Equal(2, _fullScans);
+        var scanDetails = db.GetScanDetails("r")!;
+        Assert.Equal(1, scanDetails.ErrorCount);
+        Assert.Equal("Full retry cannot enumerate the root.", Assert.Single(db.ListScanDiagnostics(scanDetails.Scan.Id)).Message);
     }
 
     [Fact]
@@ -467,7 +470,7 @@ public sealed class UsnScanTests : IDisposable
             Assert.Equal(3, readOnly.AppliedMigrations().Count);
         }
         using var upgraded = Open();
-        Assert.Equal(4, upgraded.AppliedMigrations().Count);
+        Assert.Equal(5, upgraded.AppliedMigrations().Count);
         Assert.False(upgraded.Context.Database.HasPendingModelChanges());
         Scanner(upgraded).ScanRoot("r");
         Assert.NotNull(upgraded.GetScanCheckpoint("r"));

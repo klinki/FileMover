@@ -6,6 +6,7 @@ public sealed class BackupNormalizerDbContext(DbContextOptions<BackupNormalizerD
 {
     public DbSet<StorageRootEntity> StorageRoots => Set<StorageRootEntity>();
     public DbSet<ScanEntity> Scans => Set<ScanEntity>();
+    public DbSet<ScanDiagnosticEntity> ScanDiagnostics => Set<ScanDiagnosticEntity>();
     public DbSet<ScanCheckpointEntity> ScanCheckpoints => Set<ScanCheckpointEntity>();
     public DbSet<FileEntryEntity> FileEntries => Set<FileEntryEntity>();
     public DbSet<FileHashEntity> FileHashes => Set<FileHashEntity>();
@@ -41,6 +42,17 @@ public sealed class BackupNormalizerDbContext(DbContextOptions<BackupNormalizerD
             entity.Property(x => x.CompletedUtc).HasColumnName("CompletedUtc");
             entity.Property(x => x.Status).HasColumnName("Status").HasDefaultValue(ScanStatus.Started);
             entity.HasOne<StorageRootEntity>().WithMany().HasForeignKey(x => x.StorageRootId).OnDelete(DeleteBehavior.NoAction);
+        });
+
+        modelBuilder.Entity<ScanDiagnosticEntity>(entity =>
+        {
+            entity.ToTable("ScanDiagnostic");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.Path).IsRequired();
+            entity.Property(x => x.Message).IsRequired();
+            entity.Property(x => x.RecordedUtc).IsRequired();
+            entity.HasIndex(x => x.ScanId);
+            entity.HasOne<ScanEntity>().WithMany().HasForeignKey(x => x.ScanId).OnDelete(DeleteBehavior.Cascade);
         });
 
         modelBuilder.Entity<ScanCheckpointEntity>(entity =>

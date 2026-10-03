@@ -16,6 +16,7 @@ public static class Cli
                 "init" => Init(args[1..]),
                 "root" => Root(args[1..]),
                 "scan" => Scan(args[1..]),
+                "status" => Status(args[1..]),
                 "hash" => Hash(args[1..]),
                 "plan" => Plan(args[1..]),
                 "execute" => Execute(args[1..]),
@@ -43,6 +44,8 @@ public static class Cli
               root add <id> <path> [--name N] [--writable true|false] [--db PATH]
               root list [--db PATH]
               scan <rootId|--all> [--db PATH] [--mft off|auto|require] [--usn auto|off] [--full] [--no-progress]
+              scan errors <rootId> [--scan ID] [--db PATH] [--json]
+              status [rootId] [--db PATH] [--hash-algo ALGORITHM] [--json]
               hash <rootId> --all | hash --needed [--db PATH] [--parallelism N] [--no-progress]
               plan --source-db S.db --source-root R --target-db T.db --target-root R [--plan ID]
               plan show <plan-id> [--db PATH] | plan export <plan-id> [--format json] [--output F] [--db PATH]
@@ -64,6 +67,63 @@ public static class Cli
     }
 
     private static int Version() { Console.WriteLine("BackupNormalizer 0.1.0"); return 0; }
+
+    private static void WriteJson(object value) => Console.WriteLine(System.Text.Json.JsonSerializer.Serialize(value,
+        new System.Text.Json.JsonSerializerOptions { WriteIndented = true, PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase }));
+
+    private static string TerminalText(string value) => new(value.Select(c => char.IsControl(c) ? ' ' : c).ToArray());
+
+    private static int Status(string[] a)
+    {
+        var config = AppConfig.Load(Opt(a, "--config", AppConfig.DefaultPath));
+        using var db = Database.OpenReadOnly(Opt(a, "--db", config.Database));
+        string algorithm = Opt(a, "--hash-algo", config.HashAlgorithm);
+        string? selectedRoot = a.Length > 0 && !a[0].StartsWith("--") ? a[0] : null;
+        var roots = selectedRoot == null ? db.ListRoots().Select(r => r.Id).ToList() : [selectedRoot];
+        var statuses = roots.Select(r => db.GetInventoryStatus(r, algorithm)).ToList();
+        if (Has(a, "--json")) WriteJson(statuses);
+        else foreach (var status in statuses)
+        {
+            Console.WriteLine(TerminalText($"root {status.Root.Id}: {status.Root.Path}"));
+            var latest = status.LatestScan;
+            Console.WriteLine(TerminalText(latest == null ? "  scan: none" :
+                $"  scan #{latest.Scan.Id}: {latest.Scan.Status}, {latest.Mode ?? "mode unknown"}, {latest.ScannedCount?.ToString() ?? "unknown"} entries, {latest.ErrorCount?.ToString() ?? "unknown"} errors"));
+            Console.WriteLine($"  last successful scan: {status.LastSuccessfulScan?.CompletedUtc ?? "none"}");
+            Console.WriteLine($"  files: {status.RegularFiles}; skipped links: {status.Links}; missing entries: {status.MissingEntries}; entry errors: {status.EntryErrors}");
+            Console.WriteLine($"  {TerminalText(algorithm)} hashes: {status.UsableHashes} usable, {status.MissingHashes} needed");
+            Console.WriteLine($"  USN checkpoint: {(status.Checkpoint == null ? "none; next scan uses full enumeration" : "stored; checked against the journal on the next scan")}");
+            if (latest?.FallbackReason != null) Console.WriteLine(TerminalText($"  fallback: {latest.FallbackReason}"));
+            Console.WriteLine(TerminalText($"  planning: {(status.PlanningReady ? "ready for content planning" : status.BlockingReason)}"));
+            foreach (var error in status.Errors) Console.WriteLine(TerminalText($"  ERROR \"{error.Path}\": {error.Message}"));
+            if (latest != null && latest.ErrorCount == null) Console.WriteLine("  Historical scan diagnostics are unavailable. Rescan to record details.");
+        }
+        return statuses.All(s => s.PlanningReady) ? 0 : 3;
+    }
+
+    private static int ScanErrors(string[] a)
+    {
+        if (a.Length == 0 || a[0].StartsWith("--")) return Fail("scan errors requires a root ID");
+        using var db = Database.OpenReadOnly(Opt(a, "--db", AppConfig.Load(Opt(a, "--config", AppConfig.DefaultPath)).Database));
+        long? scanId = null;
+        if (Has(a, "--scan"))
+        {
+            if (!long.TryParse(Opt(a, "--scan", ""), out long requested) || requested <= 0) return Fail("--scan requires a positive scan ID");
+            scanId = requested;
+        }
+        if (db.GetRoot(a[0]) == null) return Fail($"unknown root '{a[0]}'");
+        var details = db.GetScanDetails(a[0], scanId);
+        if (details == null) return Fail("scan not found for this root");
+        var errors = db.ListScanDiagnostics(details.Scan.Id);
+        if (Has(a, "--json")) WriteJson(new { scan = details, errors });
+        else
+        {
+            Console.WriteLine(TerminalText($"scan {a[0]} #{details.Scan.Id}: {details.Scan.Status}"));
+            if (details.ErrorCount == null) Console.WriteLine("Historical scan diagnostics are unavailable. Rescan to record details.");
+            else if (errors.Count == 0) Console.WriteLine("No recorded scan errors.");
+            foreach (var error in errors) Console.WriteLine(TerminalText($"{error.RecordedUtc} ERROR \"{error.Path}\": {error.Message}"));
+        }
+        return 0;
+    }
     private static int Fail(string m) { Console.Error.WriteLine("error: " + m); return 2; }
 
     private static string Opt(string[] a, string name, string fallback)
@@ -111,6 +171,7 @@ public static class Cli
 
     private static int Scan(string[] a)
     {
+        if (a.Length > 0 && a[0] == "errors") return ScanErrors(a[1..]);
         if (a.Length == 0) return Fail("scan <rootId|--all>");
         string db = Opt(a, "--db", AppConfig.Load(Opt(a, "--config", AppConfig.DefaultPath)).Database);
         string algo = Opt(a, "--hash-algo", AppConfig.Load(Opt(a, "--config", AppConfig.DefaultPath)).HashAlgorithm);
