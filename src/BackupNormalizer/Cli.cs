@@ -17,6 +17,7 @@ public static class Cli
                 "root" => Root(args[1..]),
                 "scan" => Scan(args[1..]),
                 "status" => Status(args[1..]),
+                "db" => Db(args[1..]),
                 "hash" => Hash(args[1..]),
                 "plan" => Plan(args[1..]),
                 "execute" => Execute(args[1..]),
@@ -46,6 +47,7 @@ public static class Cli
               scan <rootId|--all> [--db PATH] [--mft off|auto|require] [--usn auto|off] [--full] [--no-progress]
               scan errors <rootId> [--scan ID] [--db PATH] [--json]
               status [rootId] [--db PATH] [--hash-algo ALGORITHM] [--json]
+              db export --db SOURCE --output DESTINATION [--json]
               hash <rootId> --all | hash --needed [--db PATH] [--parallelism N] [--no-progress]
               plan --source-db S.db --source-root R --target-db T.db --target-root R [--plan ID]
               plan show <plan-id> [--db PATH] | plan export <plan-id> [--format json] [--output F] [--db PATH]
@@ -122,6 +124,18 @@ public static class Cli
             else if (errors.Count == 0) Console.WriteLine("No recorded scan errors.");
             foreach (var error in errors) Console.WriteLine(TerminalText($"{error.RecordedUtc} ERROR \"{error.Path}\": {error.Message}"));
         }
+        return 0;
+    }
+
+    private static int Db(string[] a)
+    {
+        if (a.Length == 0 || a[0] != "export") return Fail("db requires the export subcommand");
+        string destination = Opt(a, "--output", "");
+        if (string.IsNullOrWhiteSpace(destination)) return Fail("db export requires --output");
+        string source = Opt(a, "--db", AppConfig.Load(Opt(a, "--config", AppConfig.DefaultPath)).Database);
+        Database.ExportSnapshot(source, destination);
+        if (Has(a, "--json")) WriteJson(new { source = Path.GetFullPath(source), destination = Path.GetFullPath(destination) });
+        else Console.WriteLine(TerminalText($"exported inventory snapshot: {Path.GetFullPath(destination)}"));
         return 0;
     }
     private static int Fail(string m) { Console.Error.WriteLine("error: " + m); return 2; }
