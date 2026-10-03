@@ -75,6 +75,14 @@ Closing the jobs window keeps the job running; closing the app cancels and await
 Results remain available in the jobs window, and both panels refresh when they use the
 changed database. See the [background jobs guide](../../docs/features/gui-background-jobs/README.md).
 
+Use **File → Export active inventory snapshot...** to save a portable database to a new
+file. The export includes committed SQLite WAL data and preserves the original inventory.
+The app remembers panel sources, root selections, folders, the active panel, divider, and
+column widths. Unavailable saved roots or folders produce a warning and use a safe
+fallback. Staged operations are never restored automatically. Recorded paths are labeled,
+and the details pane reports local root availability. See the
+[portability guide](../../docs/features/gui-portability/README.md).
+
 Links show their kind in the size column. Hover over a name to see its target
 text, absolute immediate target path, and any metadata note. Linked folders
 cannot be opened. Links are excluded from content comparisons and scan-error

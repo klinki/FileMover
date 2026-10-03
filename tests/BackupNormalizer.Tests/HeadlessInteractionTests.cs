@@ -298,8 +298,9 @@ public sealed class HeadlessFallbackShortcutTests
                 Pump6();
                 Assert.Empty(vm.Left.Entries.Where(e => e.IsMarked).ToList());
                 // ...but never hijack text input.
-                var box = w.GetVisualDescendants().OfType<TextBox>().First();
-                box.Focus();
+                var box = w.GetVisualDescendants().OfType<TextBox>()
+                    .First(b => b.IsEffectivelyVisible && b.IsEffectivelyEnabled);
+                Assert.True(box.Focus());
                 Pump6();
                 w.KeyPress(Key.A, RawInputModifiers.Control, PhysicalKey.A, "a");
                 Pump6();

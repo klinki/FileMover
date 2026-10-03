@@ -5,6 +5,9 @@
              x:DataType="vm:FilePanelViewModel">
   <Expander x:Name="DetailsExpander" Header="Selected entry details" IsExpanded="True" IsVisible="{Binding IsDatabase}">
     <ScrollViewer MaxHeight="150" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+      <StackPanel Spacing="4">
+        <TextBlock Text="{Binding RecordedRootLabel}" TextWrapping="Wrap" Margin="8,0" FontSize="11" />
+        <TextBlock Text="{Binding LocalRootLabel}" TextWrapping="Wrap" Margin="8,0" FontSize="11" />
       <Grid Margin="8,0,8,8">
         <TextBlock Text="Select an inventory entry to see its recorded details."
                    TextWrapping="Wrap" IsVisible="{Binding !HasSelectedInventoryEntry}" />
@@ -39,6 +42,7 @@
                      IsVisible="{Binding SelectedDetailsIsLink}" />
         </Grid>
       </Grid>
+      </StackPanel>
     </ScrollViewer>
   </Expander>
 </UserControl>

@@ -48,8 +48,10 @@ public partial class MainWindow : Window
         Title = $"BackupNormalizer {BuildInfo.FromAssembly(typeof(MainWindow).Assembly).ShortVersion} - Inventory comparison and planner";
         DataContextChanged += OnDataContextChanged;
         Closing += OnClosingWithInventoryJob;
+        Opened += RestoreBrowsingSession;
         Closed += (_, _) =>
         {
+            SaveBrowsingSession();
             if (_observedViewModel != null) _observedViewModel.PropertyChanged -= OnViewModelChanged;
             StopAutoScroll();
         };

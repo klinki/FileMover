@@ -2,6 +2,7 @@ using Avalonia;
 using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Markup.Xaml;
 using BackupNormalizer.Ui.ViewModels;
+using BackupNormalizer.Ui.Models;
 using BackupNormalizer.Ui.Views;
 
 namespace BackupNormalizer.Ui;
@@ -20,6 +21,7 @@ public partial class App : Application
             desktop.MainWindow = new MainWindow
             {
                 DataContext = new MainViewModel(),
+                SessionStore = new GuiSessionStore(),
             };
         }
 

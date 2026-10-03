@@ -92,7 +92,10 @@
             </DataTemplate>
           </ItemsControl.ItemTemplate>
         </ItemsControl>
-        <TextBox Text="{Binding CurrentPath}" IsReadOnly="True" ToolTip.Tip="{Binding CurrentPath}" />
+        <Grid ColumnDefinitions="Auto,*" ColumnSpacing="6">
+          <TextBlock Text="{Binding PathCaption}" VerticalAlignment="Center" FontSize="11" />
+          <TextBox Grid.Column="1" Text="{Binding CurrentPath}" IsReadOnly="True" ToolTip.Tip="{Binding CurrentPath}" />
+        </Grid>
         <TextBlock Text="{Binding Status}" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Status}" />
         <TextBlock Text="{Binding SelectedInventoryRoot.HealthSummary}" IsVisible="{Binding IsDatabase}"
                    TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding SelectedInventoryRoot.HealthSummary}" />
@@ -130,6 +133,7 @@
       <MenuItem Header="_File">
         <MenuItem Header="Load database in left panel..." Tag="Left" Click="OnLoadDatabaseMenu" IsEnabled="{Binding CanChangePanelSource}" />
         <MenuItem Header="Load database in right panel..." Tag="Right" Click="OnLoadDatabaseMenu" IsEnabled="{Binding CanChangePanelSource}" />
+        <MenuItem Header="Export active inventory snapshot..." Click="OnExportInventory" IsEnabled="{Binding CanExportInventory}" />
         <Separator />
         <MenuItem Header="Save plan JSON" Command="{Binding SaveJsonCommand}" />
         <MenuItem Header="Write plan to DB" Command="{Binding WriteToDbCommand}" />
