@@ -13,6 +13,15 @@ dotnet test BackupNormalizer.slnx -c Release
 
 The examples use `bn` as shorthand for `dotnet run --project src/BackupNormalizer --` or a published `BackupNormalizer` binary.
 
+Build identity and self-contained CLI/UI release ZIPs are documented in the
+[versioned release guide](docs/features/versioned-releases/README.md).
+
+Inspect an inventory with `bn status [rootId] --db inventory.db`, retrieve failures
+with `bn scan errors <rootId> --db inventory.db`, or export a standalone copy with
+`bn db export --db inventory.db --output portable.db`. See the
+[inventory diagnostics guide](docs/features/inventory-diagnostics/README.md) and
+[portable export guide](docs/features/portable-inventory-export/README.md).
+
 ## Compare and plan
 
 Register a directory in each database, scan it, and hash its files:

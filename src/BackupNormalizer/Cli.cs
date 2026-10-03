@@ -12,7 +12,7 @@ public static class Cli
             string cmd = args[0].ToLowerInvariant();
             return cmd switch
             {
-                "--version" or "version" => Version(),
+                "--version" or "version" => Version(args[1..]),
                 "init" => Init(args[1..]),
                 "root" => Root(args[1..]),
                 "scan" => Scan(args[1..]),
@@ -38,8 +38,8 @@ public static class Cli
 
     private static int Help()
     {
-        Console.WriteLine("""
-            backup-normalizer 0.1.0 — per-drive source/target comparison
+        Console.WriteLine($"""
+            backup-normalizer {BuildInfo.FromAssembly(typeof(Cli).Assembly).ShortVersion} — per-drive source/target comparison
               Usage: BackupNormalizer <command> [options]
               init [--db PATH] [--config PATH]
               root add <id> <path> [--name N] [--writable true|false] [--db PATH]
@@ -68,7 +68,13 @@ public static class Cli
         return 0;
     }
 
-    private static int Version() { Console.WriteLine("BackupNormalizer 0.1.0"); return 0; }
+    private static int Version(string[] a)
+    {
+        var build = BuildInfo.FromAssembly(typeof(Cli).Assembly);
+        if (Has(a, "--json")) WriteJson(build);
+        else Console.WriteLine(build);
+        return 0;
+    }
 
     private static void WriteJson(object value) => Console.WriteLine(System.Text.Json.JsonSerializer.Serialize(value,
         new System.Text.Json.JsonSerializerOptions { WriteIndented = true, PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase }));

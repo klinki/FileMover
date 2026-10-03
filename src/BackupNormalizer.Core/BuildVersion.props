@@ -1,0 +1,10 @@
+<Project>
+  <PropertyGroup>
+    <Version>0.2.0</Version>
+    <BuildSourceState Condition="'$(BuildSourceState)' == ''">unknown</BuildSourceState>
+  </PropertyGroup>
+  <ItemGroup>
+    <AssemblyMetadata Include="BuildSourceState" Value="$(BuildSourceState)" />
+    <AssemblyMetadata Include="BuildRuntimeIdentifier" Value="$(RuntimeIdentifier)" />
+  </ItemGroup>
+</Project>

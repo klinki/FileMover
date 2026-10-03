@@ -45,6 +45,7 @@ public partial class MainWindow : Window
     public MainWindow()
     {
         InitializeComponent();
+        Title = $"BackupNormalizer {BuildInfo.FromAssembly(typeof(MainWindow).Assembly).ShortVersion} - Inventory comparison and planner";
         DataContextChanged += OnDataContextChanged;
         Closed += (_, _) =>
         {
