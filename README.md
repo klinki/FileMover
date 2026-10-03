@@ -176,6 +176,9 @@ This is the first release schema. Databases created by the earlier pre-release s
 
 ## Desktop planner
 
+Compare content across several disks with [backup coverage](docs/features/backup-coverage/README.md),
+available through `bn coverage` and **Inventory → Backup coverage...** in the desktop app.
+
 Run `dotnet run --project src/BackupNormalizer.Ui` to stage manual copy, move, folder, and trash operations. The UI only writes a plan. See the [desktop planner guide](src/BackupNormalizer.Ui/README.md) for its controls and CLI execution steps.
 
 ## QNAP

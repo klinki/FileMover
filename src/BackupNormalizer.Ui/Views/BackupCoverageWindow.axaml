@@ -1,0 +1,51 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:BackupNormalizer.Ui.ViewModels"
+        x:Class="BackupNormalizer.Ui.Views.BackupCoverageWindow"
+        x:DataType="vm:BackupCoverageViewModel"
+        Title="Backup coverage" Width="1100" Height="760" MinWidth="760" MinHeight="540"
+        WindowStartupLocation="CenterOwner">
+  <Grid Margin="16" RowDefinitions="Auto,Auto,180,Auto,*,140,Auto" RowSpacing="8">
+    <StackPanel Spacing="4">
+      <TextBlock Text="Backup coverage across devices" FontSize="22" FontWeight="SemiBold" />
+      <TextBlock Text="Assign the same device label to roots and exported inventories from the same physical device. Counts describe recorded content, not live backup health."
+                 TextWrapping="Wrap" />
+    </StackPanel>
+    <StackPanel Grid.Row="1" Orientation="Horizontal" Spacing="8">
+      <Button Content="Add inventories..." Click="OnAddInventories" IsEnabled="{Binding CanEdit}" />
+      <Button Content="Remove selected root" Command="{Binding RemoveSourceCommand}" />
+      <Button Content="Analyze coverage" Command="{Binding AnalyzeCommand}" />
+      <ProgressBar IsIndeterminate="True" IsVisible="{Binding IsBusy}" Width="100" />
+    </StackPanel>
+    <DataGrid Grid.Row="2" ItemsSource="{Binding Sources}" SelectedItem="{Binding SelectedSource}"
+              IsEnabled="{Binding CanEdit}" AutoGenerateColumns="False" CanUserResizeColumns="True">
+      <DataGrid.Columns>
+        <DataGridTextColumn Header="Device label (editable)" Binding="{Binding DeviceId, Mode=TwoWay}" Width="180" />
+        <DataGridTextColumn Header="Inventory" Binding="{Binding DatabasePath}" IsReadOnly="True" Width="2*" />
+        <DataGridTextColumn Header="Root" Binding="{Binding RootLabel}" IsReadOnly="True" Width="*" />
+        <DataGridTextColumn Header="Snapshot / availability" Binding="{Binding SnapshotStatus}" IsReadOnly="True" Width="2*" />
+      </DataGrid.Columns>
+    </DataGrid>
+    <StackPanel Grid.Row="3" Spacing="6">
+      <TextBlock Text="{Binding Summary}" TextWrapping="Wrap" FontWeight="SemiBold" />
+      <ComboBox ItemsSource="{Binding Filters}" SelectedItem="{Binding Filter}" Width="220" HorizontalAlignment="Left" />
+    </StackPanel>
+    <DataGrid Grid.Row="4" ItemsSource="{Binding Entries}" SelectedItem="{Binding SelectedEntry}"
+              AutoGenerateColumns="False" IsReadOnly="True" CanUserResizeColumns="True">
+      <DataGrid.Columns>
+        <DataGridTextColumn Header="Recorded path" Binding="{Binding Path}" Width="2*" />
+        <DataGridTextColumn Header="Bytes" Binding="{Binding SizeText}" Width="110" />
+        <DataGridTextColumn Header="Coverage" Binding="{Binding Coverage}" Width="130" />
+        <DataGridTextColumn Header="Devices" Binding="{Binding Devices}" Width="*" />
+        <DataGridTextColumn Header="SHA-256" Binding="{Binding Digest}" Width="*" />
+      </DataGrid.Columns>
+    </DataGrid>
+    <ScrollViewer Grid.Row="5">
+      <StackPanel Spacing="5">
+        <TextBlock Text="Recorded locations / verification details" FontWeight="SemiBold" />
+        <SelectableTextBlock Text="{Binding SelectedEntry.Details}" TextWrapping="Wrap" />
+      </StackPanel>
+    </ScrollViewer>
+    <TextBlock Grid.Row="6" Text="{Binding Status}" TextWrapping="Wrap" />
+  </Grid>
+</Window>

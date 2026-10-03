@@ -146,6 +146,7 @@
         <MenuItem Header="Activate right" Command="{Binding SetActiveCommand}" CommandParameter="Right" />
       </MenuItem>
       <MenuItem Header="_Inventory">
+        <MenuItem Header="Backup coverage..." Click="OnBackupCoverage" />
         <MenuItem Header="Inventory jobs..." Click="OnShowInventoryJobs" IsEnabled="{Binding HasDatabasePanels}" />
       </MenuItem>
     </Menu>

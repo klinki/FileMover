@@ -35,6 +35,7 @@ public static class Cli
                 "verify" => Verify(args[1..]),
                 "purge" => Purge(args[1..]),
                 "diff" => Diff(args[1..]),
+                "coverage" => Coverage(args[1..]),
                 "db-test" => DbTest(args[1..]),
                 "scan-test" => ScanTest(args[1..]),
                 _ => Fail($"unknown command '{args[0]}'. Try 'help'."),
@@ -73,6 +74,7 @@ public static class Cli
               verify <plan-id> [--db PATH] [--source-path ABS] [--target-path ABS]
               purge --older-than 30d --yes [--db PATH] [--path ROOTPATH]
               diff --source-db S.db --source-root R --target-db T.db --target-root R
+              coverage --inventory DEVICE=PATH [--inventory DEVICE=PATH ...] [--json]
               db-test [--db PATH] | scan-test <path> | --version
             Each database can inventory one drive with multiple named roots. Select the source and target
             for each diff or plan. Automatic plans require fully scanned, disjoint roots.
@@ -188,6 +190,71 @@ public static class Cli
         }
 
         return statuses.All(s => s.PlanningReady) ? 0 : 3;
+    }
+
+    private static int Coverage(string[] args)
+    {
+        var inventories = new List<(string Device, string Path)>();
+        for (int index = 0; index < args.Length; index++)
+        {
+            if (args[index] == "--json")
+                continue;
+            if (args[index] != "--inventory" || ++index >= args.Length)
+                return Fail("coverage requires repeated --inventory DEVICE=DATABASE arguments");
+            int separator = args[index].IndexOf('=');
+            if (separator <= 0 || separator == args[index].Length - 1)
+                return Fail("--inventory requires DEVICE=DATABASE");
+            inventories.Add((args[index][..separator], args[index][(separator + 1)..]));
+        }
+        var inputs = new List<CoverageInput>();
+        foreach (var inventory in inventories)
+        {
+            using var db = Database.OpenReadOnly(inventory.Path, pooling: false);
+            inputs.AddRange(
+                db.ListRoots()
+                    .Select(root => new CoverageInput(inventory.Path, root.Id, inventory.Device))
+            );
+        }
+        var report = BackupCoverage.Analyze(inputs);
+        if (Has(args, "--json"))
+        {
+            WriteJson(report);
+            return 0;
+        }
+        Console.WriteLine(
+            $"Snapshot coverage: {report.Devices.Count} device labels, {report.Content.Count} verified content groups"
+        );
+        Console.WriteLine(
+            $"Only one device: {report.SingleDeviceContent}; on every device: {report.ContentOnEveryDevice}; unverified entries: {report.Unverified.Count}"
+        );
+        Console.WriteLine(
+            "Recorded inventories, not a live verification. Assign the same label to roots and exports from the same physical device."
+        );
+        foreach (var source in report.Sources)
+            Console.WriteLine(
+                TerminalText(
+                    $"{source.Input.DeviceId}: {source.Input.DatabasePath} [{source.Input.RootId}] | {source.ScanStatus ?? "not scanned"} | {BackupCoverage.ScanAge(source.ScannedUtc)} | {(source.LocallyAvailable ? "available locally" : "offline / not available locally")}"
+                )
+            );
+        foreach (var content in report.Content)
+        {
+            Console.WriteLine(
+                $"{content.DeviceCount}/{report.Devices.Count} devices | {content.Size:N0} bytes | SHA-256 {content.Digest}"
+            );
+            foreach (var location in content.Locations)
+                Console.WriteLine(
+                    TerminalText(
+                        $"  {location.DeviceId} [{location.RootId}] {location.RelativePath}"
+                    )
+                );
+        }
+        foreach (var unknown in report.Unverified)
+            Console.WriteLine(
+                TerminalText(
+                    $"UNVERIFIED: {unknown.Location.DeviceId} [{unknown.Location.RootId}] {unknown.Location.RelativePath}: {unknown.Reason}"
+                )
+            );
+        return 0;
     }
 
     private static int ScanErrors(string[] a)
