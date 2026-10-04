@@ -162,7 +162,7 @@
       <MenuItem Header="_Inventory">
         <MenuItem Header="Create inventory..." Click="OnCreateInventory" IsEnabled="{Binding CanChangePanelSource}" />
         <MenuItem Header="Backup coverage..." Click="OnBackupCoverage" />
-        <MenuItem Header="File location changes..." Click="OnLocationChanges" />
+        <MenuItem Header="File differences..." Click="OnLocationChanges" />
         <MenuItem Header="Inventory jobs..." Click="OnShowInventoryJobs" IsEnabled="{Binding HasDatabasePanels}" />
       </MenuItem>
     </Menu>

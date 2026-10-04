@@ -104,15 +104,249 @@ public sealed class FileLocationChangesTests : IDisposable
     }
 
     [Fact]
-    public void Changed_Content_Is_One_Sided_And_Selected_Roots_Are_Isolated_Even_In_One_Database()
+    public void Changed_Content_Is_Paired_And_Selected_Roots_Are_Isolated_Even_In_One_Database()
     {
         _fixture.Seed("a", ["photo.jpg"], content: "left");
         _fixture.Seed("a", ["photo.jpg"], root: "other", content: "rght");
         var report = _fixture.Analyze("a", "a", "r", "other");
-        Assert.Equal(2, report.Groups.Count);
-        Assert.Contains(report.Groups, g => g.Classification == FileLocationChanges.OnlyInA);
-        Assert.Contains(report.Groups, g => g.Classification == FileLocationChanges.OnlyInB);
+        var group = Assert.Single(report.Groups);
+        Assert.Equal(FileLocationChanges.ContentChanged, group.Classification);
+        Assert.Equal(
+            new FileContentComparison(
+                4,
+                4,
+                LocationChangesFixture.Digest("left"),
+                LocationChangesFixture.Digest("rght")
+            ),
+            group.ContentComparison
+        );
+        Assert.Equal("photo.jpg", group.BeforePath);
+        Assert.Equal("photo.jpg", group.AfterPath);
+        Assert.Null(group.Digest);
+        Assert.Single(FileLocationChanges.Filter(report, "quick-differences"));
+        Assert.Single(FileLocationChanges.Filter(report, "content-changed"));
         Assert.Empty(FileLocationChanges.Filter(report, "changes"));
+    }
+
+    [Theory]
+    [InlineData("longer", true, true, FileLocationChanges.ContentChanged)]
+    [InlineData("longer", false, false, FileLocationChanges.ContentChanged)]
+    [InlineData("longer", true, false, FileLocationChanges.ContentChanged)]
+    [InlineData("rght", false, false, FileLocationChanges.Unverified)]
+    [InlineData("rght", true, false, FileLocationChanges.Unverified)]
+    public void Same_Path_Uses_Size_Or_Current_Hashes_Without_Inventing_Unknown_Content(
+        string after,
+        bool hashA,
+        bool hashB,
+        string classification
+    )
+    {
+        _fixture.Seed("a", ["photos/image.jpg"], content: "left", hashed: hashA);
+        _fixture.Seed("b", ["photos/image.jpg"], content: after, hashed: hashB);
+        var report = _fixture.Analyze();
+        var group = Assert.Single(report.Groups);
+        Assert.Equal(classification, group.Classification);
+        Assert.Equal(2, group.Locations.Count);
+        Assert.Equal(
+            new FileContentComparison(
+                4,
+                after.Length,
+                hashA ? LocationChangesFixture.Digest("left") : null,
+                hashB ? LocationChangesFixture.Digest(after) : null
+            ),
+            group.ContentComparison
+        );
+        Assert.Equal((hashA ? 0 : 1) + (hashB ? 0 : 1), report.UnverifiedFiles);
+        Assert.Equal(
+            classification == FileLocationChanges.ContentChanged ? 1 : 0,
+            FileLocationChanges.Filter(report, "quick-differences").Length
+        );
+    }
+
+    [Theory]
+    [InlineData("stale")]
+    [InlineData("invalid")]
+    [InlineData("scan-error")]
+    public void Same_Path_Rejects_Stale_Invalid_And_Scan_Error_Evidence(string error)
+    {
+        _fixture.Seed("a", ["image.jpg"], content: "left");
+        string b = _fixture.Seed("b", ["image.jpg"], content: "rght");
+        using (var db = Database.OpenWritable(b, pooling: false))
+        {
+            var entry = db.GetFileEntry("r", "image.jpg")!;
+            if (error == "invalid")
+                db.UpsertHash(
+                    new FileHashRow(
+                        entry.Id,
+                        "sha256",
+                        new string('z', 64),
+                        4,
+                        LocationChangesFixture.Modified,
+                        LocationChangesFixture.Modified,
+                        HashState.Ok
+                    )
+                );
+            else
+                db.UpsertFileEntry(
+                    error == "stale"
+                        ? entry with
+                        {
+                            ModifiedUtc = "2026-01-02T00:00:00Z",
+                        }
+                        : entry with
+                        {
+                            Size = 42,
+                            Status = FileStatus.ScanError,
+                            Error = "Access denied",
+                        }
+                );
+        }
+        var group = Assert.Single(_fixture.Analyze().Groups);
+        Assert.Equal(FileLocationChanges.Unverified, group.Classification);
+        Assert.Null(group.ContentComparison!.AfterDigest);
+        Assert.NotNull(group.VerificationReason);
+        if (error == "scan-error")
+            Assert.Contains("Access denied", group.VerificationReason);
+    }
+
+    [Theory]
+    [InlineData("photos/album-a/01.jpg", "photos/album-b/01.jpg")]
+    [InlineData("old/gallery-us-in-vienna.zip", "new/gallery-us-in-vienna.zip")]
+    public void Same_Filename_In_Different_Folders_Is_Not_A_Content_Comparison(
+        string pathA,
+        string pathB
+    )
+    {
+        _fixture.Seed("a", [pathA], content: "left");
+        _fixture.Seed("b", [pathB], content: "rght");
+        var report = _fixture.Analyze();
+        Assert.Equal(2, report.Groups.Count);
+        Assert.All(report.Groups, group => Assert.Null(group.ContentComparison));
+        Assert.Empty(FileLocationChanges.Filter(report, "content-changed"));
+    }
+
+    [Theory]
+    [InlineData("insensitive", "insensitive", 1)]
+    [InlineData("insensitive", "sensitive", 2)]
+    [InlineData("sensitive", "insensitive", 2)]
+    public void Content_Comparison_Respects_Both_Roots_Case_Rules_And_Normalizes_Separators(
+        string aCase,
+        string bCase,
+        int count
+    )
+    {
+        _fixture.Seed("a", ["Photos\\Image.jpg"], content: "left", caseSensitivity: aCase);
+        _fixture.Seed("b", ["photos/image.jpg"], content: "rght", caseSensitivity: bCase);
+        var report = _fixture.Analyze();
+        Assert.Equal(count, report.Groups.Count);
+        Assert.Equal(
+            count == 1 ? 1 : 0,
+            FileLocationChanges.Filter(report, "content-changed").Length
+        );
+        Assert.Equal(
+            "Photos/Image.jpg",
+            Assert
+                .Single(report.Groups.SelectMany(g => g.Locations), l => l.Side == "A")
+                .RelativePath
+        );
+    }
+
+    [Fact]
+    public void Replacement_Still_Reports_Moved_Content_And_Keeps_All_Copies_For_Uniqueness()
+    {
+        _fixture.Seed("a", ["image.jpg"], content: "left");
+        _fixture.Seed("b", ["moved/image.jpg"], content: "left");
+        _fixture.Seed("b", ["image.jpg"], content: "rght");
+        var report = _fixture.Analyze();
+        Assert.Equal(2, report.Groups.Count);
+        Assert.Single(report.Groups, g => g.Classification == FileLocationChanges.ContentChanged);
+        Assert.Equal(
+            "moved/image.jpg",
+            Assert
+                .Single(report.Groups, g => g.Classification == FileLocationChanges.Moved)
+                .AfterPath
+        );
+
+        _fixture.Seed("a", ["original-copy.jpg"], content: "left");
+        report = _fixture.Analyze();
+        var ambiguous = Assert.Single(
+            report.Groups,
+            g => g.Classification == FileLocationChanges.Ambiguous
+        );
+        Assert.Equal(3, ambiguous.Locations.Count);
+        Assert.DoesNotContain(report.Groups, g => g.Classification == FileLocationChanges.Moved);
+        Assert.Null(ambiguous.BeforePath);
+    }
+
+    [Fact]
+    public void Pairing_One_Sided_Versions_Preserves_Unpaired_Copies_And_Reverses_Metadata()
+    {
+        _fixture.Seed("a", ["image.jpg", "extra.jpg"], content: "left");
+        _fixture.Seed("b", ["image.jpg"], content: "longer");
+        var report = _fixture.Analyze();
+        Assert.Equal(2, report.Groups.Count);
+        Assert.Equal(
+            "extra.jpg",
+            Assert
+                .Single(
+                    Assert
+                        .Single(report.Groups, g => g.Classification == FileLocationChanges.OnlyInA)
+                        .Locations
+                )
+                .RelativePath
+        );
+        var reversed = Assert.Single(
+            _fixture.Analyze("b", "a").Groups,
+            g => g.Classification == FileLocationChanges.ContentChanged
+        );
+        Assert.Equal(
+            new FileContentComparison(
+                6,
+                4,
+                LocationChangesFixture.Digest("longer"),
+                LocationChangesFixture.Digest("left")
+            ),
+            reversed.ContentComparison
+        );
+    }
+
+    [Fact]
+    public void Content_Exports_Preserve_Per_Side_Sizes_And_Hashes()
+    {
+        _fixture.Seed("a", ["image.jpg"], content: "left");
+        _fixture.Seed("b", ["image.jpg"], content: "longer", hashed: false);
+        var report = _fixture.Analyze();
+        using var jsonOutput = new StringWriter();
+        LocationChangesExport.Write(jsonOutput, report, "json");
+        using var json = JsonDocument.Parse(jsonOutput.ToString());
+        Assert.Equal("Quick differences", json.RootElement.GetProperty("filter").GetString());
+        var group = json.RootElement.GetProperty("groups")[0];
+        Assert.Equal(JsonValueKind.Null, group.GetProperty("digest").ValueKind);
+        var comparison = group.GetProperty("contentComparison");
+        Assert.Equal(4, comparison.GetProperty("beforeSize").GetInt64());
+        Assert.Equal(6, comparison.GetProperty("afterSize").GetInt64());
+        Assert.Equal(
+            LocationChangesFixture.Digest("left"),
+            comparison.GetProperty("beforeDigest").GetString()
+        );
+        Assert.Equal(JsonValueKind.Null, comparison.GetProperty("afterDigest").ValueKind);
+        using var csvOutput = new StringWriter();
+        LocationChangesExport.Write(csvOutput, report, "csv");
+        using var parser = new TextFieldParser(new StringReader(csvOutput.ToString()))
+        {
+            HasFieldsEnclosedInQuotes = true,
+        };
+        parser.SetDelimiters(",");
+        parser.ReadFields();
+        var before = parser.ReadFields()!;
+        var after = parser.ReadFields()!;
+        Assert.Equal("A", before[2]);
+        Assert.Equal("4", before[7]);
+        Assert.Equal(LocationChangesFixture.Digest("left"), before[8]);
+        Assert.Equal("B", after[2]);
+        Assert.Equal("6", after[7]);
+        Assert.Equal("", after[8]);
+        Assert.True(parser.EndOfData);
     }
 
     [Theory]
@@ -396,6 +630,37 @@ public sealed class FileLocationChangesTests : IDisposable
             string exportPath = Path.Combine(_fixture.DirectoryPath, "cli.json");
             Assert.Equal(0, Cli.Run([.. args, "--output", exportPath]));
             Assert.True(File.Exists(exportPath));
+            _fixture.Seed("a", ["image.jpg"], content: "left");
+            _fixture.Seed("b", ["image.jpg"], content: "longer");
+            output.GetStringBuilder().Clear();
+            Assert.Equal(0, Cli.Run([.. args, "--json"]));
+            using (var changed = JsonDocument.Parse(output.ToString()))
+            {
+                Assert.Equal(
+                    "Quick differences",
+                    changed.RootElement.GetProperty("filter").GetString()
+                );
+                Assert.Contains(
+                    changed.RootElement.GetProperty("groups").EnumerateArray(),
+                    g =>
+                        g.GetProperty("classification").GetString()
+                        == FileLocationChanges.ContentChanged
+                );
+            }
+            output.GetStringBuilder().Clear();
+            Assert.Equal(0, Cli.Run([.. args, "--filter", "content-changed"]));
+            Assert.Contains("Content changed | 4 → 6 bytes", output.ToString());
+            Assert.Contains(LocationChangesFixture.Digest("left"), output.ToString());
+            Assert.Contains(LocationChangesFixture.Digest("longer"), output.ToString());
+            output.GetStringBuilder().Clear();
+            Assert.Equal(0, Cli.Run([.. args, "--filter", "changes", "--json"]));
+            using (var locations = JsonDocument.Parse(output.ToString()))
+                Assert.DoesNotContain(
+                    locations.RootElement.GetProperty("groups").EnumerateArray(),
+                    g =>
+                        g.GetProperty("classification").GetString()
+                        == FileLocationChanges.ContentChanged
+                );
             Assert.Equal(2, Cli.Run(["location-changes"]));
             Assert.Equal(2, Cli.Run([.. args, "--json", "--format", "csv"]));
             Assert.Equal(2, Cli.Run([.. args, "--output", a]));

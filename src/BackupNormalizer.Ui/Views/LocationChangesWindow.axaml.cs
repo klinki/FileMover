@@ -65,8 +65,8 @@ public partial class LocationChangesWindow : Window
             var file = await StorageProvider.SaveFilePickerAsync(
                 new FilePickerSaveOptions
                 {
-                    Title = "Export location changes",
-                    SuggestedFileName = "location-changes." + format,
+                    Title = "Export file differences",
+                    SuggestedFileName = "file-differences." + format,
                     DefaultExtension = format,
                     FileTypeChoices =
                     [

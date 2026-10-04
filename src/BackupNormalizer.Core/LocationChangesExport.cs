@@ -10,7 +10,7 @@ public static class LocationChangesExport
         TextWriter writer,
         LocationChangesReport report,
         string format,
-        string filter = "Location changes",
+        string filter = "Quick differences",
         CancellationToken cancellationToken = default
     )
     {
@@ -116,8 +116,8 @@ public static class LocationChangesExport
                     source.Input.RootId,
                     location.RelativePath,
                     location.State,
-                    group.Size.ToString(CultureInfo.InvariantCulture),
-                    group.Digest,
+                    (location.Size ?? group.Size).ToString(CultureInfo.InvariantCulture),
+                    location.Digest ?? group.Digest,
                     group.VerificationReason,
                     group.BeforePath,
                     group.AfterPath,
@@ -142,7 +142,7 @@ public static class LocationChangesExport
         string path,
         LocationChangesReport report,
         string format,
-        string filter = "Location changes",
+        string filter = "Quick differences",
         CancellationToken cancellationToken = default
     )
     {

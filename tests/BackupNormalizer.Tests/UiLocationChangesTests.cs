@@ -16,6 +16,32 @@ public sealed class UiLocationChangesTests : IDisposable
     public void Dispose() => _fixture.Dispose();
 
     [Fact]
+    public async Task Quick_Differences_Show_Paired_Content_Metadata_And_Keep_Location_Filter_Separate()
+    {
+        string a = _fixture.Seed("a", ["photos/image.jpg"], content: "left");
+        string b = _fixture.Seed("b", ["photos/image.jpg"], content: "longer", hashed: false);
+        using var vm = new LocationChangesViewModel();
+        await vm.LoadAsync("A", a);
+        await vm.LoadAsync("B", b);
+        await vm.Analyze();
+        Assert.Equal("Quick differences", vm.Filter);
+        var row = Assert.Single(vm.Entries);
+        Assert.Equal(FileLocationChanges.ContentChanged, row.Classification);
+        Assert.Equal("photos/image.jpg", row.PathA);
+        Assert.Equal(row.PathA, row.PathB);
+        Assert.Equal("4 → 6", row.SizeText);
+        Assert.Contains($"4 bytes | SHA-256: {LocationChangesFixture.Digest("left")}", row.Details);
+        Assert.Contains("6 bytes | SHA-256: unavailable", row.Details);
+        Assert.True(vm.CanExport);
+        vm.Filter = "Location changes";
+        await vm.FilterTask;
+        Assert.Empty(vm.Entries);
+        vm.Filter = "Content changed";
+        await vm.FilterTask;
+        Assert.Single(vm.Entries);
+    }
+
+    [Fact]
     public async Task Selections_Filtering_Exports_Swap_And_Refresh_Follow_The_Report_Lifecycle()
     {
         string a = _fixture.Seed("a", ["old"]);

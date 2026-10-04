@@ -176,9 +176,10 @@ This is the first release schema. Databases created by the earlier pre-release s
 
 ## Desktop planner
 
-Compare recorded paths with the [file location changes report](docs/features/file-location-changes/README.md),
-available through `bn location-changes` and **Inventory → File location changes...**.
-It distinguishes unique moves, retained originals with new copies, and ambiguous
+Compare content and recorded paths with the [file differences report](docs/features/file-location-changes/README.md),
+available through `bn location-changes` and **Inventory → File differences...**.
+It reports changed content at the same relative path with A/B sizes and hashes,
+and distinguishes unique moves, retained originals with new copies, and ambiguous
 duplicate matches, and exports CSV or JSON without changing either inventory.
 
 Compare content across several disks with [backup coverage](docs/features/backup-coverage/README.md),

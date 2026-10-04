@@ -16,7 +16,20 @@ public sealed record LocationChangeSource(
     int SkippedEntries
 );
 
-public sealed record FileLocation(string Side, string RelativePath, string State);
+public sealed record FileLocation(
+    string Side,
+    string RelativePath,
+    string State,
+    long? Size = null,
+    string? Digest = null
+);
+
+public sealed record FileContentComparison(
+    long BeforeSize,
+    long AfterSize,
+    string? BeforeDigest,
+    string? AfterDigest
+);
 
 public sealed record LocationChangeGroup(
     string Id,
@@ -29,7 +42,8 @@ public sealed record LocationChangeGroup(
     IReadOnlyList<string> AddedPaths,
     string? BeforePath,
     string? AfterPath,
-    string? VerificationReason
+    string? VerificationReason,
+    FileContentComparison? ContentComparison = null
 );
 
 public sealed record LocationChangesReport(
@@ -54,10 +68,13 @@ public static class FileLocationChanges
     public const string OnlyInA = "Only in A";
     public const string OnlyInB = "Only in B";
     public const string Unverified = "Unverified";
+    public const string ContentChanged = "Content changed";
     public static IReadOnlyList<string> Filters { get; } =
     [
+        "Quick differences",
         "Location changes",
         "All differences",
+        ContentChanged,
         Moved,
         Copied,
         RemovedCopies,
@@ -89,11 +106,17 @@ public static class FileLocationChanges
         using var bTransaction = bDb?.Context.Database.BeginTransaction();
         var aRoot = RequireRoot(aDb, a, "A");
         var bRoot = RequireRoot(targetDb, b, "B");
+        var comparer =
+            aRoot.CaseSensitivity == "insensitive" && bRoot.CaseSensitivity == "insensitive"
+                ? StringComparer.OrdinalIgnoreCase
+                : StringComparer.Ordinal;
         var aExclusions = aDb.GetPathExclusions(aRoot);
         var bExclusions = targetDb.GetPathExclusions(bRoot);
         bool Excluded(string path) => aExclusions.IsExcluded(path) || bExclusions.IsExcluded(path);
         var groups = new Dictionary<(long Size, string Digest), List<FileLocation>>();
         var unknown = new List<(long Size, FileLocation Location, string Reason)>();
+        var aFiles = new Dictionary<string, Database.FileWithHashRow>(comparer);
+        var bFiles = new Dictionary<string, Database.FileWithHashRow>(comparer);
         var aSource = Load(
             aDb,
             a,
@@ -102,6 +125,7 @@ public static class FileLocationChanges
             Excluded,
             groups,
             unknown,
+            aFiles,
             cancellationToken,
             progress
         );
@@ -113,15 +137,66 @@ public static class FileLocationChanges
             Excluded,
             groups,
             unknown,
+            bFiles,
             cancellationToken,
             progress
         );
-        var comparer =
-            aRoot.CaseSensitivity == "insensitive" && bRoot.CaseSensitivity == "insensitive"
-                ? StringComparer.OrdinalIgnoreCase
-                : StringComparer.Ordinal;
         var unknownSizes = unknown.Select(file => file.Size).ToHashSet();
         var results = new List<LocationChangeGroup>();
+        var pairedPaths = new HashSet<string>(comparer);
+        progress?.Report("Comparing content at matching paths...");
+        foreach (var before in aFiles.Values.OrderBy(f => f.RelativePath, StringComparer.Ordinal))
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            if (!bFiles.TryGetValue(before.RelativePath, out var after))
+                continue;
+            bool scanError = before.Status != FileStatus.Ok || after.Status != FileStatus.Ok;
+            bool differentSize = before.Size != after.Size;
+            bool hashesKnown = before.Digest != null && after.Digest != null;
+            if (!scanError && !differentSize && hashesKnown && before.Digest == after.Digest)
+                continue;
+            string classification =
+                !scanError && (differentSize || hashesKnown) ? ContentChanged : Unverified;
+            string? reason =
+                classification == Unverified
+                    ? scanError
+                        ? "Scan metadata is unverified. "
+                            + (before.Error ?? after.Error ?? "An entry has a scan error.")
+                        : "Matching-size files need current full SHA-256 hashes on both sides."
+                    : null;
+            pairedPaths.Add(before.RelativePath);
+            results.Add(
+                new LocationChangeGroup(
+                    "path:" + before.RelativePath,
+                    classification,
+                    before.Size,
+                    null,
+                    [
+                        new FileLocation(
+                            "A",
+                            before.RelativePath,
+                            classification,
+                            before.Size,
+                            before.Digest
+                        ),
+                        new FileLocation(
+                            "B",
+                            after.RelativePath,
+                            classification,
+                            after.Size,
+                            after.Digest
+                        ),
+                    ],
+                    [before.RelativePath],
+                    [],
+                    [],
+                    before.RelativePath,
+                    after.RelativePath,
+                    reason,
+                    new FileContentComparison(before.Size, after.Size, before.Digest, after.Digest)
+                )
+            );
+        }
         progress?.Report("Matching recorded locations...");
         foreach (
             var group in groups
@@ -140,6 +215,15 @@ public static class FileLocationChanges
                 .Select(p => p.RelativePath)
                 .Order(StringComparer.Ordinal)
                 .ToArray();
+            // Paired path rows cover one-sided versions. Shared content groups retain
+            // every original location so move/copy uniqueness is never changed.
+            if (before.Length == 0 || after.Length == 0)
+            {
+                before = before.Where(path => !pairedPaths.Contains(path)).ToArray();
+                after = after.Where(path => !pairedPaths.Contains(path)).ToArray();
+                if (before.Length == 0 && after.Length == 0)
+                    continue;
+            }
             var beforeSet = before.ToHashSet(comparer);
             var afterSet = after.ToHashSet(comparer);
             var shared = before.Where(afterSet.Contains).ToArray();
@@ -164,13 +248,17 @@ public static class FileLocationChanges
                 .Select(p => new FileLocation(
                     "A",
                     p,
-                    afterSet.Contains(p) ? "Retained" : "Removed"
+                    afterSet.Contains(p) ? "Retained" : "Removed",
+                    group.Key.Size,
+                    group.Key.Digest
                 ))
                 .Concat(
                     after.Select(p => new FileLocation(
                         "B",
                         p,
-                        beforeSet.Contains(p) ? "Retained" : "Added"
+                        beforeSet.Contains(p) ? "Retained" : "Added",
+                        group.Key.Size,
+                        group.Key.Digest
                     ))
                 )
                 .ToArray();
@@ -197,6 +285,8 @@ public static class FileLocationChanges
         )
         {
             cancellationToken.ThrowIfCancellationRequested();
+            if (pairedPaths.Contains(file.Location.RelativePath))
+                continue;
             results.Add(
                 new LocationChangeGroup(
                     $"unverified:{file.Location.Side}:{file.Location.RelativePath}",
@@ -254,6 +344,12 @@ public static class FileLocationChanges
             cancellationToken.ThrowIfCancellationRequested();
             bool include = filter switch
             {
+                "Quick differences" => group.Classification
+                    is ContentChanged
+                        or Moved
+                        or Copied
+                        or RemovedCopies
+                        or Ambiguous,
                 "Location changes" => group.Classification
                     is Moved
                         or Copied
@@ -291,6 +387,7 @@ public static class FileLocationChanges
         Func<string, bool> excluded,
         Dictionary<(long Size, string Digest), List<FileLocation>> groups,
         List<(long Size, FileLocation Location, string Reason)> unknown,
+        Dictionary<string, Database.FileWithHashRow> indexedFiles,
         CancellationToken token,
         IProgress<string>? progress
     )
@@ -326,16 +423,21 @@ public static class FileLocationChanges
             count++;
             if (count % 1000 == 0)
                 progress?.Report($"Inventory {side}: {count:N0} files read...");
-            if (
-                file.Status != FileStatus.Ok
-                || file.Digest is not { Length: 64 }
-                || !file.Digest.All(Uri.IsHexDigit)
-            )
+            bool usableHash =
+                file.Status == FileStatus.Ok
+                && file.Digest is { Length: 64 }
+                && file.Digest.All(Uri.IsHexDigit);
+            string? digest = usableHash ? file.Digest!.ToLowerInvariant() : null;
+            if (!indexedFiles.TryAdd(path, file with { RelativePath = path, Digest = digest }))
+                throw new InvalidOperationException(
+                    $"Inventory {side} has duplicate comparison path '{path}'."
+                );
+            if (!usableHash)
             {
                 unknown.Add(
                     (
                         file.Size,
-                        new FileLocation(side, path, Unverified),
+                        new FileLocation(side, path, Unverified, file.Size),
                         file.Status != FileStatus.Ok
                             ? file.Error ?? "Entry has a scan error."
                             : "No usable current full SHA-256 hash."
@@ -344,10 +446,10 @@ public static class FileLocationChanges
                 continue;
             }
             hashed++;
-            var key = (file.Size, file.Digest.ToLowerInvariant());
+            var key = (file.Size, digest!);
             if (!groups.TryGetValue(key, out var locations))
                 groups[key] = locations = [];
-            locations.Add(new FileLocation(side, path, ""));
+            locations.Add(new FileLocation(side, path, "", file.Size, digest));
         }
         return new LocationChangeSource(
             input,

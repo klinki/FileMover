@@ -27,7 +27,10 @@ public sealed record LocationChangeItem(LocationChangeGroup Group)
 {
     public string Classification => Group.Classification;
     public long Size => Group.Size;
-    public string SizeText => Size.ToString("N0");
+    public string SizeText =>
+        Group.ContentComparison is { } comparison
+            ? $"{comparison.BeforeSize:N0} → {comparison.AfterSize:N0}"
+            : Size.ToString("N0");
     public string PathA { get; } = PathSummary(Group, "A");
     public string PathB { get; } = PathSummary(Group, "B");
     public string Counts { get; } =
@@ -35,13 +38,13 @@ public sealed record LocationChangeItem(LocationChangeGroup Group)
     public string Details { get; } =
         string.Join(
             Environment.NewLine,
-            new[]
-            {
-                Group.Digest == null ? "SHA-256 unavailable" : $"SHA-256: {Group.Digest}",
-                Group.VerificationReason,
-            }
+            Group
+                .Locations.Select(l =>
+                    $"{l.Side} | {l.State} | {l.RelativePath}"
+                    + $" | {l.Size ?? Group.Size:N0} bytes | SHA-256: {l.Digest ?? Group.Digest ?? "unavailable"}"
+                )
+                .Prepend(Group.VerificationReason)
                 .Where(s => s != null)
-                .Concat(Group.Locations.Select(l => $"{l.Side} | {l.State} | {l.RelativePath}"))
         );
 
     private static string PathSummary(LocationChangeGroup group, string side)
@@ -107,13 +110,13 @@ public sealed partial class LocationChangesViewModel : ObservableObject, IDispos
 
     [ObservableProperty]
     public partial string Status { get; set; } =
-        "Select two inventory roots, then analyze their recorded locations.";
+        "Select two inventory roots, then compare recorded content and locations.";
 
     [ObservableProperty]
-    public partial string Summary { get; set; } = "No location report yet.";
+    public partial string Summary { get; set; } = "No differences report yet.";
 
     [ObservableProperty]
-    public partial string Filter { get; set; } = "Location changes";
+    public partial string Filter { get; set; } = "Quick differences";
 
     [ObservableProperty]
     public partial IReadOnlyList<LocationChangeItem> Entries { get; set; } =
@@ -142,7 +145,7 @@ public sealed partial class LocationChangesViewModel : ObservableObject, IDispos
             var roots = await Task.Run(() => LoadRoots(path, work.Token), work.Token);
             work.Token.ThrowIfCancellationRequested();
             SetRoots(side, roots, rootId);
-            Status = "Inventory loaded. Analyze to compare recorded locations.";
+            Status = "Inventory loaded. Analyze to compare recorded content and locations.";
         }
         catch (OperationCanceledException)
         {
@@ -166,7 +169,7 @@ public sealed partial class LocationChangesViewModel : ObservableObject, IDispos
         var a = SelectedA!.Input;
         var b = SelectedB!.Input;
         ClearReport();
-        using var work = BeginWork("Analyzing recorded locations...");
+        using var work = BeginWork("Analyzing recorded content and locations...");
         var progress = new Progress<string>(message =>
         {
             if (_work == work)
@@ -183,7 +186,7 @@ public sealed partial class LocationChangesViewModel : ObservableObject, IDispos
             Summary =
                 string.Join(" | ", report.Summary.Select(s => $"{s.Key}: {s.Value:N0}"))
                 + $" | Unverified files: {report.UnverifiedFiles:N0}";
-            Status = "Recorded locations in A → B. Select a group to inspect every location.";
+            Status = "Recorded differences in A → B. Select a group to inspect paths and content.";
         }
         catch (OperationCanceledException)
         {
@@ -193,7 +196,7 @@ public sealed partial class LocationChangesViewModel : ObservableObject, IDispos
         catch (Exception ex)
         {
             ClearReport();
-            Status = "Location analysis failed: " + ex.Message;
+            Status = "File comparison failed: " + ex.Message;
         }
         finally
         {
@@ -257,14 +260,14 @@ public sealed partial class LocationChangesViewModel : ObservableObject, IDispos
             return;
         var report = Report!;
         string filter = Filter;
-        using var work = BeginWork("Exporting location report...");
+        using var work = BeginWork("Exporting differences report...");
         try
         {
             await Task.Run(
                 () => LocationChangesExport.Save(path, report, format, filter, work.Token),
                 work.Token
             );
-            Status = "Location report exported to " + path;
+            Status = "File differences report exported to " + path;
         }
         catch (OperationCanceledException)
         {
@@ -465,7 +468,7 @@ public sealed partial class LocationChangesViewModel : ObservableObject, IDispos
         Report = null;
         Entries = Array.Empty<LocationChangeItem>();
         SelectedEntry = null;
-        Summary = "No location report yet.";
+        Summary = "No differences report yet.";
         OnPropertyChanged(nameof(CanExport));
     }
 

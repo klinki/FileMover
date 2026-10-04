@@ -77,7 +77,7 @@ public static class Cli
               diff --source-db S.db --source-root R --target-db T.db --target-root R
               coverage --inventory DEVICE=PATH [--inventory DEVICE=PATH ...] [--json]
               location-changes --source-db A.db --source-root R --target-db B.db --target-root R
-                   [--filter changes|moved|copied|removed-copies|ambiguous|only-in-a|only-in-b|unverified|unchanged|all-differences|all]
+                   [--filter quick-differences|content-changed|changes|moved|copied|removed-copies|ambiguous|only-in-a|only-in-b|unverified|unchanged|all-differences|all]
                    [--json | --format csv|json] [--output PATH]
               db-test [--db PATH] | scan-test <path> | --version
             Each database can inventory one drive with multiple named roots. Select the source and target
@@ -206,7 +206,9 @@ public static class Cli
             return Fail(
                 "location-changes requires --source-db A.db --source-root R --target-db B.db --target-root R"
             );
-        string filter = FileLocationChanges.NormalizeFilter(Opt(args, "--filter", "changes"));
+        string filter = FileLocationChanges.NormalizeFilter(
+            Opt(args, "--filter", "quick-differences")
+        );
         string format = Opt(args, "--format", "json").ToLowerInvariant();
         if (format is not ("csv" or "json") || (Has(args, "--json") && format != "json"))
             return Fail(
@@ -232,7 +234,7 @@ public static class Cli
         }
         else
         {
-            Console.WriteLine($"Recorded location changes A → B | {filter}");
+            Console.WriteLine($"Recorded file differences A → B | {filter}");
             Console.WriteLine(
                 TerminalText(
                     $"A: {report.A.Input.DatabasePath} [{report.A.Input.RootId}] {report.A.RootPath} | scanned {report.A.ScannedUtc ?? "unknown"}"
@@ -252,11 +254,15 @@ public static class Cli
             foreach (var group in FileLocationChanges.Filter(report, filter))
             {
                 Console.WriteLine(
-                    $"{group.Classification} | {group.Size:N0} bytes | {group.Digest ?? "unverified"}"
+                    group.ContentComparison is { } comparison
+                        ? $"{group.Classification} | {comparison.BeforeSize:N0} → {comparison.AfterSize:N0} bytes"
+                        : $"{group.Classification} | {group.Size:N0} bytes | {group.Digest ?? "unavailable"}"
                 );
                 foreach (var location in group.Locations)
                     Console.WriteLine(
-                        TerminalText($"  {location.Side} {location.State}: {location.RelativePath}")
+                        TerminalText(
+                            $"  {location.Side} {location.State}: {location.RelativePath} | {location.Size ?? group.Size:N0} bytes | SHA-256: {location.Digest ?? group.Digest ?? "unavailable"}"
+                        )
                     );
                 if (group.VerificationReason != null)
                     Console.WriteLine(TerminalText("  " + group.VerificationReason));

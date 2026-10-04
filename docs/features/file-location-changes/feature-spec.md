@@ -1,4 +1,4 @@
-# File location changes between inventories
+# File content and location differences between inventories
 
 ## Status
 
@@ -10,7 +10,8 @@ Implemented in the core, CLI, and desktop app. See the
 Compare a selected root from database A with a selected root from database B and
 report unchanged file content recorded at different locations. Show the path in
 A and the path in B, distinguishing moves, retained originals with new copies,
-and ambiguous duplicate matches.
+and ambiguous duplicate matches. Also report different file content at the same
+root-relative path, with each side's size and current SHA-256 digest.
 
 A is the before or reference inventory; B is the after or compared inventory.
 These roles belong to this report and do not change the databases. Results
@@ -25,13 +26,43 @@ the observed locations rather than a log of filesystem actions.
   including historical snapshots of the same directory.
 - Regular files matched by size and usable full SHA-256 digest, including renamed
   files and files in different folders.
+- Content differences between regular files at the same normalized relative path.
 - Offline inventories, without reading file contents or requiring mounted drives.
 - Complete successful scans on both selected roots. Incomplete or unavailable
   scans block analysis with an explanation of which root needs a complete scan.
 
-Synchronizing files, generating execution plans, tracking files whose content
-changed, scanning or hashing automatically, and comparing all roots at once are
-outside this feature.
+Synchronizing files, generating execution plans, matching changed content by
+filename across folders, scanning or hashing automatically, and comparing all
+roots at once are outside this feature. Broader filename matching is deferred
+until constraints prevent unrelated repeated names such as album `01.jpg` files
+from being paired.
+
+## Same-path content differences
+
+Compare files at the same normalized root-relative path before reporting content
+locations. Ignore case only when both roots are case-insensitive.
+
+- Different recorded sizes establish **Content changed** when both file entries
+  have successful scan metadata, even if hashes are unavailable.
+- Equal sizes and two usable current SHA-256 hashes establish **Content changed**
+  when the digests differ. Matching hashes keep the existing location analysis.
+- Equal sizes with missing or stale hashes produce a paired **Unverified** row.
+  Scan-error entries also remain unverified even when their recorded sizes differ.
+- Show both paths, sizes, and hashes. An unavailable hash stays explicitly unknown.
+- Report a paired content difference once instead of two one-sided content rows.
+  Keep all files in the content analysis so move/copy uniqueness remains correct.
+  A content group shared across inventories can still report a move or copy in
+  addition to a same-path replacement; these describe separate observed changes.
+- Files with the same filename in different folders do not match in this mode.
+
+The default **Quick differences** filter includes content changes and the existing
+location-change classifications. Keep **Location changes** as a separate filter,
+and provide **Content changed**, **Unverified**, and the existing other filters.
+The CLI default is `quick-differences`; `--filter changes` keeps its existing
+location-only meaning, and `--filter content-changed` isolates content differences.
+CSV records each side's own size and digest on its location row. JSON adds a
+`contentComparison` object containing both sizes and digests for paired rows.
+Neither export invents a shared digest for different content.
 
 ## Matching rules
 
@@ -54,6 +85,9 @@ with a different digest is different content and cannot anchor a copy match.
 
 ## Classifications
 
+- **Content changed:** files at the same normalized relative path have different
+  successful recorded sizes or different current SHA-256 hashes. Show both
+  versions together, including unavailable hashes.
 - **Unchanged:** all recorded locations for a content group match. Hide these
   groups by default.
 - **Moved:** the content appears exactly once in A and exactly once in B, at
@@ -74,7 +108,9 @@ with a different digest is different content and cannot anchor a copy match.
 - **Only in A / Only in B:** verified content has no match on the other side.
   These are supporting differences, available through a filter, rather than
   claimed location changes.
-- **Unverified:** a regular file lacks a usable current SHA-256 digest. Show its
+- **Unverified:** equal-size files at a matching path lack hashes needed to
+  compare their content, or an entry has scan errors. Elsewhere, a regular file
+  lacks a usable current SHA-256 digest. Show its
   side, path, size, and reason. An unverified file of the same size as a content
   group could be another copy. Mark that group's location classification
   unverified and retain its known locations instead of claiming uniqueness,
@@ -82,7 +118,7 @@ with a different digest is different content and cannot anchor a copy match.
 
 ## Examples
 
-Each example concerns one content group with the same size and digest.
+Location examples concern one content group with the same size and digest.
 
 - A has `old/photo.jpg`; B has `new/photo.jpg`: Moved.
 - A has `photo.jpg`; B has `photo.jpg` and `backup/photo.jpg`: Copied.
@@ -94,25 +130,27 @@ Each example concerns one content group with the same size and digest.
 - A has `one/photo.jpg` and `two/photo.jpg`; B has `three/photo.jpg` and
   `four/photo.jpg`: Ambiguous, with every location listed.
 - A has `photo.jpg` and `backup/photo.jpg`; B has `photo.jpg`: Removed copies.
-- A and B have `photo.jpg` with different digests: separate content differences,
-  not a move or a copy.
+- A and B have `photo.jpg` with different digests: one Content changed row with
+  both versions' sizes and hashes.
+- A has `photos/album-a/01.jpg`; B has `photos/album-b/01.jpg` with different
+  content: Only in A and Only in B. The filenames do not establish a match.
 - A has one verified `old/photo.jpg`; B has one matching `new/photo.jpg` and a
   same-size file with a stale hash: Unverified, because uniqueness is unknown.
 
 ## Desktop workflow
 
-Add **Inventory → File location changes...**. Default A and B to the loaded
+Add **Inventory → File differences...**. Default A and B to the loaded
 database panels when available. Allow selecting each database and root, and
 swapping the report direction. Display database names, selected roots, recorded
 root paths, scan dates, and hash readiness.
 
 Run analysis in the background with progress and cancellation. Keep the desktop
-responsive during analysis and filtering. The default view shows Moved, Copied,
-Removed copies, and Ambiguous results, with an explicit unverified count and
+responsive during analysis and filtering. The default view shows Content changed,
+Moved, Copied, Removed copies, and Ambiguous results, with an explicit unverified count and
 access to those entries. Filters expose each classification, all differences,
 and unchanged content.
 
-Show classification, path in A, path in B, size, and location counts per side.
+Show classification, path in A, path in B, sizes in A/B, and location counts per side.
 For groups with several locations, show counts in the list and all locations in
 the details view, including their retained, removed, or added state. Do not
 display a single invented source/destination pair for ambiguous groups.
@@ -147,6 +185,11 @@ companion file. Analysis and export never modify the input inventories or files.
 ## Acceptance criteria
 
 - The examples above produce the specified classifications and complete paths.
+- Same-path comparisons produce one paired row with each side's metadata.
+  Different sizes establish a change without hashes; equal sizes require usable
+  hashes on both sides. Scan errors prevent a definitive comparison.
+- Matching filenames in different folders never establish a changed-content
+  pairing. Broader filename matching remains deferred.
 - Shared paths are matched before changes are classified, while uniqueness uses
   all original locations. Duplicate groups never receive arbitrary move pairs.
 - Missing or stale hashes cannot establish identity or a definitive location
