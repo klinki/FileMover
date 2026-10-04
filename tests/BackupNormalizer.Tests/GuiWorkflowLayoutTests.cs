@@ -1,3 +1,4 @@
+using Avalonia;
 using Avalonia.Controls;
 using Avalonia.LogicalTree;
 using Avalonia.Threading;
@@ -11,9 +12,15 @@ namespace BackupNormalizer.Tests;
 public sealed class GuiWorkflowLayoutTests
 {
     [Theory]
-    [InlineData(1280, 800)]
-    [InlineData(860, 560)]
-    public void Inventory_Controls_Keep_File_Lists_Usable(double width, double height)
+    [InlineData(1280, 800, true)]
+    [InlineData(860, 560, true)]
+    [InlineData(1280, 800, false)]
+    [InlineData(860, 560, false)]
+    public void Inventory_Controls_Keep_File_Lists_Usable(
+        double width,
+        double height,
+        bool inventory
+    )
     {
         UiTestHost.Run(() =>
         {
@@ -38,10 +45,13 @@ public sealed class GuiWorkflowLayoutTests
             root.Nodes.Add(file.RelativePath, file);
             var snapshot = new InventorySnapshot("/offline/inventory.db", new[] { root });
             var vm = new MainViewModel();
-            vm.Left.LoadSnapshot(snapshot);
-            vm.Right.LoadSnapshot(snapshot);
-            vm.Left.SelectedEntry = vm.Left.Entries.Single();
-            vm.Right.SelectedEntry = vm.Right.Entries.Single();
+            if (inventory)
+            {
+                vm.Left.LoadSnapshot(snapshot);
+                vm.Right.LoadSnapshot(snapshot);
+                vm.Left.SelectedEntry = vm.Left.Entries.Single();
+                vm.Right.SelectedEntry = vm.Right.Entries.Single();
+            }
             var window = new MainWindow
             {
                 DataContext = vm,
@@ -53,6 +63,25 @@ public sealed class GuiWorkflowLayoutTests
                 window.Show();
                 window.UpdateLayout();
                 Dispatcher.UIThread.RunJobs();
+                if (!inventory && OperatingSystem.IsWindows())
+                {
+                    var buttons = window.GetLogicalDescendants().OfType<Button>().ToArray();
+                    var drives = buttons
+                        .Where(button => button.CommandParameter is DriveView)
+                        .ToArray();
+                    Assert.NotEmpty(drives);
+                    foreach (var drive in drives)
+                    {
+                        var load = buttons.Single(button =>
+                            Equals(button.Content, "Load database...")
+                            && Equals(button.Tag, drive.Tag)
+                        );
+                        var driveOrigin = drive.TranslatePoint(default, window)!.Value;
+                        var loadOrigin = load.TranslatePoint(default, window)!.Value;
+                        Assert.True(driveOrigin.Y < loadOrigin.Y + load.Bounds.Height);
+                        Assert.True(loadOrigin.Y < driveOrigin.Y + drive.Bounds.Height);
+                    }
+                }
                 foreach (var grid in window.GetLogicalDescendants().OfType<DataGrid>())
                 {
                     Assert.True(

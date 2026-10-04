@@ -53,17 +53,40 @@
       </Panel>
     </DataTemplate>
     <DataTemplate x:Key="PanelHeader" x:DataType="vm:FilePanelViewModel">
-      <StackPanel Spacing="4" Margin="6">
-        <Grid ColumnDefinitions="*,Auto,Auto,Auto">
-          <TextBlock Text="{Binding Side}" FontWeight="Bold" VerticalAlignment="Center" />
+      <StackPanel Spacing="3" Margin="6,4">
+        <Grid ColumnDefinitions="*,Auto,Auto,Auto" ColumnSpacing="4">
+          <ComboBox ItemsSource="{Binding Drives}" SelectedItem="{Binding SelectedDrive}"
+                    IsVisible="{Binding ShowDriveCombo}" HorizontalAlignment="Stretch" ToolTip.Tip="Select drive">
+            <ComboBox.ItemTemplate>
+              <DataTemplate x:DataType="vm:DriveView">
+                <TextBlock Text="{Binding Display}" ToolTip.Tip="{Binding Tooltip}" />
+              </DataTemplate>
+            </ComboBox.ItemTemplate>
+          </ComboBox>
+          <ScrollViewer IsVisible="{Binding ShowDriveButtons}" HorizontalScrollBarVisibility="Auto"
+                        VerticalScrollBarVisibility="Disabled" VerticalAlignment="Center">
+            <ItemsControl ItemsSource="{Binding Drives}">
+              <ItemsControl.ItemsPanel>
+                <ItemsPanelTemplate><StackPanel Orientation="Horizontal" /></ItemsPanelTemplate>
+              </ItemsControl.ItemsPanel>
+              <ItemsControl.ItemTemplate>
+                <DataTemplate x:DataType="vm:DriveView">
+                  <Button Content="{Binding Display}" CommandParameter="{Binding}" Click="OnDriveClick"
+                          Tag="{Binding $parent[ItemsControl].DataContext.Side}" MinWidth="32" Height="26"
+                          Margin="0,0,3,0" Padding="6,2" ToolTip.Tip="{Binding Tooltip}" />
+                </DataTemplate>
+              </ItemsControl.ItemTemplate>
+            </ItemsControl>
+          </ScrollViewer>
           <Button Grid.Column="1" Content="Load database..." Tag="{Binding Side}" Click="OnLoadDatabase"
-                  IsEnabled="{Binding CanChangeSource}" Padding="8,4" Margin="0,0,4,0" />
+                  IsEnabled="{Binding CanChangeSource}" Padding="6,2" Height="26" FontSize="12"
+                  ToolTip.Tip="{Binding SourceLabel}" VerticalAlignment="Center" />
           <Button Grid.Column="2" Content="Live folders" Tag="{Binding Side}" Click="OnUseLive"
-                  IsEnabled="{Binding CanChangeSource}" IsVisible="{Binding IsDatabase}" Padding="8,4" />
+                  IsEnabled="{Binding CanChangeSource}" IsVisible="{Binding IsDatabase}" Padding="6,2"
+                  Height="26" FontSize="12" VerticalAlignment="Center" />
           <Button Grid.Column="3" Content="Health / errors..." Tag="{Binding Side}" Click="OnInventoryHealth"
-                  IsVisible="{Binding IsDatabase}" Padding="8,4" Margin="4,0,0,0" />
+                  IsVisible="{Binding IsDatabase}" Padding="6,2" Height="26" FontSize="12" VerticalAlignment="Center" />
         </Grid>
-        <TextBlock Text="{Binding SourceLabel}" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding SourceLabel}" />
         <ComboBox ItemsSource="{Binding InventoryRoots}" SelectedItem="{Binding SelectedInventoryRoot}"
                   IsVisible="{Binding IsDatabase}" IsEnabled="{Binding CanChangeSource}"
                   HorizontalAlignment="Stretch" ToolTip.Tip="Inventory root">
@@ -73,29 +96,6 @@
             </DataTemplate>
           </ComboBox.ItemTemplate>
         </ComboBox>
-        <ComboBox ItemsSource="{Binding Drives}" SelectedItem="{Binding SelectedDrive}"
-                  IsVisible="{Binding ShowDriveCombo}" HorizontalAlignment="Stretch" ToolTip.Tip="Select drive">
-          <ComboBox.ItemTemplate>
-            <DataTemplate x:DataType="vm:DriveView">
-              <TextBlock Text="{Binding Display}" ToolTip.Tip="{Binding Tooltip}" />
-            </DataTemplate>
-          </ComboBox.ItemTemplate>
-        </ComboBox>
-        <ScrollViewer IsVisible="{Binding ShowDriveButtons}" HorizontalScrollBarVisibility="Auto"
-                      VerticalScrollBarVisibility="Disabled">
-          <ItemsControl ItemsSource="{Binding Drives}">
-            <ItemsControl.ItemsPanel>
-              <ItemsPanelTemplate><StackPanel Orientation="Horizontal" /></ItemsPanelTemplate>
-            </ItemsControl.ItemsPanel>
-            <ItemsControl.ItemTemplate>
-              <DataTemplate x:DataType="vm:DriveView">
-                <Button Content="{Binding Display}" CommandParameter="{Binding}" Click="OnDriveClick"
-                        Tag="{Binding $parent[ItemsControl].DataContext.Side}" MinWidth="32" Height="26"
-                        Margin="0,0,3,0" Padding="6,2" ToolTip.Tip="{Binding Tooltip}" />
-              </DataTemplate>
-            </ItemsControl.ItemTemplate>
-          </ItemsControl>
-        </ScrollViewer>
         <Grid ColumnDefinitions="Auto,*" ColumnSpacing="6">
           <TextBlock Text="{Binding PathCaption}" VerticalAlignment="Center" FontSize="11" />
           <TextBox Grid.Column="1" Text="{Binding CurrentPath}" IsReadOnly="True" ToolTip.Tip="{Binding CurrentPath}" />
