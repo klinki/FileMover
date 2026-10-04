@@ -6,11 +6,11 @@ Analyze coverage freezes the desktop dialog.
 
 ## Status
 
-`awaiting-user-confirmation`
+`fixed`
 
 ## Reported symptoms
 
-The coverage dialog stops responding after Analyze coverage is selected, despite
+The coverage dialog stopped responding after Analyze coverage was selected, despite
 showing a progress bar.
 
 ## Expected behavior
@@ -18,10 +18,10 @@ showing a progress bar.
 Analysis and result preparation run in the background. The window and progress
 animation remain responsive until the results are ready.
 
-## Actual behavior
+## Behavior before the fix
 
-The database analysis uses a worker thread, but filtering, formatting location
-details, and publishing each result run synchronously on the UI thread.
+The database analysis used a worker thread, but filtering, formatting location
+details, and publishing each result ran synchronously on the UI thread.
 
 ## Reproduction details
 
@@ -39,4 +39,9 @@ and update bound UI state only on the UI thread.
 
 ## Open questions
 
-User confirmation on the real inventory pair is still required after local checks.
+None. The user confirmed responsiveness with the real inventory pair on 2026-10-04.
+
+## User confirmation
+
+2026-10-04: The user confirmed both fixes work in the rebuilt GUI. The required
+real-inventory check is complete.

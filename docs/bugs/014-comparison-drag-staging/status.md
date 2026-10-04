@@ -2,9 +2,9 @@
 
 ## Current state
 
-`awaiting-user-confirmation`
+`fixed`
 
-## Active attempt
+## Confirmed attempt
 
 [Fix attempt 001](fix-attempt-001.md)
 
@@ -14,7 +14,7 @@
 
 ## Confirmation date
 
-Not confirmed.
+2026-10-04.
 
 ## Resolution summary
 
@@ -23,17 +23,20 @@ the selected source and target roots for export and execution review.
 
 ## Attempt history
 
-- [Fix attempt 001](fix-attempt-001.md): inventory copy staging planned.
+- [Fix attempt 001](fix-attempt-001.md): inventory copy staging implemented,
+  verified locally, and confirmed by the user.
 
 ## State change log
 
 - 2026-10-04: User reported comparison drag failure. Bug opened and investigated.
 - 2026-10-04: First attempt started.
 - 2026-10-04: Routed drops, offline copies, metadata checks, export, and temporary
-  execution verified. All 55 combined focused tests passed. Awaiting user retest.
+  execution verified. All 55 combined focused tests passed. At that point, the
+  attempt awaited user retesting.
+- 2026-10-04: User confirmed both fixes work in the rebuilt GUI. Comparison drag
+  staging marked fixed. Implementation committed as `1dc154b`.
 
 ## Notes
 
-No commit or push requested for this repair.
-
-- 2026-10-04: The user subsequently requested a separate commit for each change.
+The user requested a separate implementation commit for each repair. Both commits
+are complete. Unrelated workspace changes were preserved.

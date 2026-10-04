@@ -6,20 +6,20 @@ Dragging between inventory comparison panels does not stage operations.
 
 ## Status
 
-`awaiting-user-confirmation`
+`fixed`
 
 ## Reported symptoms
 
-Files and folders cannot be dragged from one comparison panel to the other.
+Files and folders could not be dragged from one comparison panel to the other.
 
 ## Expected behavior
 
 Dropping into the opposite panel stages copies for review. Folders include their
 indexed contents. Staging changes neither the inventory databases nor disk files.
 
-## Actual behavior
+## Behavior before the fix
 
-Drag initiation, acceptance, and drop handling require two live filesystem panels.
+Drag initiation, acceptance, and drop handling required two live filesystem panels.
 
 ## Reproduction details
 
@@ -36,5 +36,9 @@ separate source and destination roots. Preserve unrelated workspace changes.
 
 ## Open questions
 
-Native pointer delivery requires the user's desktop check after local regression
-verification.
+None. The user confirmed native drag and drop in the rebuilt GUI on 2026-10-04.
+
+## User confirmation
+
+2026-10-04: The user confirmed dragging files and folders between comparison
+panels stages the expected operations. The native desktop check is complete.

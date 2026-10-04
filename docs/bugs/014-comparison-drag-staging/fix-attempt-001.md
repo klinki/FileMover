@@ -2,7 +2,7 @@
 
 ## Attempt status
 
-`awaiting-user-confirmation`
+`fixed`
 
 ## Goal
 
@@ -62,12 +62,19 @@ The Release GUI build passed with existing Avalonia constructor warnings.
 
 ## Outcome
 
-Local verification passed. Native pointer delivery remains for user retesting.
+Local verification passed, and the user confirmed native drag and drop in the
+rebuilt GUI on 2026-10-04. The bug is fixed.
 
 ## Next step
 
-Commit this change separately and open the rebuilt GUI for the user.
+None. The implementation commit and user verification are complete.
 
 ## Remaining gaps
 
-User confirmation of native drag and drop.
+None. The user's desktop check confirmed native drag and drop.
+
+## User confirmation
+
+2026-10-04: The user answered "Both work" after testing the rebuilt GUI. Native
+drag and drop is confirmed, and this attempt is fixed. Implementation commit:
+`1dc154b`.

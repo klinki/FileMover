@@ -2,7 +2,7 @@
 
 ## Attempt status
 
-`awaiting-user-confirmation`
+`fixed`
 
 ## Goal
 
@@ -47,15 +47,16 @@ database planning, and execution run passed all 55 tests.
 
 ## Outcome
 
-Local verification passed. Awaiting the user's real-inventory check.
+Local verification passed, and the user confirmed the real dialog remains
+responsive on 2026-10-04. The bug is fixed.
 
 ## Next step
 
-Commit the coverage change separately and open the rebuilt GUI for retesting.
+None. The implementation commit and user verification are complete.
 
 ## Remaining gaps
 
-The bug stays open until the user confirms the real dialog is responsive.
+None. The user's real-inventory check confirmed the dialog is responsive.
 
 ## Verified implementation update
 
@@ -67,5 +68,11 @@ is disabled during work.
 `dotnet test` with `UiBackupCoverageTests|BackupCoverageTests` passed all nine tests.
 The large-result regression checks worker-thread enumeration, responsive UI
 dispatch, one publication on the UI thread, and asynchronous filtering. Release
-build passed with existing Avalonia constructor warnings. User confirmation is
-pending.
+build passed with existing Avalonia constructor warnings. The user subsequently
+confirmed the fix on 2026-10-04.
+
+## User confirmation
+
+2026-10-04: The user answered "Both work" after testing coverage responsiveness
+and comparison drag staging in the rebuilt GUI. This attempt is confirmed fixed.
+Implementation commit: `2839f73`.
