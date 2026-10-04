@@ -17,16 +17,30 @@ public sealed class AppConfig
 
     public static string DefaultPath => "./settings.json";
 
+    public static string ResolvePath(string? path = null)
+    {
+        if (path != null)
+        {
+            return path;
+        }
+        if (
+            Environment.GetEnvironmentVariable("BN_CONFIG") is string env
+            && !string.IsNullOrWhiteSpace(env)
+        )
+        {
+            return env;
+        }
+        return !File.Exists(DefaultPath) && File.Exists("./backup-normalizer.json")
+            ? "./backup-normalizer.json"
+            : DefaultPath;
+    }
+
     public static AppConfig Load(string? path = null, bool allowMissing = false)
     {
         bool selected =
             path != null
             || !string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("BN_CONFIG"));
-        path ??= EnvOrDefault("BN_CONFIG", DefaultPath);
-        if (!selected && !File.Exists(path) && File.Exists("./backup-normalizer.json"))
-        {
-            path = "./backup-normalizer.json";
-        }
+        path = ResolvePath(path);
 
         if (!File.Exists(path))
         {

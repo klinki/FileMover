@@ -9,10 +9,9 @@ namespace BackupNormalizer.Ui.Models;
 /// <summary>Runs one explicitly selected scan or hash job against a local inventory.</summary>
 public sealed class InventoryJobRunner
 {
-    private readonly Func<Database, Scanner> _scannerFactory;
+    private readonly Func<Database, Scanner>? _scannerFactory;
 
-    public InventoryJobRunner()
-        : this(db => new Scanner(db, mftMode: "auto", usnMode: "auto")) { }
+    public InventoryJobRunner() { }
 
     public InventoryJobRunner(Func<Database, Scanner> scannerFactory) =>
         _scannerFactory = scannerFactory;
@@ -46,7 +45,15 @@ public sealed class InventoryJobRunner
                 || string.IsNullOrWhiteSpace(request.RootId)
             )
             {
-                throw new InvalidOperationException("Select an inventory database root first.");
+                throw new InvalidOperationException("Choose a database path and root ID first.");
+            }
+
+            request.Configuration?.Validate();
+            if (request.CreateInventory && request.Kind == InventoryJobKind.HashNeeded)
+            {
+                throw new InvalidOperationException(
+                    "A new inventory must be scanned before hashing."
+                );
             }
 
             if (!Path.IsPathFullyQualified(request.RecordedRootPath))
@@ -58,7 +65,7 @@ public sealed class InventoryJobRunner
 
             string databasePath = Path.GetFullPath(request.DatabasePath);
             string recordedRootPath = Path.GetFullPath(request.RecordedRootPath);
-            if (!File.Exists(databasePath))
+            if (!request.CreateInventory && !File.Exists(databasePath))
             {
                 throw new FileNotFoundException(
                     "The inventory database is no longer available.",
@@ -74,22 +81,54 @@ public sealed class InventoryJobRunner
             }
 
             StorageRootRow root;
-            using (var check = Database.OpenReadOnly(databasePath, pooling: false))
+            if (request.CreateInventory)
             {
+                foreach (string suffix in new[] { "", "-wal", "-shm", "-journal" })
+                {
+                    if (
+                        File.Exists(databasePath + suffix)
+                        || Directory.Exists(databasePath + suffix)
+                    )
+                    {
+                        throw new IOException(
+                            "Choose a new database file. The selected destination or a database sidecar already exists."
+                        );
+                    }
+                }
+                root = new StorageRootRow(
+                    request.RootId,
+                    request.RootId,
+                    recordedRootPath,
+                    true,
+                    Paths.GetFileSystemId(recordedRootPath),
+                    Paths.DetectCaseSensitivity(recordedRootPath),
+                    Database.UtcNow()
+                );
+                cancellationToken.ThrowIfCancellationRequested();
+                Directory.CreateDirectory(Path.GetDirectoryName(databasePath)!);
+                using (new FileStream(databasePath, FileMode.CreateNew, FileAccess.Write)) { }
+            }
+            else
+            {
+                using var check = Database.OpenReadOnly(databasePath, pooling: false);
                 root =
                     check.GetRoot(request.RootId)
                     ?? throw new InvalidOperationException(
                         $"The selected root '{request.RootId}' is no longer in the inventory."
                     );
-            }
-            if (!Paths.PathEquals(root.Path, recordedRootPath))
-            {
-                throw new InvalidOperationException(
-                    "The selected root path changed since this inventory was loaded. Reload the database before running a job."
-                );
+                if (!Paths.PathEquals(root.Path, recordedRootPath))
+                {
+                    throw new InvalidOperationException(
+                        "The selected root path changed since this inventory was loaded. Reload the database before running a job."
+                    );
+                }
             }
 
-            cancellationToken.ThrowIfCancellationRequested();
+            // A reserved new database must have its root registered before cancellation.
+            if (!request.CreateInventory)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+            }
             if (!File.Exists(databasePath))
             {
                 throw new FileNotFoundException(
@@ -106,6 +145,10 @@ public sealed class InventoryJobRunner
             }
 
             using var db = Database.OpenWritable(databasePath, pooling: false);
+            if (request.CreateInventory)
+            {
+                db.UpsertRoot(root);
+            }
             root =
                 db.GetRoot(request.RootId)
                 ?? throw new InvalidOperationException(
@@ -118,7 +161,15 @@ public sealed class InventoryJobRunner
                 );
             }
 
-            var scanner = _scannerFactory(db);
+            var scanner =
+                _scannerFactory?.Invoke(db)
+                ?? new Scanner(
+                    db,
+                    request.Configuration?.HashAlgorithm,
+                    request.Configuration?.MftMode ?? "auto",
+                    request.Configuration?.UsnMode ?? "auto",
+                    request.Configuration?.ExcludedPathRegexes
+                );
             int scanned = 0,
                 scanErrors = 0,
                 hashed = 0,
@@ -257,7 +308,7 @@ public sealed class InventoryJobRunner
                 InventoryJobStage.Validating =>
                     "Job canceled before filesystem processing started.",
                 InventoryJobStage.Scanning =>
-                    "Scan canceled. The core scanner recorded an incomplete scan.",
+                    "Scan canceled. The inventory is not ready for planning.",
                 _ => "Hash job canceled. A partial file hash was not stored.",
             };
             return new InventoryJobResult(

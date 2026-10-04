@@ -110,15 +110,44 @@ public sealed partial class MainViewModel
             root.Root.Path,
             kind,
             Job.FullScan,
-            Parallelism: 2
+            Parallelism: Configuration.HashParallelism,
+            Configuration: Configuration
         );
+        return StartInventoryJob(request);
+    }
+
+    public Task RunNewInventoryJobAsync(InventoryJobRequest request)
+    {
+        if (!CanChangePanelSource)
+        {
+            StatusMessage =
+                "Finish the current operation and clear staged operations before creating an inventory.";
+            return Task.CompletedTask;
+        }
+        if (!request.CreateInventory)
+        {
+            StatusMessage = "Choose a new inventory scan request.";
+            return Task.CompletedTask;
+        }
+        return StartInventoryJob(request, Active);
+    }
+
+    private Task StartInventoryJob(
+        InventoryJobRequest request,
+        FilePanelViewModel? newInventoryPanel = null
+    )
+    {
         _inventoryJobCancellation = new CancellationTokenSource();
-        Job.Start(kind);
-        Job.Context = $"{root.Display} | {request.DatabasePath}";
+        Job.Start(request.Kind);
+        Job.Context = $"{request.RootId} | {request.RecordedRootPath} | {request.DatabasePath}";
         IsBusy = true;
-        StatusMessage = $"Running {kind} for {root.Root.Name}...";
+        StatusMessage = $"Running {request.Kind} for {request.RootId}...";
         NotifyInventoryJobCommands();
-        _inventoryJobTask = RunInventoryJobCoreAsync(request, _inventoryJobCancellation);
+        _inventoryJobTask = RunInventoryJobCoreAsync(
+            request,
+            _inventoryJobCancellation,
+            newInventoryPanel
+        );
         return _inventoryJobTask;
     }
 
@@ -140,7 +169,8 @@ public sealed partial class MainViewModel
 
     private async Task RunInventoryJobCoreAsync(
         InventoryJobRequest request,
-        CancellationTokenSource cancellation
+        CancellationTokenSource cancellation,
+        FilePanelViewModel? newInventoryPanel
     )
     {
         InventoryJobResult result;
@@ -168,6 +198,15 @@ public sealed partial class MainViewModel
         try
         {
             await ReloadAffectedJobSnapshotsAsync(request.DatabasePath);
+            if (
+                newInventoryPanel != null
+                && result.Outcome != InventoryJobOutcome.Failed
+                && File.Exists(request.DatabasePath)
+            )
+            {
+                var snapshot = await Task.Run(() => InventorySnapshot.Load(request.DatabasePath));
+                newInventoryPanel.LoadSnapshot(snapshot, request.RootId);
+            }
         }
         catch (Exception ex)
         {

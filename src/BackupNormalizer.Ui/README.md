@@ -15,6 +15,18 @@ dotnet run --project src/BackupNormalizer.Ui -c Release
 Requires the .NET 10 SDK. No Docker needed (Docker is only for the QNAP
 scanner, see the repo README).
 
+## Create an inventory
+
+Choose **Inventory → Create inventory...** to select a folder or drive, root ID,
+and new database file. Scanning followed by hashing is enabled by default. Jobs
+show progress and support cancellation, then load the resulting inventory into
+the active panel. Existing database files are preserved; use **Inventory jobs...**
+to rescan them.
+
+The app reads the CLI JSON config on startup. Choose **File → Load configuration...**
+to load another file. Config settings apply to new scans and jobs on loaded
+inventories. See the [creation and configuration guide](../../docs/features/gui-initial-scan/README.md).
+
 ## Compare inventory databases
 
 1. Select **Load database...** above either panel and choose an existing SQLite

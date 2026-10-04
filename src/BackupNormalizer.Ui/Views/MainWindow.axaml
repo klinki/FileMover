@@ -140,6 +140,8 @@
   <DockPanel>
     <Menu DockPanel.Dock="Top">
       <MenuItem Header="_File">
+        <MenuItem Header="Load configuration..." Click="OnLoadConfiguration" IsEnabled="{Binding !IsBusy}" />
+        <Separator />
         <MenuItem Header="Load database in left panel..." Tag="Left" Click="OnLoadDatabaseMenu" IsEnabled="{Binding CanChangePanelSource}" />
         <MenuItem Header="Load database in right panel..." Tag="Right" Click="OnLoadDatabaseMenu" IsEnabled="{Binding CanChangePanelSource}" />
         <MenuItem Header="Export active inventory snapshot..." Click="OnExportInventory" IsEnabled="{Binding CanExportInventory}" />
@@ -158,6 +160,7 @@
         <MenuItem Header="Activate right" Command="{Binding SetActiveCommand}" CommandParameter="Right" />
       </MenuItem>
       <MenuItem Header="_Inventory">
+        <MenuItem Header="Create inventory..." Click="OnCreateInventory" IsEnabled="{Binding CanChangePanelSource}" />
         <MenuItem Header="Backup coverage..." Click="OnBackupCoverage" />
         <MenuItem Header="Inventory jobs..." Click="OnShowInventoryJobs" IsEnabled="{Binding HasDatabasePanels}" />
       </MenuItem>

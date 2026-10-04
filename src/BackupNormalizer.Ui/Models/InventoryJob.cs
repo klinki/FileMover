@@ -30,7 +30,9 @@ public sealed record InventoryJobRequest(
     string RecordedRootPath,
     InventoryJobKind Kind,
     bool FullScan = false,
-    int Parallelism = 2
+    int Parallelism = 2,
+    bool CreateInventory = false,
+    AppConfig? Configuration = null
 );
 
 public sealed record InventoryJobProgress(

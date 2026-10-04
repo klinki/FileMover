@@ -1,0 +1,38 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:BackupNormalizer.Ui.ViewModels"
+        x:Class="BackupNormalizer.Ui.Views.InventoryScanWindow"
+        x:DataType="vm:InventoryScanViewModel"
+        Title="Create inventory" Width="680" Height="430" MinWidth="540" MinHeight="380"
+        WindowStartupLocation="CenterOwner">
+  <DockPanel Margin="18">
+    <StackPanel DockPanel.Dock="Bottom" Spacing="8" Margin="0,12,0,0">
+      <TextBlock Text="{Binding Error}" TextWrapping="Wrap" />
+      <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8">
+        <Button Content="Cancel" Click="OnCancel" />
+        <Button x:Name="StartScanButton" Content="Create and scan" Click="OnStart" />
+      </StackPanel>
+    </StackPanel>
+    <ScrollViewer>
+      <StackPanel Spacing="12">
+        <TextBlock Text="Create a disk or folder inventory" FontSize="22" FontWeight="SemiBold" />
+        <TextBlock Text="Choose a folder and a new database file. The scan reads your files and records their metadata." TextWrapping="Wrap" />
+        <Grid ColumnDefinitions="Auto,*,Auto" RowDefinitions="Auto,Auto,Auto" ColumnSpacing="10" RowSpacing="10">
+          <TextBlock Text="Folder" VerticalAlignment="Center" />
+          <TextBox x:Name="ScanRootPath" Grid.Column="1" Text="{Binding RootPath}" />
+          <Button Grid.Column="2" Content="Browse..." Click="OnBrowseFolder" />
+          <TextBlock Grid.Row="1" Text="Root ID" VerticalAlignment="Center" />
+          <TextBox x:Name="ScanRootId" Grid.Row="1" Grid.Column="1" Text="{Binding RootId}" PlaceholderText="For example, g or photos" />
+          <TextBlock Grid.Row="2" Text="New database" VerticalAlignment="Center" />
+          <TextBox x:Name="ScanDatabasePath" Grid.Row="2" Grid.Column="1" Text="{Binding DatabasePath}" />
+          <Button Grid.Row="2" Grid.Column="2" Content="Browse..." Click="OnBrowseDatabase" />
+        </Grid>
+        <CheckBox Content="Hash files after scanning so the inventory can compare contents"
+                  IsChecked="{Binding HashAfterScan}" />
+        <TextBlock Text="Scan settings" FontWeight="SemiBold" />
+        <TextBlock Text="{Binding ConfigurationSummary}" TextWrapping="Wrap" />
+        <TextBlock Text="Load another JSON configuration from File → Load configuration before opening this window." TextWrapping="Wrap" />
+      </StackPanel>
+    </ScrollViewer>
+  </DockPanel>
+</Window>

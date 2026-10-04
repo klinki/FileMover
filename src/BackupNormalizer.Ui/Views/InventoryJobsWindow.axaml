@@ -13,7 +13,8 @@
     <StackPanel Margin="18" Spacing="12">
       <TextBlock Text="Scan and hash inventory" FontSize="22" FontWeight="SemiBold" />
 
-      <Border Padding="12" CornerRadius="6">
+      <TextBlock Text="{Binding ConfigurationSummary}" TextWrapping="Wrap" />
+      <Border Padding="12" CornerRadius="6" IsVisible="{Binding Active.IsDatabase}">
         <StackPanel Spacing="5">
           <TextBlock Text="Selected database" FontWeight="SemiBold" />
           <TextBlock Text="{Binding Active.SourceLabel}" TextWrapping="Wrap" />
