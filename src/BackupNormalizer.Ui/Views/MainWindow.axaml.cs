@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Linq;
+using System.Text.Json;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
@@ -18,7 +19,7 @@ namespace BackupNormalizer.Ui.Views;
 /// Total Commander style input: cursor (grid selection) is independent from marks.
 /// Left = cursor, Right/Space = toggle mark, Shift/Ctrl+Left = range/toggle,
 /// Shift+Up/Down = move cursor + toggle, right-drag = rubber-band toggle,
-/// left-drag across panels = schedule MOVE (plan-only).
+/// left-drag across panels = stage live MOVEs or inventory COPYs.
 /// </summary>
 public partial class MainWindow : Window
 {
@@ -26,6 +27,15 @@ public partial class MainWindow : Window
     private const string DropFormatName = "x-bn-staged";
     private static readonly DataFormat<string> DropFormat =
         DataFormat.CreateStringApplicationFormat(DropFormatName);
+    private static readonly DataFormat<string> InventoryDropFormat =
+        DataFormat.CreateStringApplicationFormat("x-bn-inventory-copy");
+
+    private sealed record InventoryDrag(
+        string Side,
+        string DatabasePath,
+        string RootId,
+        string[] Paths
+    );
 
     private FilePanelViewModel? _rubberPanel;
     private string? _rubberSide;
@@ -377,7 +387,12 @@ public partial class MainWindow : Window
             UpdateAutoScroll(grid, pos);
             return;
         }
-        if (_dragPanel != null && !_dragging && point.Properties.IsLeftButtonPressed && Vm.CanStage)
+        if (
+            _dragPanel != null
+            && !_dragging
+            && point.Properties.IsLeftButtonPressed
+            && Vm.CanDragStage
+        )
         {
             var grid = GridOf(e.Source) ?? FindGrid(_dragSide);
             if (grid == null)
@@ -400,19 +415,39 @@ public partial class MainWindow : Window
             }
             _dragging = true;
             var vm = Vm;
+            bool inventoryCopy = _dragPanel.IsDatabase;
+            var effect = inventoryCopy ? DragDropEffects.Copy : DragDropEffects.Move;
             vm.StatusMessage =
-                $"Dragging {set.Count} item(s) — release over the other panel to stage MOVE.";
+                $"Dragging {set.Count} item(s) — release over the other panel to stage {(inventoryCopy ? "COPY" : "MOVE")}.";
             var transfer = new DataTransfer();
-            transfer.Add(
-                DataTransferItem.Create(DropFormat, string.Join("\n", set.Select(s => s.FullPath)))
-            );
+            if (inventoryCopy)
+            {
+                var payload = new InventoryDrag(
+                    _dragSide!,
+                    _dragPanel.Snapshot!.DatabasePath,
+                    _dragPanel.SelectedInventoryRoot!.Root.Id,
+                    set.Select(s => s.FullPath).ToArray()
+                );
+                transfer.Add(
+                    DataTransferItem.Create(InventoryDropFormat, JsonSerializer.Serialize(payload))
+                );
+            }
+            else
+            {
+                transfer.Add(
+                    DataTransferItem.Create(
+                        DropFormat,
+                        string.Join("\n", set.Select(s => s.FullPath))
+                    )
+                );
+            }
             var press = _dragPress;
             _dragPanel = null;
             _dragPress = null;
             try
             {
                 _ = DragDrop
-                    .DoDragDropAsync(press, transfer, DragDropEffects.Move)
+                    .DoDragDropAsync(press, transfer, effect)
                     .ContinueWith(
                         t =>
                         {
@@ -559,11 +594,21 @@ public partial class MainWindow : Window
         }
     }
 
-    // --- Drop: schedule MOVE into the target panel directory (plan-only) ---
+    // --- Drop: stage copies from inventory metadata or live moves (plan-only) ---
 
     private void OnGridDragOver(object? sender, DragEventArgs e)
     {
-        if (Vm?.CanStage == true && e.DataTransfer.Contains(DropFormat))
+        var grid = GridOf(e.Source);
+        if (
+            Vm?.CanCreateDatabasePlan == true
+            && grid != null
+            && ReadInventoryDrag(e) is { } payload
+            && payload.Side != (grid.Tag as string)
+        )
+        {
+            e.DragEffects = DragDropEffects.Copy;
+        }
+        else if (Vm?.CanStage == true && grid != null && e.DataTransfer.Contains(DropFormat))
         {
             e.DragEffects = DragDropEffects.Move;
         }
@@ -573,9 +618,9 @@ public partial class MainWindow : Window
         }
     }
 
-    private void OnGridDrop(object? sender, DragEventArgs e)
+    private async void OnGridDrop(object? sender, DragEventArgs e)
     {
-        if (Vm == null || !Vm.CanStage)
+        if (Vm == null || !Vm.CanDragStage)
         {
             return;
         }
@@ -586,10 +631,32 @@ public partial class MainWindow : Window
             return;
         }
 
-        if (!e.DataTransfer.Contains(DropFormat))
+        var panel = PanelOf(grid);
+        if (panel == null)
         {
             return;
         }
+        if (Vm.CanCreateDatabasePlan && ReadInventoryDrag(e) is { } payload)
+        {
+            var source = payload.Side == "Left" ? Vm.Left : Vm.Right;
+            if (
+                source == panel
+                || source.Snapshot == null
+                || !Paths.PathEquals(payload.DatabasePath, source.Snapshot.DatabasePath)
+                || payload.RootId != source.SelectedInventoryRoot?.Root.Id
+            )
+                return;
+            var row = HitRow(grid, e.GetPosition(grid));
+            string destination = row is { IsDirectory: true, IsParentEntry: false }
+                ? row.FullPath
+                : panel.InventoryPath;
+            Activate(grid);
+            e.Handled = true;
+            await Vm.StageInventoryCopyAsync(source, panel, payload.Paths, destination);
+            return;
+        }
+        if (!Vm.CanStage || !e.DataTransfer.Contains(DropFormat))
+            return;
 
         var text = e.DataTransfer.TryGetValue(DropFormat);
         if (string.IsNullOrWhiteSpace(text))
@@ -597,14 +664,34 @@ public partial class MainWindow : Window
             return;
         }
 
-        var panel = PanelOf(grid);
-        if (panel == null)
-        {
-            return;
-        }
-
         Activate(grid);
+        e.Handled = true;
         Vm.StageMovePaths(text!.Split('\n'), panel.CurrentPath);
+    }
+
+    private static InventoryDrag? ReadInventoryDrag(DragEventArgs e)
+    {
+        string? text = e.DataTransfer.TryGetValue(InventoryDropFormat);
+        if (string.IsNullOrWhiteSpace(text))
+            return null;
+        try
+        {
+            var payload = JsonSerializer.Deserialize<InventoryDrag>(text);
+            return
+                payload
+                    is {
+                        Side: "Left" or "Right",
+                        DatabasePath.Length: > 0,
+                        RootId.Length: > 0,
+                        Paths.Length: > 0
+                    }
+                ? payload
+                : null;
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
     }
 
     private static readonly Dictionary<string, string> ColumnTitles = new()

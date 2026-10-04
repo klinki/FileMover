@@ -150,7 +150,7 @@
         <MenuItem Header="Write plan to DB" Command="{Binding WriteToDbCommand}" />
         <MenuItem Header="Clear staged" Command="{Binding ClearStagedCommand}" />
         <Separator />
-        <MenuItem Header="Review / execute staged plan..." Click="OnReviewStagedExecution" IsEnabled="{Binding CanStage}" />
+        <MenuItem Header="Review / execute staged plan..." Click="OnReviewStagedExecution" IsEnabled="{Binding CanReviewStaged}" />
         <MenuItem Header="Open execution database..." Click="OnOpenExecution" IsEnabled="{Binding !IsBusy}" />
       </MenuItem>
       <MenuItem Header="_Panels">
@@ -233,7 +233,7 @@
           <Button Content="F8 Delete (stage trash)" Command="{Binding StageTrashCommand}" />
           <Button Content="Save JSON" Command="{Binding SaveJsonCommand}" />
           <Button Content="Write to DB" Command="{Binding WriteToDbCommand}" />
-          <Button Content="Review / execute..." Click="OnReviewStagedExecution" IsEnabled="{Binding CanStage}" />
+          <Button Content="Review / execute..." Click="OnReviewStagedExecution" IsEnabled="{Binding CanReviewStaged}" />
         </WrapPanel>
       </StackPanel>
     </Border>

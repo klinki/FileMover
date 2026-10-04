@@ -148,6 +148,12 @@ public sealed partial class MainViewModel : ViewModelBase
 
         if (Left.IsDatabase || Right.IsDatabase)
         {
+            if (_inventoryStaging != null && !CanChangePanelSource)
+            {
+                StatusMessage =
+                    "Clear staged inventory operations before refreshing panel sources.";
+                return;
+            }
             await ReloadSnapshots(false);
             return;
         }
@@ -168,6 +174,12 @@ public sealed partial class MainViewModel : ViewModelBase
 
         if (Active.IsDatabase)
         {
+            if (_inventoryStaging != null && !CanChangePanelSource)
+            {
+                StatusMessage =
+                    "Clear staged inventory operations before refreshing panel sources.";
+                return;
+            }
             await ReloadSnapshots(true);
             return;
         }
@@ -185,6 +197,11 @@ public sealed partial class MainViewModel : ViewModelBase
 
         if (Left.IsDatabase || Right.IsDatabase)
         {
+            if (!CanChangePanelSource)
+            {
+                StatusMessage = "Clear staged operations before swapping panel sources.";
+                return;
+            }
             SwapSources();
             return;
         }
@@ -233,17 +250,12 @@ public sealed partial class MainViewModel : ViewModelBase
     private void AppendStaged(IEnumerable<BackupNormalizer.PlanStaging.StagedOp> ops)
     {
         int added = 0;
+        var keys = _stagedCore.Select(op => (op.Type, op.SourceRel, op.DestRel ?? "")).ToHashSet();
         foreach (var op in ops)
         {
             string src = op.Type == OpType.Mkdir ? "" : op.SourceRel;
             string dst = op.Type == OpType.Trash ? "" : (op.DestRel ?? op.SourceRel);
-            if (
-                _stagedCore.Any(s =>
-                    s.Type == op.Type
-                    && s.SourceRel == op.SourceRel
-                    && (s.DestRel ?? "") == (op.DestRel ?? "")
-                )
-            )
+            if (!keys.Add((op.Type, op.SourceRel, op.DestRel ?? "")))
             {
                 continue; // dedupe
             }
@@ -266,6 +278,7 @@ public sealed partial class MainViewModel : ViewModelBase
         UpdateSourceCommands();
         if (_stagedCore.Count == 0)
         {
+            _inventoryStaging = null;
             VirtualDirs.Clear();
             if (Left.IsLive && !Directory.Exists(Left.CurrentPath))
             {
@@ -288,12 +301,22 @@ public sealed partial class MainViewModel : ViewModelBase
         PlanSummary =
             _stagedCore.Count == 0
                 ? "No staged operations."
-                : $"Staged: MKDIR {mkdir}  MOVE {move}  COPY {copy}  TRASH {trash}  SKIP_LINK {_stagedCore.Count(o => o.Type == OpType.SkipLink)}  | bytes to copy: {bytes:N0}";
+                : $"Staged: MKDIR {mkdir}  MOVE {move}  COPY {copy}  VERIFY {_stagedCore.Count(o => o.Type == OpType.Verify)}  TRASH {trash}  SKIP_LINK {_stagedCore.Count(o => o.Type == OpType.SkipLink)}  | bytes to copy: {bytes:N0}";
     }
 
-    [RelayCommand(CanExecute = nameof(CanStage))]
-    public void StageCopy()
+    [RelayCommand(CanExecute = nameof(CanStageCopy))]
+    public async Task StageCopy()
     {
+        if (CanCreateDatabasePlan)
+        {
+            await StageInventoryCopyAsync(
+                Active,
+                Inactive,
+                Active.StagingSet().Select(e => e.FullPath).ToArray(),
+                Inactive.InventoryPath
+            );
+            return;
+        }
         if (!EnsureLiveStaging())
         {
             return;
@@ -487,7 +510,7 @@ public sealed partial class MainViewModel : ViewModelBase
     [RelayCommand]
     public void RemoveStaged(StagedOpItem? item)
     {
-        if (item == null)
+        if (IsBusy || item == null)
         {
             return;
         }
@@ -505,6 +528,8 @@ public sealed partial class MainViewModel : ViewModelBase
     [RelayCommand]
     public void ClearStaged()
     {
+        if (IsBusy)
+            return;
         Staged.Clear();
         _stagedCore.Clear();
         UpdateSummary();
@@ -526,12 +551,8 @@ public sealed partial class MainViewModel : ViewModelBase
                 StatusMessage = "Plan ID is required.";
                 return;
             }
-            var doc = BackupNormalizer.PlanStaging.BuildPlanDoc(
-                PlanId.Trim(),
-                RootId.Trim(),
-                AppliedBasePath,
-                _stagedCore
-            );
+            var doc = BuildStagedDocument();
+            _inventoryStaging?.EnsureOutputPath(JsonPath);
             File.WriteAllText(JsonPath, BackupNormalizer.PlanStaging.ToJson(doc));
             StatusMessage =
                 $"Saved plan {doc.PlanId} ({doc.Operations.Count} ops) to {JsonPath}. Execute later with: plan import + execute.";
@@ -552,14 +573,10 @@ public sealed partial class MainViewModel : ViewModelBase
                 StatusMessage = "Nothing to write: stage operations first.";
                 return;
             }
-            var doc = BackupNormalizer.PlanStaging.BuildPlanDoc(
-                PlanId.Trim(),
-                RootId.Trim(),
-                AppliedBasePath,
-                _stagedCore
-            );
-            using var db = new BackupNormalizer.Database(DbPath);
-            BackupNormalizer.PlanStaging.WriteToDatabase(db, doc, RootId.Trim(), AppliedBasePath);
+            var doc = BuildStagedDocument();
+            _inventoryStaging?.EnsureOutputPath(DbPath);
+            using var db = BackupNormalizer.Database.OpenWritable(DbPath, pooling: false);
+            BackupNormalizer.PlanStaging.WriteToDatabase(db, doc, doc.TargetRoot, doc.TargetPath);
             StatusMessage =
                 $"Wrote plan {doc.PlanId} ({doc.Operations.Count} ops) into {DbPath}. Run: execute {doc.PlanId} --db {DbPath}.";
         }

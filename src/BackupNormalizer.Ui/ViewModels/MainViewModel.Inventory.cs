@@ -44,6 +44,9 @@ public sealed partial class MainViewModel
     private void UpdateSourceCommands()
     {
         OnPropertyChanged(nameof(CanStage));
+        OnPropertyChanged(nameof(CanStageCopy));
+        OnPropertyChanged(nameof(CanDragStage));
+        OnPropertyChanged(nameof(CanReviewStaged));
         OnPropertyChanged(nameof(CanCompare));
         OnPropertyChanged(nameof(CanChangeBase));
         OnPropertyChanged(nameof(CanChangePanelSource));

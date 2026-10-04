@@ -16,12 +16,7 @@ public sealed partial class MainViewModel
         }
         try
         {
-            var document = PlanStaging.BuildPlanDoc(
-                PlanId.Trim(),
-                RootId.Trim(),
-                AppliedBasePath,
-                _stagedCore
-            );
+            var document = BuildStagedDocument();
             var execution = new PlanExecutionViewModel(document);
             AttachExecution(execution);
             return execution;

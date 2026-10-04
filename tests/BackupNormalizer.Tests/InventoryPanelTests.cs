@@ -257,7 +257,7 @@ public sealed class InventoryPanelTests : IDisposable
         await vm.CompareFolders();
         Assert.True(vm.IsComparisonEnabled);
         Assert.False(vm.CanStage);
-        Assert.False(vm.StageCopyCommand.CanExecute(null));
+        Assert.True(vm.StageCopyCommand.CanExecute(null));
         vm.DifferencesOnly = true;
         vm.Left.SelectedEntry = vm.Left.Entries.Single(e => e.Name == "shared");
         vm.EnterSelected();
@@ -339,7 +339,7 @@ public sealed class InventoryPanelTests : IDisposable
         var vm = new MainViewModel();
         await vm.LoadDatabaseAsync("Left", path);
         vm.Left.SelectedEntry = Assert.Single(vm.Left.Entries);
-        vm.StageCopy();
+        await vm.StageCopy();
         vm.StageMove();
         vm.StageTrash();
         vm.StageMkdirFromDialog("new");
