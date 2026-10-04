@@ -176,10 +176,10 @@ This is the first release schema. Databases created by the earlier pre-release s
 
 ## Desktop planner
 
-The planned [file location changes report](docs/features/file-location-changes/feature-spec.md)
-will compare inventory snapshots and distinguish unique moves, retained originals
-with new copies, and ambiguous duplicate matches. Its specification is saved;
-the dedicated report is not implemented yet.
+Compare recorded paths with the [file location changes report](docs/features/file-location-changes/README.md),
+available through `bn location-changes` and **Inventory → File location changes...**.
+It distinguishes unique moves, retained originals with new copies, and ambiguous
+duplicate matches, and exports CSV or JSON without changing either inventory.
 
 Compare content across several disks with [backup coverage](docs/features/backup-coverage/README.md),
 available through `bn coverage` and **Inventory → Backup coverage...** in the desktop app.

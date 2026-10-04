@@ -1,0 +1,68 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:BackupNormalizer.Ui.ViewModels"
+        x:Class="BackupNormalizer.Ui.Views.LocationChangesWindow"
+        x:DataType="vm:LocationChangesViewModel"
+        Title="File location changes" Width="1100" Height="800" MinWidth="800" MinHeight="620"
+        WindowStartupLocation="CenterOwner">
+  <Grid Margin="16" RowDefinitions="Auto,Auto,Auto,Auto,*,130,Auto" RowSpacing="10">
+    <StackPanel Spacing="4">
+      <TextBlock Text="File location changes in A → B" FontSize="22" FontWeight="SemiBold" />
+      <TextBlock Text="Compare recorded paths using file size and SHA-256. Offline inventories are supported. Select a group to see every location."
+                 TextWrapping="Wrap" />
+    </StackPanel>
+    <Grid Grid.Row="1" ColumnDefinitions="*,*" ColumnSpacing="16" IsEnabled="{Binding CanEdit}">
+      <StackPanel Spacing="5">
+        <Button Content="Select inventory A..." Click="OnSelectInventory" Tag="A" />
+        <TextBlock Text="{Binding DatabaseA}" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding DatabaseA}" />
+        <ComboBox ItemsSource="{Binding RootsA}" SelectedItem="{Binding SelectedA}" HorizontalAlignment="Stretch">
+          <ComboBox.ItemTemplate>
+            <DataTemplate x:DataType="vm:LocationRootOption"><TextBlock Text="{Binding Display}" /></DataTemplate>
+          </ComboBox.ItemTemplate>
+        </ComboBox>
+        <TextBlock Text="{Binding SelectedA.Details}" TextWrapping="Wrap" FontSize="11" />
+      </StackPanel>
+      <StackPanel Grid.Column="1" Spacing="5">
+        <Button Content="Select inventory B..." Click="OnSelectInventory" Tag="B" />
+        <TextBlock Text="{Binding DatabaseB}" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding DatabaseB}" />
+        <ComboBox ItemsSource="{Binding RootsB}" SelectedItem="{Binding SelectedB}" HorizontalAlignment="Stretch">
+          <ComboBox.ItemTemplate>
+            <DataTemplate x:DataType="vm:LocationRootOption"><TextBlock Text="{Binding Display}" /></DataTemplate>
+          </ComboBox.ItemTemplate>
+        </ComboBox>
+        <TextBlock Text="{Binding SelectedB.Details}" TextWrapping="Wrap" FontSize="11" />
+      </StackPanel>
+    </Grid>
+    <WrapPanel Grid.Row="2" ItemSpacing="8" LineSpacing="6">
+      <Button Content="Analyze locations" Command="{Binding AnalyzeCommand}" />
+      <Button Content="Swap A / B" Command="{Binding SwapCommand}" />
+      <Button Content="Refresh snapshots" Command="{Binding RefreshCommand}" />
+      <Button Content="Cancel" Command="{Binding CancelCommand}" />
+      <Button Content="Export CSV..." Tag="csv" Click="OnExport" IsEnabled="{Binding CanExport}" />
+      <Button Content="Export JSON..." Tag="json" Click="OnExport" IsEnabled="{Binding CanExport}" />
+      <ProgressBar IsIndeterminate="True" IsVisible="{Binding IsBusy}" Width="80" Height="8" VerticalAlignment="Center" />
+    </WrapPanel>
+    <StackPanel Grid.Row="3" Spacing="6">
+      <TextBlock Text="{Binding Summary}" TextWrapping="Wrap" FontWeight="SemiBold" />
+      <ComboBox ItemsSource="{Binding Filters}" SelectedItem="{Binding Filter}" IsEnabled="{Binding CanEdit}"
+                Width="220" HorizontalAlignment="Left" />
+    </StackPanel>
+    <DataGrid Grid.Row="4" ItemsSource="{Binding Entries}" SelectedItem="{Binding SelectedEntry}"
+              AutoGenerateColumns="False" IsReadOnly="True" CanUserResizeColumns="True">
+      <DataGrid.Columns>
+        <DataGridTextColumn Header="Classification" Binding="{Binding Classification}" Width="140" />
+        <DataGridTextColumn Header="Path in A" Binding="{Binding PathA}" Width="2*" />
+        <DataGridTextColumn Header="Path in B" Binding="{Binding PathB}" Width="2*" />
+        <DataGridTextColumn Header="Bytes" Binding="{Binding SizeText}" Width="110" />
+        <DataGridTextColumn Header="Locations A / B" Binding="{Binding Counts}" Width="130" />
+      </DataGrid.Columns>
+    </DataGrid>
+    <ScrollViewer Grid.Row="5">
+      <StackPanel Spacing="5">
+        <TextBlock Text="Recorded locations / verification details" FontWeight="SemiBold" />
+        <SelectableTextBlock Text="{Binding SelectedEntry.Details}" TextWrapping="Wrap" />
+      </StackPanel>
+    </ScrollViewer>
+    <TextBlock Grid.Row="6" Text="{Binding Status}" TextWrapping="Wrap" />
+  </Grid>
+</Window>

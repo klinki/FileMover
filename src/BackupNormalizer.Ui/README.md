@@ -88,6 +88,15 @@ Closing the jobs window keeps the job running; closing the app cancels and await
 Results remain available in the jobs window, and both panels refresh when they use the
 changed database. See the [background jobs guide](../../docs/features/gui-background-jobs/README.md).
 
+Choose **Inventory → File location changes...** to report moves and copies between
+two inventory roots. Selections default to the loaded panels. Analyze recorded
+size and SHA-256 identities, filter the classifications, and select a group to
+inspect all retained, removed, and added locations. Swap A/B to reverse direction,
+refresh snapshots to reload metadata, or export the current filter as CSV or JSON.
+Analysis requires complete scans and supports offline inventories. Missing or
+stale hashes and ambiguous duplicate matches remain explicit. See the
+[location changes guide](../../docs/features/file-location-changes/README.md).
+
 Use **File → Export active inventory snapshot...** to save a portable database to a new
 file. The export includes committed SQLite WAL data and preserves the original inventory.
 The app remembers panel sources, root selections, folders, the active panel, divider, and

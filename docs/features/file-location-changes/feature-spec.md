@@ -2,8 +2,8 @@
 
 ## Status
 
-Specified for future implementation. The current folder comparison and backup
-coverage reports do not provide this dedicated report.
+Implemented in the core, CLI, and desktop app. See the
+[usage guide](README.md) and [verification notes](verification.md).
 
 ## Goal
 

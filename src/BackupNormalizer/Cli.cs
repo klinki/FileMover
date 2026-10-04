@@ -36,6 +36,7 @@ public static class Cli
                 "purge" => Purge(args[1..]),
                 "diff" => Diff(args[1..]),
                 "coverage" => Coverage(args[1..]),
+                "location-changes" => LocationChanges(args[1..]),
                 "db-test" => DbTest(args[1..]),
                 "scan-test" => ScanTest(args[1..]),
                 _ => Fail($"unknown command '{args[0]}'. Try 'help'."),
@@ -75,6 +76,9 @@ public static class Cli
               purge --older-than 30d --yes [--db PATH] [--path ROOTPATH]
               diff --source-db S.db --source-root R --target-db T.db --target-root R
               coverage --inventory DEVICE=PATH [--inventory DEVICE=PATH ...] [--json]
+              location-changes --source-db A.db --source-root R --target-db B.db --target-root R
+                   [--filter changes|moved|copied|removed-copies|ambiguous|only-in-a|only-in-b|unverified|unchanged|all-differences|all]
+                   [--json | --format csv|json] [--output PATH]
               db-test [--db PATH] | scan-test <path> | --version
             Each database can inventory one drive with multiple named roots. Select the source and target
             for each diff or plan. Automatic plans require fully scanned, disjoint roots.
@@ -190,6 +194,75 @@ public static class Cli
         }
 
         return statuses.All(s => s.PlanningReady) ? 0 : 3;
+    }
+
+    private static int LocationChanges(string[] args)
+    {
+        string sourceDb = Opt(args, "--source-db", ""),
+            sourceRoot = Opt(args, "--source-root", "");
+        string targetDb = Opt(args, "--target-db", ""),
+            targetRoot = Opt(args, "--target-root", "");
+        if (new[] { sourceDb, sourceRoot, targetDb, targetRoot }.Any(string.IsNullOrWhiteSpace))
+            return Fail(
+                "location-changes requires --source-db A.db --source-root R --target-db B.db --target-root R"
+            );
+        string filter = FileLocationChanges.NormalizeFilter(Opt(args, "--filter", "changes"));
+        string format = Opt(args, "--format", "json").ToLowerInvariant();
+        if (format is not ("csv" or "json") || (Has(args, "--json") && format != "json"))
+            return Fail(
+                "location-changes supports csv or json; --json cannot be combined with --format csv"
+            );
+        var report = FileLocationChanges.Analyze(
+            new(sourceDb, sourceRoot),
+            new(targetDb, targetRoot)
+        );
+        if (Has(args, "--output"))
+        {
+            string path = Opt(args, "--output", "");
+            if (string.IsNullOrWhiteSpace(path))
+                return Fail("--output requires a file path");
+            LocationChangesExport.Save(path, report, format, filter);
+            Console.WriteLine(
+                $"Location changes report saved to {TerminalText(Path.GetFullPath(path))}"
+            );
+        }
+        else if (Has(args, "--json") || Has(args, "--format"))
+        {
+            LocationChangesExport.Write(Console.Out, report, format, filter);
+        }
+        else
+        {
+            Console.WriteLine($"Recorded location changes A → B | {filter}");
+            Console.WriteLine(
+                TerminalText(
+                    $"A: {report.A.Input.DatabasePath} [{report.A.Input.RootId}] {report.A.RootPath} | scanned {report.A.ScannedUtc ?? "unknown"}"
+                )
+            );
+            Console.WriteLine(
+                TerminalText(
+                    $"B: {report.B.Input.DatabasePath} [{report.B.Input.RootId}] {report.B.RootPath} | scanned {report.B.ScannedUtc ?? "unknown"}"
+                )
+            );
+            Console.WriteLine(
+                string.Join("; ", report.Summary.Select(item => $"{item.Key}: {item.Value}"))
+            );
+            Console.WriteLine(
+                $"Unverified files: {report.UnverifiedFiles}; unverified groups: {report.Summary.GetValueOrDefault(FileLocationChanges.Unverified)}"
+            );
+            foreach (var group in FileLocationChanges.Filter(report, filter))
+            {
+                Console.WriteLine(
+                    $"{group.Classification} | {group.Size:N0} bytes | {group.Digest ?? "unverified"}"
+                );
+                foreach (var location in group.Locations)
+                    Console.WriteLine(
+                        TerminalText($"  {location.Side} {location.State}: {location.RelativePath}")
+                    );
+                if (group.VerificationReason != null)
+                    Console.WriteLine(TerminalText("  " + group.VerificationReason));
+            }
+        }
+        return 0;
     }
 
     private static int Coverage(string[] args)
