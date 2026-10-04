@@ -106,6 +106,12 @@ into content versions and A/B path lists without guessing replacement pairs.
 or B root, with copy counts and potential savings. Unknown evidence stays separate.
 Exports follow the current view. Changing matching options clears previous results.
 
+Expand **Exclude paths from both inventories** and enter one root-relative
+file or directory per line. Directory entries exclude their contents. The same
+list applies to A and B before all comparisons and duplicate calculations.
+Editing the list clears results; analyze again to export. Existing scan
+exclusions remain in force.
+
 Use **File → Export active inventory snapshot...** to save a portable database to a new
 file. The export includes committed SQLite WAL data and preserves the original inventory.
 The app remembers panel sources, root selections, folders, the active panel, divider, and

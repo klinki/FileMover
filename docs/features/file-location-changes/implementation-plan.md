@@ -19,6 +19,20 @@ The [feature specification](feature-spec.md) defines the report's behavior.
    large duplicate family without a Cartesian expansion. Run Release checks.
 1. Update usage and verification documentation. Leave changes uncommitted.
 
+## Report path exclusion extension
+
+1. Add optional literal root-relative exclusions to analysis options. Normalize
+   and validate before opening inputs, then combine with stored scan exclusions
+   while loading files so all matching and duplicate computations use the scope.
+1. Add a shared multiline exclusion field in the desktop dialog and repeatable
+   `--exclude-path` CLI options. Clear stale reports on edits and preserve the
+   list when refreshing or swapping inputs.
+1. Include normalized exclusions in JSON and CSV for every view, including
+   empty reports. Document scope and literal path rules.
+1. Verify directory boundaries, files, case and separator rules, validation,
+   combined stored policies, move uniqueness, duplicate counts and savings,
+   unknown-file scope, read-only preservation, exports, CLI, and desktop state.
+
 ## Same-path content comparison extension
 
 1. Index eligible regular files by normalized relative path while loading the

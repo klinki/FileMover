@@ -16,6 +16,34 @@ public sealed class UiLocationChangesTests : IDisposable
     public void Dispose() => _fixture.Dispose();
 
     [Fact]
+    public async Task Report_Exclusions_Recompute_All_Views_And_Clear_Stale_Exports()
+    {
+        string a = _fixture.Seed("a", ["old/movie.mp4", "cache/copy.mp4"]);
+        string b = _fixture.Seed("b", ["new/movie.mp4"]);
+        using var vm = new LocationChangesViewModel();
+        await vm.LoadAsync("A", a);
+        await vm.LoadAsync("B", b);
+        await vm.Analyze();
+        Assert.Equal(FileLocationChanges.Ambiguous, Assert.Single(vm.Entries).Classification);
+        Assert.Single(vm.Report!.DuplicatesA);
+        vm.ExcludedPaths = "\r\n cache\\ \r\n  \n";
+        Assert.Null(vm.Report);
+        Assert.Empty(vm.Entries);
+        Assert.Empty(vm.GroupedEntries);
+        Assert.False(vm.CanExport);
+        await vm.Analyze();
+        Assert.Equal(FileLocationChanges.Moved, Assert.Single(vm.Entries).Classification);
+        Assert.Empty(vm.Report!.DuplicatesA);
+        Assert.Equal(new[] { "cache" }, vm.Report.ExcludedPaths);
+        Assert.Contains("Excluded paths: 1", vm.Summary);
+        vm.ExcludedPaths = "../cache";
+        await vm.Analyze();
+        Assert.Null(vm.Report);
+        Assert.False(vm.CanExport);
+        Assert.Contains("Invalid excluded path", vm.Status);
+    }
+
+    [Fact]
     public async Task Grouped_Views_Keep_All_Paths_Export_The_Active_View_And_Clear_On_Options_Changes()
     {
         string a = _fixture.Seed("a", ["old/movie.mp4", "copy/movie.mp4"], content: "left");
@@ -322,6 +350,12 @@ public sealed class UiLocationChangesTests : IDisposable
                 window!.UpdateLayout();
                 var grid = window.FindControl<DataGrid>("LocationGrid")!;
                 Assert.True(grid.Bounds.Width > 0);
+                Assert.True(grid.Bounds.Height > 0);
+                var exclusions = window.GetLogicalDescendants().OfType<Expander>().Single();
+                exclusions.IsExpanded = true;
+                window.UpdateLayout();
+                var paths = window.FindControl<TextBox>("ExcludedPathsBox")!;
+                Assert.True(paths.Bounds.Height > 0);
                 Assert.True(grid.Bounds.Height > 0);
                 Assert.All(
                     window!

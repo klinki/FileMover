@@ -58,6 +58,7 @@ public sealed record LocationChangesReport(
     public string Direction => "A → B";
     public bool FilenameMatchingEnabled { get; init; }
     public IReadOnlyList<string> FilenameExtensions { get; init; } = [];
+    public IReadOnlyList<string> ExcludedPaths { get; init; } = [];
     public IReadOnlyList<FilenameDifferenceGroup> FilenameGroups { get; init; } = [];
     public IReadOnlyList<DuplicateContentGroup> DuplicatesA { get; init; } = [];
     public IReadOnlyList<DuplicateContentGroup> DuplicatesB { get; init; } = [];
@@ -111,6 +112,7 @@ public static class FileLocationChanges
     )
     {
         cancellationToken.ThrowIfCancellationRequested();
+        var excludedPaths = options.NormalizeExcludedPaths();
         var extensions = options.MatchFilenames
             ? GroupedFileReports.NormalizeExtensions(options.Extensions)
             : [];
@@ -132,7 +134,22 @@ public static class FileLocationChanges
                 : StringComparer.Ordinal;
         var aExclusions = aDb.GetPathExclusions(aRoot);
         var bExclusions = targetDb.GetPathExclusions(bRoot);
-        bool Excluded(string path) => aExclusions.IsExcluded(path) || bExclusions.IsExcluded(path);
+        var reportExclusions = excludedPaths.ToHashSet(comparer);
+        bool Excluded(string path)
+        {
+            if (aExclusions.IsExcluded(path) || bExclusions.IsExcluded(path))
+                return true;
+            while (path.Length > 0)
+            {
+                if (reportExclusions.Contains(path))
+                    return true;
+                int separator = path.LastIndexOf('/');
+                if (separator < 0)
+                    break;
+                path = path[..separator];
+            }
+            return false;
+        }
         var groups = new Dictionary<(long Size, string Digest), List<FileLocation>>();
         var unknown = new List<(long Size, FileLocation Location, string Reason)>();
         var aFiles = new Dictionary<string, Database.FileWithHashRow>(comparer);
@@ -351,6 +368,7 @@ public static class FileLocationChanges
         {
             FilenameMatchingEnabled = options.MatchFilenames,
             FilenameExtensions = extensions,
+            ExcludedPaths = excludedPaths,
             FilenameGroups = filenameGroups,
             DuplicatesA = duplicatesA,
             DuplicatesB = duplicatesB,

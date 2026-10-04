@@ -184,6 +184,8 @@ duplicate matches, and exports CSV or JSON without changing either inventory.
 Enable extension-filtered filename matching to compare content versions across
 folders while retaining repeated names. The Duplicates view reports verified
 copies across filenames within A or B, with all locations and potential savings.
+Exclude root-relative files or directories from both inventories before
+computation using the dialog's exclusion list or repeatable `--exclude-path` options.
 
 Compare content across several disks with [backup coverage](docs/features/backup-coverage/README.md),
 available through `bn coverage` and **Inventory → Backup coverage...** in the desktop app.

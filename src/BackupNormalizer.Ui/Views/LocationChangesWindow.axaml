@@ -10,52 +10,63 @@
       <TextBlock Text="{Binding Label}" TextWrapping="Wrap" />
     </TreeDataTemplate>
   </Window.DataTemplates>
-  <Grid Margin="16" RowDefinitions="Auto,Auto,Auto,Auto,*,80,Auto" RowSpacing="10">
-    <StackPanel Spacing="4">
-      <TextBlock Text="File differences in A → B" FontSize="22" FontWeight="SemiBold" />
-      <TextBlock Text="Compare content at the same relative path and find moved or copied files using recorded size and SHA-256. Offline inventories are supported."
-                 TextWrapping="Wrap" />
-    </StackPanel>
-    <Grid Grid.Row="1" ColumnDefinitions="*,*" ColumnSpacing="16" IsEnabled="{Binding CanEdit}">
-      <StackPanel Spacing="5">
-        <Button Content="Select inventory A..." Click="OnSelectInventory" Tag="A" />
-        <TextBlock Text="{Binding DatabaseA}" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding DatabaseA}" />
-        <ComboBox ItemsSource="{Binding RootsA}" SelectedItem="{Binding SelectedA}" HorizontalAlignment="Stretch">
-          <ComboBox.ItemTemplate>
-            <DataTemplate x:DataType="vm:LocationRootOption"><TextBlock Text="{Binding Display}" /></DataTemplate>
-          </ComboBox.ItemTemplate>
-        </ComboBox>
-        <TextBlock Text="{Binding SelectedA.Details}" TextWrapping="Wrap" FontSize="11" />
-      </StackPanel>
-      <StackPanel Grid.Column="1" Spacing="5">
-        <Button Content="Select inventory B..." Click="OnSelectInventory" Tag="B" />
-        <TextBlock Text="{Binding DatabaseB}" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding DatabaseB}" />
-        <ComboBox ItemsSource="{Binding RootsB}" SelectedItem="{Binding SelectedB}" HorizontalAlignment="Stretch">
-          <ComboBox.ItemTemplate>
-            <DataTemplate x:DataType="vm:LocationRootOption"><TextBlock Text="{Binding Display}" /></DataTemplate>
-          </ComboBox.ItemTemplate>
-        </ComboBox>
-        <TextBlock Text="{Binding SelectedB.Details}" TextWrapping="Wrap" FontSize="11" />
-      </StackPanel>
-    </Grid>
-    <WrapPanel Grid.Row="2" ItemSpacing="8" LineSpacing="6">
-      <Button Content="Analyze differences" Command="{Binding AnalyzeCommand}" />
-      <Button Content="Swap A / B" Command="{Binding SwapCommand}" />
-      <Button Content="Refresh snapshots" Command="{Binding RefreshCommand}" />
-      <Button Content="Cancel" Command="{Binding CancelCommand}" />
-      <Button Content="Export CSV..." Tag="csv" Click="OnExport" IsEnabled="{Binding CanExport}" />
-      <Button Content="Export JSON..." Tag="json" Click="OnExport" IsEnabled="{Binding CanExport}" />
-      <ProgressBar IsIndeterminate="True" IsVisible="{Binding IsBusy}" Width="80" Height="8" VerticalAlignment="Center" />
-    </WrapPanel>
-    <StackPanel Grid.Row="3" Spacing="6">
-      <WrapPanel ItemSpacing="8" LineSpacing="5" IsEnabled="{Binding CanEdit}">
-        <CheckBox Content="Match filenames across folders" IsChecked="{Binding MatchFilenames}" />
-        <TextBlock Text="Extensions:" VerticalAlignment="Center" />
-        <TextBox Text="{Binding Extensions}" Width="180" PlaceholderText=".zip,.mp4" />
-      </WrapPanel>
-      <TextBlock Text="{Binding Summary}" TextWrapping="Wrap" FontWeight="SemiBold" />
-    </StackPanel>
-    <TabControl Grid.Row="4" SelectedIndex="{Binding ReportView}" IsEnabled="{Binding CanEdit}"
+  <Grid Margin="16" RowDefinitions="Auto,*,80,Auto" RowSpacing="10">
+    <ScrollViewer MaxHeight="420" HorizontalScrollBarVisibility="Disabled">
+      <Grid RowDefinitions="Auto,Auto,Auto,Auto" RowSpacing="10">
+        <StackPanel Spacing="4">
+          <TextBlock Text="File differences in A → B" FontSize="22" FontWeight="SemiBold" />
+          <TextBlock Text="Compare content at the same relative path and find moved or copied files using recorded size and SHA-256. Offline inventories are supported."
+                     TextWrapping="Wrap" />
+        </StackPanel>
+        <Grid Grid.Row="1" ColumnDefinitions="*,*" ColumnSpacing="16" IsEnabled="{Binding CanEdit}">
+          <StackPanel Spacing="5">
+            <Button Content="Select inventory A..." Click="OnSelectInventory" Tag="A" />
+            <TextBlock Text="{Binding DatabaseA}" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding DatabaseA}" />
+            <ComboBox ItemsSource="{Binding RootsA}" SelectedItem="{Binding SelectedA}" HorizontalAlignment="Stretch">
+              <ComboBox.ItemTemplate>
+                <DataTemplate x:DataType="vm:LocationRootOption"><TextBlock Text="{Binding Display}" /></DataTemplate>
+              </ComboBox.ItemTemplate>
+            </ComboBox>
+            <TextBlock Text="{Binding SelectedA.Details}" TextWrapping="Wrap" FontSize="11" />
+          </StackPanel>
+          <StackPanel Grid.Column="1" Spacing="5">
+            <Button Content="Select inventory B..." Click="OnSelectInventory" Tag="B" />
+            <TextBlock Text="{Binding DatabaseB}" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding DatabaseB}" />
+            <ComboBox ItemsSource="{Binding RootsB}" SelectedItem="{Binding SelectedB}" HorizontalAlignment="Stretch">
+              <ComboBox.ItemTemplate>
+                <DataTemplate x:DataType="vm:LocationRootOption"><TextBlock Text="{Binding Display}" /></DataTemplate>
+              </ComboBox.ItemTemplate>
+            </ComboBox>
+            <TextBlock Text="{Binding SelectedB.Details}" TextWrapping="Wrap" FontSize="11" />
+          </StackPanel>
+        </Grid>
+        <WrapPanel Grid.Row="2" ItemSpacing="8" LineSpacing="6">
+          <Button Content="Analyze differences" Command="{Binding AnalyzeCommand}" />
+          <Button Content="Swap A / B" Command="{Binding SwapCommand}" />
+          <Button Content="Refresh snapshots" Command="{Binding RefreshCommand}" />
+          <Button Content="Cancel" Command="{Binding CancelCommand}" />
+          <Button Content="Export CSV..." Tag="csv" Click="OnExport" IsEnabled="{Binding CanExport}" />
+          <Button Content="Export JSON..." Tag="json" Click="OnExport" IsEnabled="{Binding CanExport}" />
+          <ProgressBar IsIndeterminate="True" IsVisible="{Binding IsBusy}" Width="80" Height="8" VerticalAlignment="Center" />
+        </WrapPanel>
+        <StackPanel Grid.Row="3" Spacing="6">
+          <WrapPanel ItemSpacing="8" LineSpacing="5" IsEnabled="{Binding CanEdit}">
+            <CheckBox Content="Match filenames across folders" IsChecked="{Binding MatchFilenames}" />
+            <TextBlock Text="Extensions:" VerticalAlignment="Center" />
+            <TextBox Text="{Binding Extensions}" Width="180" PlaceholderText=".zip,.mp4" />
+          </WrapPanel>
+          <Expander Header="Exclude paths from both inventories" IsEnabled="{Binding CanEdit}" HorizontalAlignment="Stretch">
+            <StackPanel Spacing="4">
+              <TextBlock Text="One root-relative file or directory per line. Directories include all contents. Applies before comparison to every report view." TextWrapping="Wrap" FontSize="11" />
+              <TextBox x:Name="ExcludedPathsBox" Text="{Binding ExcludedPaths}" AcceptsReturn="True" Height="64"
+                       PlaceholderText="photos/cache&#10;temporary/video.mp4" />
+            </StackPanel>
+          </Expander>
+          <TextBlock Text="{Binding Summary}" TextWrapping="Wrap" FontWeight="SemiBold" />
+        </StackPanel>
+      </Grid>
+    </ScrollViewer>
+    <TabControl Grid.Row="1" SelectedIndex="{Binding ReportView}" IsEnabled="{Binding CanEdit}"
                 HorizontalContentAlignment="Stretch" VerticalContentAlignment="Stretch">
       <TabControl.ItemsPanel>
         <ItemsPanelTemplate><StackPanel Orientation="Horizontal" /></ItemsPanelTemplate>
@@ -93,12 +104,12 @@
         </Grid>
       </TabItem>
     </TabControl>
-    <ScrollViewer Grid.Row="5">
+    <ScrollViewer Grid.Row="2">
       <StackPanel Spacing="5">
         <TextBlock Text="Recorded locations / verification details" FontWeight="SemiBold" />
         <SelectableTextBlock Text="{Binding SelectedDetails}" TextWrapping="Wrap" />
       </StackPanel>
     </ScrollViewer>
-    <TextBlock Grid.Row="6" Text="{Binding Status}" TextWrapping="Wrap" />
+    <TextBlock Grid.Row="3" Text="{Binding Status}" TextWrapping="Wrap" />
   </Grid>
 </Window>

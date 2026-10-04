@@ -92,6 +92,9 @@ public sealed partial class LocationChangesViewModel : ObservableObject, IDispos
     public partial string Extensions { get; set; } = ".zip,.mp4";
 
     [ObservableProperty]
+    public partial string ExcludedPaths { get; set; } = "";
+
+    [ObservableProperty]
     public partial int ReportView { get; set; }
 
     [ObservableProperty]
@@ -208,7 +211,14 @@ public sealed partial class LocationChangesViewModel : ObservableObject, IDispos
         });
         try
         {
-            var options = new FileDifferenceOptions(MatchFilenames, Extensions);
+            var options = new FileDifferenceOptions(
+                MatchFilenames,
+                Extensions,
+                ExcludedPaths.Split(
+                    ['\r', '\n'],
+                    StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries
+                )
+            );
             var report = await Task.Run(
                 () => _analyze(a, b, options, work.Token, progress),
                 work.Token
@@ -223,6 +233,8 @@ public sealed partial class LocationChangesViewModel : ObservableObject, IDispos
                 $"Path/location groups: {report.Groups.Count:N0}"
                 + $" | Filename groups: {report.FilenameGroups.Count:N0} | Duplicates A/B: {report.DuplicatesA.Count:N0}/{report.DuplicatesB.Count:N0}"
                 + $" | Unverified files: {report.UnverifiedFiles:N0}";
+            if (report.ExcludedPaths.Count > 0)
+                Summary += $" | Excluded paths: {report.ExcludedPaths.Count:N0}";
             Status = "Recorded differences in A → B. Select a group to inspect paths and content.";
         }
         catch (OperationCanceledException)
@@ -330,6 +342,8 @@ public sealed partial class LocationChangesViewModel : ObservableObject, IDispos
     partial void OnMatchFilenamesChanged(bool value) => SourceChanged();
 
     partial void OnExtensionsChanged(string value) => SourceChanged();
+
+    partial void OnExcludedPathsChanged(string value) => SourceChanged();
 
     partial void OnSelectedEntryChanged(LocationChangeItem? value) =>
         OnPropertyChanged(nameof(SelectedDetails));

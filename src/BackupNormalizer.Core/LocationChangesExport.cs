@@ -35,6 +35,7 @@ public static class LocationChangesExport
                     report.UnverifiedFiles,
                     report.FilenameMatchingEnabled,
                     report.FilenameExtensions,
+                    report.ExcludedPaths,
                     Groups = groups,
                 },
                 new JsonSerializerOptions
@@ -49,6 +50,7 @@ public static class LocationChangesExport
         }
         if (!format.Equals("csv", StringComparison.OrdinalIgnoreCase))
             throw new ArgumentException("Location reports support csv or json format.");
+        string excludedPaths = JsonSerializer.Serialize(report.ExcludedPaths);
         Row(
             writer,
             "GroupId",
@@ -74,7 +76,8 @@ public static class LocationChangesExport
             "RootB",
             "RootPathB",
             "ScannedUtcB",
-            "Filter"
+            "Filter",
+            "ExcludedPaths"
         );
         if (groups.Length == 0)
         {
@@ -104,7 +107,8 @@ public static class LocationChangesExport
                 report.B.Input.RootId,
                 report.B.RootPath,
                 report.B.ScannedUtc,
-                filter
+                filter,
+                excludedPaths
             );
         }
         foreach (var group in groups)
@@ -139,7 +143,8 @@ public static class LocationChangesExport
                     report.B.Input.RootId,
                     report.B.RootPath,
                     report.B.ScannedUtc,
-                    filter
+                    filter,
+                    excludedPaths
                 );
             }
         }

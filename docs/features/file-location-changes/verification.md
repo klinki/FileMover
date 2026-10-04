@@ -4,18 +4,18 @@ Verified on 2026-10-04 against the [feature specification](feature-spec.md).
 
 ## Results
 
-- Release solution build completed successfully; test runs also compiled the projects.
-- Full solution tests passed: 441 passed, 20 skipped, 0 failed. The skips are
+- Release solution compilation completed successfully as part of the test runs.
+- Full solution tests passed: 464 passed, 20 skipped, 0 failed. The skips are
   existing native NTFS/symlink and headless input tests.
-- All 72 feature cases passed in the full run, including 24 added for grouped
-  filename/duplicate reports. All 11 desktop cases also passed in a focused run.
-- CSharpier checked all nine C# files changed by this extension. Whitespace checks and
+- All 95 feature cases passed in the full run, including 24 added for grouped
+  filename/duplicate reports and 23 for report path exclusions. All 12 desktop
+  cases also passed in a focused run.
+- CSharpier checked all eight C# files changed by the path exclusion extension. Whitespace checks and
   feature documentation links passed.
 
 ```powershell
-dotnet build BackupNormalizer.slnx -c Release --no-restore -p:UsedAvaloniaProducts=
-dotnet test BackupNormalizer.slnx -c Release --no-restore -p:UsedAvaloniaProducts= --filter 'FullyQualifiedName~UiLocationChangesTests' --results-directory TestResults/grouped-file-reports --logger 'trx;LogFileName=ui.trx'
-dotnet test BackupNormalizer.slnx -c Release --no-restore -p:UsedAvaloniaProducts= --results-directory TestResults/grouped-file-reports --logger 'trx;LogFileName=full.trx'
+dotnet test BackupNormalizer.slnx -c Release --no-restore -p:UsedAvaloniaProducts= -p:OutputPath=bin/PathExclusions/Release/ --filter 'FullyQualifiedName~UiLocationChangesTests' --results-directory TestResults/path-exclusions --logger 'trx;LogFileName=ui.trx'
+dotnet test BackupNormalizer.slnx -c Release --no-restore -p:UsedAvaloniaProducts= -p:OutputPath=bin/PathExclusions/Release/ --results-directory TestResults/path-exclusions --logger 'trx;LogFileName=full.trx'
 ```
 
 The empty `UsedAvaloniaProducts` property disables Avalonia build telemetry for
@@ -23,7 +23,22 @@ these sandboxed checks. The standard telemetry target attempted to write its log
 outside the workspace. Existing Avalonia constructor and xUnit analyzer warnings
 remain unrelated to this feature.
 
+The first attempt to build into the standard Release directory was blocked by
+running app instances holding its DLLs open. The successful runs used the separate
+output directory shown above and left those processes running.
+
 ## Coverage
+
+[Report exclusion tests](../../../tests/BackupNormalizer.Tests/FileDifferenceExclusionsTests.cs)
+verify literal file and subtree exclusions before every comparison mode, sibling
+prefix boundaries, separator normalization, deduplication, case rules, invalid
+paths, and existing stored policies. Excluded unknown files cannot undermine
+move uniqueness, and excluded copies do not inflate duplicate counts or savings.
+Checks preserve both input databases and retain exclusion metadata in JSON/CSV,
+including empty exports and names requiring quoting. CLI checks cover repeatable
+options and missing values. Desktop checks verify stale-report invalidation,
+blank-line handling, reanalysis, invalid input, and visible results at minimum
+window size with the exclusions section expanded.
 
 [Core and CLI tests](../../../tests/BackupNormalizer.Tests/FileLocationChangesTests.cs)
 verify unique moves, copies with one or several retained originals, removed

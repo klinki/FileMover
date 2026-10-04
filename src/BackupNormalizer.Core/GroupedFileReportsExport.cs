@@ -38,6 +38,7 @@ internal static class GroupedFileReportsExport
                     Filter = filter,
                     report.FilenameMatchingEnabled,
                     report.FilenameExtensions,
+                    report.ExcludedPaths,
                     report.Summary,
                     report.UnverifiedFiles,
                     FilenameGroups = families,
@@ -56,6 +57,7 @@ internal static class GroupedFileReportsExport
         }
         if (!format.Equals("csv", StringComparison.OrdinalIgnoreCase))
             throw new ArgumentException("File reports support csv or json format.");
+        string excludedPaths = JsonSerializer.Serialize(report.ExcludedPaths);
         LocationChangesExport.Row(
             writer,
             "GroupId",
@@ -87,7 +89,8 @@ internal static class GroupedFileReportsExport
             "ScannedUtcB",
             "Filter",
             "FilenameMatchingEnabled",
-            "FilenameExtensions"
+            "FilenameExtensions",
+            "ExcludedPaths"
         );
         int rows = 0;
         void Row(
@@ -140,7 +143,8 @@ internal static class GroupedFileReportsExport
                 report.B.ScannedUtc,
                 filter,
                 report.FilenameMatchingEnabled.ToString(),
-                string.Join(",", report.FilenameExtensions)
+                string.Join(",", report.FilenameExtensions),
+                excludedPaths
             );
             rows++;
         }

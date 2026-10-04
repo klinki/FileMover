@@ -77,6 +77,8 @@ matching basis in group labels and full metadata in selection details. Extension
 or matching-mode edits clear stale analysis. Switching views uses background
 projection with cancellation; export follows the active view and duplicate side.
 The window has a minimum size of 800 × 720 to keep results visible with these controls.
+Its settings section scrolls when expanded controls need more space, keeping
+the result views visible at that minimum size.
 
 CLI adds `--match-filenames`, `--extensions zip,mp4`, and filters
 `filename-differences`, `duplicates-in-a`, and `duplicates-in-b`. Filename view
@@ -84,6 +86,32 @@ requires explicit filename matching. JSON exports grouped versions or duplicates
 with analysis options and unknown locations. CSV uses one row per location with
 family/version IDs, version status, copy counts, extra copies, potential savings,
 and existing input metadata. Empty exports retain metadata.
+
+## Report path exclusions
+
+Provide an optional **Exclude paths from both inventories** section in the
+desktop dialog. Accept one root-relative file or directory per line. Apply the
+same list to A and B before same-path comparison, content matching, filename
+grouping, duplicate discovery, and uncertainty checks. Excluding a directory
+also excludes its descendants; a sibling with a similar prefix remains eligible.
+For example, `photos/cache` excludes `photos/cache/image.jpg` but preserves
+`photos/cache-old/image.jpg`.
+
+Treat paths literally, including characters with regex meaning. Normalize slash
+directions, duplicate separators, an optional leading `./`, and trailing slashes.
+Trim whitespace, ignore empty input lines, deduplicate, and sort the list.
+Reject absolute paths, drive-qualified paths, `.` or `..` segments, and wildcards.
+Ignore path case only when both selected roots are case-insensitive. Keep both
+roots' stored scan exclusions in force alongside these report-specific rules.
+
+Changing the list clears stale results and exports. Refreshing or swapping inputs
+retains the shared list. Duplicate copy counts and savings, summaries, eligible
+file counts, and unverified counts describe only included files. The report never
+stores these exclusions in either inventory or changes scan policy.
+
+CLI accepts repeatable `--exclude-path RELATIVE_PATH`. JSON records normalized
+`excludedPaths` in every view; CSV appends an `ExcludedPaths` column containing
+the JSON array, including empty-result metadata rows.
 
 ## Same-path content differences
 
@@ -241,6 +269,10 @@ companion file. Analysis and export never modify the input inventories or files.
   source/destination pairs. Extension filtering affects only this candidate view.
 - Duplicate counts and savings apply to one selected root at a time, across
   filenames. Unverified entries never establish duplicate identity.
+- Report path exclusions apply to both inventories before all computation.
+  Directory boundaries and literal path characters are respected; excluded
+  copies and unknown files do not affect classifications, counts, or savings.
+  Edits invalidate results, and exports retain the normalized exclusion list.
 - Shared paths are matched before changes are classified, while uniqueness uses
   all original locations. Duplicate groups never receive arbitrary move pairs.
 - Missing or stale hashes cannot establish identity or a definitive location

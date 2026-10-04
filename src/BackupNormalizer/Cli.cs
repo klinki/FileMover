@@ -80,6 +80,7 @@ public static class Cli
                    [--filter quick-differences|content-changed|changes|moved|copied|removed-copies|ambiguous|only-in-a|only-in-b|unverified|unchanged|all-differences|all]
                    [--json | --format csv|json] [--output PATH]
                    [--match-filenames] [--extensions zip,mp4]
+                   [--exclude-path RELATIVE_PATH ...]
                    Grouped views: --filter filename-differences|duplicates-in-a|duplicates-in-b
               db-test [--db PATH] | scan-test <path> | --version
             Each database can inventory one drive with multiple named roots. Select the source and target
@@ -216,12 +217,22 @@ public static class Cli
             return Fail(
                 "location-changes supports csv or json; --json cannot be combined with --format csv"
             );
+        var excludedPaths = new List<string>();
+        for (int index = 0; index < args.Length; index++)
+        {
+            if (args[index] != "--exclude-path")
+                continue;
+            if (++index >= args.Length || args[index].StartsWith("--"))
+                return Fail("--exclude-path requires a root-relative file or directory path");
+            excludedPaths.Add(args[index]);
+        }
         var report = FileLocationChanges.Analyze(
             new(sourceDb, sourceRoot),
             new(targetDb, targetRoot),
             new FileDifferenceOptions(
                 Has(args, "--match-filenames"),
-                Opt(args, "--extensions", ".zip,.mp4")
+                Opt(args, "--extensions", ".zip,.mp4"),
+                excludedPaths
             )
         );
         if (filter == GroupedFileReports.FilenameDifferences && !report.FilenameMatchingEnabled)
@@ -259,6 +270,11 @@ public static class Cli
             Console.WriteLine(
                 $"Unverified files: {report.UnverifiedFiles}; unverified groups: {report.Summary.GetValueOrDefault(FileLocationChanges.Unverified)}"
             );
+            if (report.ExcludedPaths.Count > 0)
+                Console.WriteLine(
+                    "Excluded paths in both inventories: "
+                        + TerminalText(string.Join(", ", report.ExcludedPaths))
+                );
             if (GroupedFileReports.IsGroupedView(filter))
             {
                 WriteGroupedFileReport(report, filter);

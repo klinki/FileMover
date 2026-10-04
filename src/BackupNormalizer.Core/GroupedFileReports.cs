@@ -2,8 +2,32 @@ namespace BackupNormalizer;
 
 public sealed record FileDifferenceOptions(
     bool MatchFilenames = false,
-    string Extensions = ".zip,.mp4"
-);
+    string Extensions = ".zip,.mp4",
+    IReadOnlyList<string>? ExcludedPaths = null
+)
+{
+    internal string[] NormalizeExcludedPaths() =>
+        (ExcludedPaths ?? [])
+            .Select(path =>
+            {
+                string relative = path.Replace('\\', '/').Trim();
+                if (relative.StartsWith('/') || relative.Contains(':'))
+                    throw new ArgumentException($"Excluded path must be root-relative: '{path}'.");
+                relative = Paths.NormalizeRelative(relative).TrimEnd('/');
+                if (
+                    relative.Length == 0
+                    || relative.IndexOfAny(['*', '?']) >= 0
+                    || relative.Split('/').Any(part => part is "." or "..")
+                )
+                    throw new ArgumentException(
+                        $"Invalid excluded path: '{path}'. Use a relative file or directory path without wildcards."
+                    );
+                return relative;
+            })
+            .Distinct(StringComparer.Ordinal)
+            .Order(StringComparer.Ordinal)
+            .ToArray();
+}
 
 public sealed record FilenameContentVersion(
     string Id,

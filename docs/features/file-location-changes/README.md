@@ -14,7 +14,9 @@ duplicate content within either selected root.
 1. Choose **Inventory → File differences...**. Loaded panel databases and
    selected roots provide the defaults. Select a different database or root on
    either side as needed.
-1. Choose **Analyze differences**. Progress appears in the status line, and
+1. Optionally expand **Exclude paths from both inventories** and enter one
+   root-relative file or directory per line. Then choose **Analyze differences**.
+   Progress appears in the status line, and
    **Cancel** stops the work without publishing a partial result.
 1. In **Path / location differences**, the default **Quick differences** filter
    shows content changes, moves, copies,
@@ -33,6 +35,22 @@ duplicate content within either selected root.
 Loading, analysis, filtering, refresh, and export run in the background. Closing
 the window cancels outstanding work. Root selection, direction changes, failed
 analysis, and cancellation prevent exporting stale or partial results.
+
+## Exclude paths from computation
+
+Use **Exclude paths from both inventories** to leave specific files or folders
+out of this report. Enter paths relative to the selected inventory roots, such
+as `photos/cache` or `temporary/video.mp4`, one per line. The same list applies
+to A and B. Directory exclusions include all descendants; `photos/cache` does
+not exclude `photos/cache-old`. Paths are literal, not regexes or wildcard
+patterns. Absolute paths and `..` segments are rejected. Either slash direction
+works; paths ignore case only when both roots are case-insensitive.
+
+Exclusions apply before computation to every report view, including filename
+groups, duplicate counts and savings, and unverified counts. Stored scan
+exclusions also apply. Editing the list clears results; analyze again before
+exporting. Refreshing or swapping inputs keeps the list. These rules affect only
+this report and do not change either database or its scan policy.
 
 ## Filename differences across folders
 
@@ -121,6 +139,7 @@ bn location-changes --source-db A.db --source-root photos --target-db B.db --tar
 bn location-changes --source-db A.db --source-root photos --target-db B.db --target-root photos --filter all-differences --format csv --output changes.csv
 bn location-changes --source-db A.db --source-root photos --target-db B.db --target-root photos --match-filenames --extensions zip,mp4 --filter filename-differences --json
 bn location-changes --source-db A.db --source-root photos --target-db B.db --target-root photos --filter duplicates-in-b --format csv --output duplicates.csv
+bn location-changes --source-db A.db --source-root photos --target-db B.db --target-root photos --exclude-path photos/cache --exclude-path temporary/video.mp4 --json
 ```
 
 The default filter is `quick-differences`. Filters accept `quick-differences`,
@@ -132,6 +151,11 @@ filter values. `--json` or `--format json`
 writes JSON to stdout when no output path is provided. `--format csv` writes CSV
 to stdout. With `--output`, the default format is JSON; specify `--format csv` for
 CSV. Errors return exit code 2.
+
+Repeat `--exclude-path` for each root-relative file or directory to omit from
+both inventories before analysis. JSON includes the normalized `excludedPaths`
+list in every view. CSV appends an `ExcludedPaths` column containing that list
+as a JSON array, including metadata rows for empty reports.
 
 `filename-differences` requires `--match-filenames`; `--extensions` defaults to
 `.zip,.mp4`. Duplicate views require no filename matching flag. Both inventory
