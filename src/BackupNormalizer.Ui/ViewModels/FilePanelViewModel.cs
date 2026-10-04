@@ -12,10 +12,7 @@ namespace BackupNormalizer.Ui.ViewModels;
 /// <summary>One ready drive for the TC-style drive bar.</summary>
 public sealed record DriveView(string Root, string Label, long FreeBytes, long TotalBytes)
 {
-    public string Display =>
-        string.IsNullOrEmpty(Label) || Label == Root
-            ? $"{Root} {FormatBytes(FreeBytes)} free"
-            : $"{Root} ({Label}) {FormatBytes(FreeBytes)} free";
+    public string Display => Root.Length > 1 ? Root.TrimEnd('\\', '/') : Root;
 
     public string Tooltip =>
         $"{Root}{Environment.NewLine}{Label}{Environment.NewLine}{FormatBytes(FreeBytes)} free of {FormatBytes(TotalBytes)}";

@@ -81,17 +81,21 @@
             </DataTemplate>
           </ComboBox.ItemTemplate>
         </ComboBox>
-        <ItemsControl IsVisible="{Binding ShowDriveButtons}" ItemsSource="{Binding Drives}">
-          <ItemsControl.ItemsPanel>
-            <ItemsPanelTemplate><WrapPanel Orientation="Horizontal" /></ItemsPanelTemplate>
-          </ItemsControl.ItemsPanel>
-          <ItemsControl.ItemTemplate>
-            <DataTemplate x:DataType="vm:DriveView">
-              <Button Content="{Binding Display}" CommandParameter="{Binding}" Click="OnDriveClick"
-                      Tag="{Binding $parent[ItemsControl].DataContext.Side}" Margin="0,0,3,2" Padding="6,2" ToolTip.Tip="{Binding Tooltip}" />
-            </DataTemplate>
-          </ItemsControl.ItemTemplate>
-        </ItemsControl>
+        <ScrollViewer IsVisible="{Binding ShowDriveButtons}" HorizontalScrollBarVisibility="Auto"
+                      VerticalScrollBarVisibility="Disabled">
+          <ItemsControl ItemsSource="{Binding Drives}">
+            <ItemsControl.ItemsPanel>
+              <ItemsPanelTemplate><StackPanel Orientation="Horizontal" /></ItemsPanelTemplate>
+            </ItemsControl.ItemsPanel>
+            <ItemsControl.ItemTemplate>
+              <DataTemplate x:DataType="vm:DriveView">
+                <Button Content="{Binding Display}" CommandParameter="{Binding}" Click="OnDriveClick"
+                        Tag="{Binding $parent[ItemsControl].DataContext.Side}" MinWidth="32" Height="26"
+                        Margin="0,0,3,0" Padding="6,2" ToolTip.Tip="{Binding Tooltip}" />
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
+        </ScrollViewer>
         <Grid ColumnDefinitions="Auto,*" ColumnSpacing="6">
           <TextBlock Text="{Binding PathCaption}" VerticalAlignment="Center" FontSize="11" />
           <TextBox Grid.Column="1" Text="{Binding CurrentPath}" IsReadOnly="True" ToolTip.Tip="{Binding CurrentPath}" />

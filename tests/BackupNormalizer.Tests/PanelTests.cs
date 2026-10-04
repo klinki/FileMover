@@ -639,7 +639,8 @@ public sealed class DriveBarTests : IDisposable
                 Assert.False(string.IsNullOrEmpty(d.Root));
                 Assert.True(d.TotalBytes > 0);
                 Assert.True(d.FreeBytes >= 0 && d.FreeBytes <= d.TotalBytes);
-                Assert.Contains("free", d.Display);
+                Assert.DoesNotContain("free", d.Display);
+                Assert.Contains("free", d.Tooltip);
             }
         );
     }
