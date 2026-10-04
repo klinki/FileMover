@@ -60,6 +60,12 @@ public sealed class GuiWorkflowLayoutTests
                         $"File list height {grid.Bounds.Height} at {width}x{height}."
                     );
                     Assert.True(grid.Bounds.Width >= 250);
+                    var footer = window.FindControl<ContentControl>(
+                        grid.Name == "LeftList" ? "LeftPanelFooter" : "RightPanelFooter"
+                    );
+                    Assert.NotNull(footer);
+                    Assert.True(footer.Bounds.Top >= grid.Bounds.Bottom);
+                    Assert.True(footer.Bounds.Height > 0);
                 }
             }
             finally

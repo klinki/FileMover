@@ -250,6 +250,7 @@ public sealed partial class FilePanelViewModel : ObservableObject
     public FileEntryItem? MarkAnchor { get; set; }
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(FooterSummary), nameof(FooterTooltip))]
     public partial string Status { get; set; } = "";
 
     /// <summary>
@@ -275,6 +276,7 @@ public sealed partial class FilePanelViewModel : ObservableObject
     }
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(FooterTooltip))]
     public partial string DriveStatus { get; set; } = "";
 
     /// <summary>Rebuilds the drive bar; only ready drives get a button.</summary>

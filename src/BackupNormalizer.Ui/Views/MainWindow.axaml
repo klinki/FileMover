@@ -100,11 +100,16 @@
           <TextBlock Text="{Binding PathCaption}" VerticalAlignment="Center" FontSize="11" />
           <TextBox Grid.Column="1" Text="{Binding CurrentPath}" IsReadOnly="True" ToolTip.Tip="{Binding CurrentPath}" />
         </Grid>
-        <TextBlock Text="{Binding Status}" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Status}" />
         <TextBlock Text="{Binding SelectedInventoryRoot.HealthSummary}" IsVisible="{Binding IsDatabase}"
                    TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding SelectedInventoryRoot.HealthSummary}" />
         <views:InventorySearchControl />
       </StackPanel>
+    </DataTemplate>
+    <DataTemplate x:Key="PanelFooter" x:DataType="vm:FilePanelViewModel">
+      <Border BorderBrush="Gray" BorderThickness="0,1,0,0" Padding="6,4">
+        <TextBlock Text="{Binding FooterSummary}" FontSize="11" TextTrimming="CharacterEllipsis"
+                   ToolTip.Tip="{Binding FooterTooltip}" />
+      </Border>
     </DataTemplate>
     <DataTemplate x:Key="NameCell" x:DataType="vm:FileEntryItem">
       <Grid ColumnDefinitions="3,*">
@@ -234,6 +239,7 @@
               Margin="0,4,0,4" CornerRadius="4">
         <DockPanel>
           <ContentControl DockPanel.Dock="Top" Content="{Binding Left}" ContentTemplate="{StaticResource PanelHeader}" />
+          <ContentControl x:Name="LeftPanelFooter" DockPanel.Dock="Bottom" Content="{Binding Left}" ContentTemplate="{StaticResource PanelFooter}" />
           <views:InventoryDetailsControl DockPanel.Dock="Bottom" DataContext="{Binding Left}" />
           <DataGrid x:Name="LeftList" Tag="Left" ItemsSource="{Binding Left.Entries}" SelectedItem="{Binding Left.SelectedEntry}"
                     AutoGenerateColumns="False" IsReadOnly="True" SelectionMode="Single"
@@ -255,6 +261,7 @@
               Margin="0,4,0,4" CornerRadius="4">
         <DockPanel>
           <ContentControl DockPanel.Dock="Top" Content="{Binding Right}" ContentTemplate="{StaticResource PanelHeader}" />
+          <ContentControl x:Name="RightPanelFooter" DockPanel.Dock="Bottom" Content="{Binding Right}" ContentTemplate="{StaticResource PanelFooter}" />
           <views:InventoryDetailsControl DockPanel.Dock="Bottom" DataContext="{Binding Right}" />
           <DataGrid x:Name="RightList" Tag="Right" ItemsSource="{Binding Right.Entries}" SelectedItem="{Binding Right.SelectedEntry}"
                     AutoGenerateColumns="False" IsReadOnly="True" SelectionMode="Single"
