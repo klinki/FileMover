@@ -57,8 +57,21 @@ public sealed record CoverageItem(
 
 public sealed partial class BackupCoverageViewModel : ObservableObject
 {
+    private const string ReadyStatus =
+        "Coverage is based on recorded scans and hashes. Offline roots still contribute their recorded content.";
+    private readonly Func<CoverageInput[], CoverageReport> _analyze;
+    private int _reportVersion;
+
+    public BackupCoverageViewModel()
+        : this(inputs => BackupCoverage.Analyze(inputs)) { }
+
+    public BackupCoverageViewModel(Func<CoverageInput[], CoverageReport> analyze) =>
+        _analyze = analyze;
+
     public ObservableCollection<CoverageSourceItem> Sources { get; } = new();
-    public ObservableCollection<CoverageItem> Entries { get; } = new();
+
+    [ObservableProperty]
+    public partial IReadOnlyList<CoverageItem> Entries { get; set; } = Array.Empty<CoverageItem>();
     public IReadOnlyList<string> Filters { get; } =
     ["All verified content", "Only one device", "Every device", "Unverified entries"];
 
@@ -78,12 +91,12 @@ public sealed partial class BackupCoverageViewModel : ObservableObject
     [ObservableProperty]
     public partial CoverageItem? SelectedEntry { get; set; }
     public CoverageReport? Report { get; private set; }
+    public Task FilterTask { get; private set; } = Task.CompletedTask;
     public bool CanEdit => !IsBusy;
     public bool CanAnalyze => !IsBusy && Sources.Count > 0;
-    public string Summary =>
-        Report == null
-            ? "No coverage report yet."
-            : $"{Report.Devices.Count:N0} device labels | {Report.Content.Count:N0} verified content groups | {Report.SingleDeviceContent:N0} on one device | {Report.ContentOnEveryDevice:N0} on every device | {Report.Unverified.Count:N0} unverified entries";
+
+    [ObservableProperty]
+    public partial string Summary { get; set; } = "No coverage report yet.";
 
     public async Task AddDatabaseAsync(string path)
     {
@@ -132,6 +145,8 @@ public sealed partial class BackupCoverageViewModel : ObservableObject
     [RelayCommand(CanExecute = nameof(CanAnalyze))]
     public async Task Analyze()
     {
+        if (!CanAnalyze)
+            return;
         var inputs = Sources
             .Select(source => new CoverageInput(
                 source.DatabasePath,
@@ -139,11 +154,29 @@ public sealed partial class BackupCoverageViewModel : ObservableObject
                 source.DeviceId
             ))
             .ToArray();
+        string filter = Filter;
+        int version = _reportVersion;
         IsBusy = true;
         Status = "Analyzing recorded content...";
         try
         {
-            Report = await Task.Run(() => BackupCoverage.Analyze(inputs));
+            var result = await Task.Run(() =>
+            {
+                var report = _analyze(inputs);
+                return (
+                    Report: report,
+                    Entries: CreateEntries(report, filter),
+                    Summary: $"{report.Devices.Count:N0} device labels | {report.Content.Count:N0} verified content groups | {report.SingleDeviceContent:N0} on one device | {report.ContentOnEveryDevice:N0} on every device | {report.Unverified.Count:N0} unverified entries"
+                );
+            });
+            while (filter != Filter && version == _reportVersion)
+            {
+                filter = Filter;
+                result.Entries = await Task.Run(() => CreateEntries(result.Report, filter));
+            }
+            if (version != _reportVersion)
+                return;
+            Report = result.Report;
             foreach (var source in Report.Sources)
             {
                 var item = Sources.First(row =>
@@ -153,10 +186,10 @@ public sealed partial class BackupCoverageViewModel : ObservableObject
                 item.SnapshotStatus =
                     $"{source.ScanStatus ?? "Not scanned"} | {BackupCoverage.ScanAge(source.ScannedUtc)} | {(source.LocallyAvailable ? "Available locally" : "Offline / not available locally")} | {source.UnverifiedFiles:N0} unverified";
             }
-            ApplyFilter();
-            OnPropertyChanged(nameof(Summary));
-            Status =
-                "Coverage is based on recorded scans and hashes. Offline roots still contribute their recorded content.";
+            SelectedEntry = null;
+            Entries = result.Entries;
+            Summary = result.Summary;
+            Status = ReadyStatus;
         }
         catch (Exception ex)
         {
@@ -169,7 +202,45 @@ public sealed partial class BackupCoverageViewModel : ObservableObject
         }
     }
 
-    partial void OnFilterChanged(string value) => ApplyFilter();
+    partial void OnFilterChanged(string value)
+    {
+        if (!IsBusy)
+            FilterTask = ApplyFilterAsync();
+    }
+
+    private async Task ApplyFilterAsync()
+    {
+        if (IsBusy || Report == null)
+            return;
+        var report = Report;
+        int version = _reportVersion;
+        string filter = Filter;
+        IsBusy = true;
+        Status = "Filtering recorded content...";
+        try
+        {
+            var entries = await Task.Run(() => CreateEntries(report, filter));
+            while (filter != Filter && version == _reportVersion)
+            {
+                filter = Filter;
+                entries = await Task.Run(() => CreateEntries(report, filter));
+            }
+            if (version != _reportVersion)
+                return;
+            SelectedEntry = null;
+            Entries = entries;
+            Status = ReadyStatus;
+        }
+        catch (Exception ex)
+        {
+            Invalidate();
+            Status = "Coverage filtering failed: " + ex.Message;
+        }
+        finally
+        {
+            IsBusy = false;
+        }
+    }
 
     partial void OnIsBusyChanged(bool value)
     {
@@ -181,66 +252,60 @@ public sealed partial class BackupCoverageViewModel : ObservableObject
 
     private void Invalidate()
     {
+        _reportVersion++;
         Report = null;
-        Entries.Clear();
         SelectedEntry = null;
+        Entries = Array.Empty<CoverageItem>();
+        Summary = "No coverage report yet.";
         Status =
             "Assign the same device label to all roots and exports from the same physical device. Analyze to refresh coverage.";
-        OnPropertyChanged(nameof(Summary));
         OnPropertyChanged(nameof(CanAnalyze));
         AnalyzeCommand.NotifyCanExecuteChanged();
     }
 
-    private void ApplyFilter()
+    private static CoverageItem[] CreateEntries(CoverageReport report, string filter)
     {
-        Entries.Clear();
-        SelectedEntry = null;
-        if (Report == null)
-            return;
-        if (Filter == "Unverified entries")
+        if (filter == "Unverified entries")
         {
-            foreach (var file in Report.Unverified)
-                Entries.Add(
-                    new CoverageItem(
-                        file.Location.RelativePath,
-                        file.Size,
-                        "Unverified",
-                        file.Location.DeviceId,
-                        "",
-                        $"{file.Reason}\n{file.Location.DatabasePath} [{file.Location.RootId}] {file.Location.RelativePath}",
-                        true
-                    )
-                );
-            return;
+            return report
+                .Unverified.Select(file => new CoverageItem(
+                    file.Location.RelativePath,
+                    file.Size,
+                    "Unverified",
+                    file.Location.DeviceId,
+                    "",
+                    $"{file.Reason}\n{file.Location.DatabasePath} [{file.Location.RootId}] {file.Location.RelativePath}",
+                    true
+                ))
+                .ToArray();
         }
-        foreach (
-            var group in Report.Content.Where(group =>
-                Filter switch
+        return report
+            .Content.Where(group =>
+                filter switch
                 {
                     "Only one device" => group.DeviceCount == 1,
-                    "Every device" => group.DeviceCount == Report.Devices.Count,
+                    "Every device" => group.DeviceCount == report.Devices.Count,
                     _ => true,
                 }
             )
-        )
-        {
-            string details = string.Join(
-                Environment.NewLine,
-                group.Locations.Select(location =>
-                    $"{location.DeviceId} | {location.DatabasePath} [{location.RootId}] | {location.RelativePath}"
-                )
-            );
-            Entries.Add(
-                new CoverageItem(
+            .Select(group =>
+            {
+                string details = string.Join(
+                    Environment.NewLine,
+                    group.Locations.Select(location =>
+                        $"{location.DeviceId} | {location.DatabasePath} [{location.RootId}] | {location.RelativePath}"
+                    )
+                );
+                return new CoverageItem(
                     group.Locations[0].RelativePath,
                     group.Size,
-                    $"{group.DeviceCount}/{Report.Devices.Count} devices",
+                    $"{group.DeviceCount}/{report.Devices.Count} devices",
                     string.Join(", ", group.Devices),
                     group.Digest,
                     details,
                     false
-                )
-            );
-        }
+                );
+            })
+            .ToArray();
     }
 }

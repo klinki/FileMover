@@ -28,7 +28,8 @@
     </DataGrid>
     <StackPanel Grid.Row="3" Spacing="6">
       <TextBlock Text="{Binding Summary}" TextWrapping="Wrap" FontWeight="SemiBold" />
-      <ComboBox ItemsSource="{Binding Filters}" SelectedItem="{Binding Filter}" Width="220" HorizontalAlignment="Left" />
+      <ComboBox ItemsSource="{Binding Filters}" SelectedItem="{Binding Filter}" IsEnabled="{Binding CanEdit}"
+                Width="220" HorizontalAlignment="Left" />
     </StackPanel>
     <DataGrid Grid.Row="4" ItemsSource="{Binding Entries}" SelectedItem="{Binding SelectedEntry}"
               AutoGenerateColumns="False" IsReadOnly="True" CanUserResizeColumns="True">
