@@ -3,9 +3,14 @@
         xmlns:vm="using:BackupNormalizer.Ui.ViewModels"
         x:Class="BackupNormalizer.Ui.Views.LocationChangesWindow"
         x:DataType="vm:LocationChangesViewModel"
-        Title="File differences" Width="1100" Height="800" MinWidth="800" MinHeight="620"
+        Title="File differences" Width="1100" Height="800" MinWidth="800" MinHeight="720"
         WindowStartupLocation="CenterOwner">
-  <Grid Margin="16" RowDefinitions="Auto,Auto,Auto,Auto,*,130,Auto" RowSpacing="10">
+  <Window.DataTemplates>
+    <TreeDataTemplate DataType="{x:Type vm:GroupedFileItem}" x:DataType="vm:GroupedFileItem" ItemsSource="{Binding Children}">
+      <TextBlock Text="{Binding Label}" TextWrapping="Wrap" />
+    </TreeDataTemplate>
+  </Window.DataTemplates>
+  <Grid Margin="16" RowDefinitions="Auto,Auto,Auto,Auto,*,80,Auto" RowSpacing="10">
     <StackPanel Spacing="4">
       <TextBlock Text="File differences in A → B" FontSize="22" FontWeight="SemiBold" />
       <TextBlock Text="Compare content at the same relative path and find moved or copied files using recorded size and SHA-256. Offline inventories are supported."
@@ -43,11 +48,23 @@
       <ProgressBar IsIndeterminate="True" IsVisible="{Binding IsBusy}" Width="80" Height="8" VerticalAlignment="Center" />
     </WrapPanel>
     <StackPanel Grid.Row="3" Spacing="6">
+      <WrapPanel ItemSpacing="8" LineSpacing="5" IsEnabled="{Binding CanEdit}">
+        <CheckBox Content="Match filenames across folders" IsChecked="{Binding MatchFilenames}" />
+        <TextBlock Text="Extensions:" VerticalAlignment="Center" />
+        <TextBox Text="{Binding Extensions}" Width="180" PlaceholderText=".zip,.mp4" />
+      </WrapPanel>
       <TextBlock Text="{Binding Summary}" TextWrapping="Wrap" FontWeight="SemiBold" />
-      <ComboBox ItemsSource="{Binding Filters}" SelectedItem="{Binding Filter}" IsEnabled="{Binding CanEdit}"
-                Width="220" HorizontalAlignment="Left" />
     </StackPanel>
-    <DataGrid Grid.Row="4" ItemsSource="{Binding Entries}" SelectedItem="{Binding SelectedEntry}"
+    <TabControl Grid.Row="4" SelectedIndex="{Binding ReportView}" IsEnabled="{Binding CanEdit}"
+                HorizontalContentAlignment="Stretch" VerticalContentAlignment="Stretch">
+      <TabControl.ItemsPanel>
+        <ItemsPanelTemplate><StackPanel Orientation="Horizontal" /></ItemsPanelTemplate>
+      </TabControl.ItemsPanel>
+      <TabItem Header="Path / location differences" HorizontalContentAlignment="Stretch" VerticalContentAlignment="Stretch">
+        <Grid RowDefinitions="Auto,*" RowSpacing="6">
+          <ComboBox ItemsSource="{Binding Filters}" SelectedItem="{Binding LocationFilter}"
+                    Width="220" HorizontalAlignment="Left" />
+          <DataGrid x:Name="LocationGrid" Grid.Row="1" ItemsSource="{Binding Entries}" SelectedItem="{Binding SelectedEntry}"
               AutoGenerateColumns="False" IsReadOnly="True" CanUserResizeColumns="True">
       <DataGrid.Columns>
         <DataGridTextColumn Header="Classification" Binding="{Binding Classification}" Width="140" />
@@ -56,11 +73,30 @@
         <DataGridTextColumn Header="Bytes A → B" Binding="{Binding SizeText}" Width="140" />
         <DataGridTextColumn Header="Locations A / B" Binding="{Binding Counts}" Width="130" />
       </DataGrid.Columns>
-    </DataGrid>
+          </DataGrid>
+        </Grid>
+      </TabItem>
+      <TabItem Header="Filename differences" HorizontalContentAlignment="Stretch" VerticalContentAlignment="Stretch">
+        <Grid RowDefinitions="Auto,*" RowSpacing="6">
+          <TextBlock Text="Enable filename matching and analyze. Expand candidates into content versions and A/B locations." TextWrapping="Wrap" />
+          <TreeView x:Name="FilenameTree" Grid.Row="1" ItemsSource="{Binding GroupedEntries}" SelectedItem="{Binding SelectedGroupedEntry}" />
+        </Grid>
+      </TabItem>
+      <TabItem Header="Duplicates" HorizontalContentAlignment="Stretch" VerticalContentAlignment="Stretch">
+        <Grid RowDefinitions="Auto,*" RowSpacing="6">
+          <WrapPanel ItemSpacing="8" LineSpacing="5">
+            <TextBlock Text="Inventory:" VerticalAlignment="Center" />
+            <ComboBox ItemsSource="{Binding DuplicateSides}" SelectedItem="{Binding DuplicateSide}" Width="80" />
+            <TextBlock Text="All filenames and extensions. Savings assume one copy is retained." TextWrapping="Wrap" VerticalAlignment="Center" />
+          </WrapPanel>
+          <TreeView x:Name="DuplicateTree" Grid.Row="1" ItemsSource="{Binding GroupedEntries}" SelectedItem="{Binding SelectedGroupedEntry}" />
+        </Grid>
+      </TabItem>
+    </TabControl>
     <ScrollViewer Grid.Row="5">
       <StackPanel Spacing="5">
         <TextBlock Text="Recorded locations / verification details" FontWeight="SemiBold" />
-        <SelectableTextBlock Text="{Binding SelectedEntry.Details}" TextWrapping="Wrap" />
+        <SelectableTextBlock Text="{Binding SelectedDetails}" TextWrapping="Wrap" />
       </StackPanel>
     </ScrollViewer>
     <TextBlock Grid.Row="6" Text="{Binding Status}" TextWrapping="Wrap" />

@@ -27,15 +27,63 @@ the observed locations rather than a log of filesystem actions.
 - Regular files matched by size and usable full SHA-256 digest, including renamed
   files and files in different folders.
 - Content differences between regular files at the same normalized relative path.
+- Optional extension-constrained filename families and verified per-root duplicate
+  discovery, retaining all recorded copies without arbitrary pairings.
 - Offline inventories, without reading file contents or requiring mounted drives.
 - Complete successful scans on both selected roots. Incomplete or unavailable
   scans block analysis with an explanation of which root needs a complete scan.
 
-Synchronizing files, generating execution plans, matching changed content by
-filename across folders, scanning or hashing automatically, and comparing all
-roots at once are outside this feature. Broader filename matching is deferred
-until constraints prevent unrelated repeated names such as album `01.jpg` files
-from being paired.
+Synchronizing files, deleting duplicates, generating execution plans, scanning
+or hashing automatically, and comparing all roots at once are outside this feature.
+
+## Grouped filename comparison and duplicate discovery
+
+The second mode is optional filename matching across folders, constrained by an
+editable extension allowlist. Default the allowlist to `.zip,.mp4` and keep this
+matching disabled until selected. Extensions ignore case and accept comma,
+semicolon, or whitespace separators with optional leading dots. Reject empty
+enabled lists, paths, wildcards, and malformed extensions. Match the complete
+basename using the same case rules as relative paths.
+
+Run the same-path analysis first. Filename families retain every eligible file
+with that name in both selected roots, including repeated names and same-path
+anchors. Show a family when both inventories contain the filename, their relative
+location sets differ, and their verified content-version sets differ or evidence
+is unverified. Families with identical version sets stay in the existing location
+report. A family summarizes candidates, not proven replacement pairs.
+
+- Group verified versions by size and current full SHA-256, retaining every path.
+- Show versions shared across A/B, only in A, or only in B with copy counts.
+- Keep each unverified file separate, with its size, path, and reason. Never merge
+  unknown hashes into one content version or claim them as verified duplicates.
+- Never generate all path pairs or all version pairs. Use indexes, version sets,
+  and location lists. Runtime is linear in file count apart from sorting.
+- Existing same-path and move/copy classifications keep their complete evidence.
+  Filename results are a separate view and do not inflate their summary counts.
+
+Duplicate discovery uses verified content identity across all filenames and
+extensions, independently of filename matching. Count copies within A or within B,
+never across the two snapshots. Preserve all locations even when a same-path
+comparison hides redundant one-sided rows. For each content group with two or
+more files on that side, show size, SHA-256, copy count, extra copies, and potential
+savings `(copies - 1) × size` if one copy is retained. This is a recorded logical
+byte estimate; no automatic deletion or keeper selection is part of this report.
+Show unverified locations separately alongside the selected inventory's duplicates.
+
+The desktop adds Filename differences and Duplicates views beside the existing
+path/location results. Filename rows expand into content versions, then A/B path
+lists. Duplicate rows expand into every path on the chosen side. Show counts and
+matching basis in group labels and full metadata in selection details. Extension
+or matching-mode edits clear stale analysis. Switching views uses background
+projection with cancellation; export follows the active view and duplicate side.
+The window has a minimum size of 800 × 720 to keep results visible with these controls.
+
+CLI adds `--match-filenames`, `--extensions zip,mp4`, and filters
+`filename-differences`, `duplicates-in-a`, and `duplicates-in-b`. Filename view
+requires explicit filename matching. JSON exports grouped versions or duplicates
+with analysis options and unknown locations. CSV uses one row per location with
+family/version IDs, version status, copy counts, extra copies, potential savings,
+and existing input metadata. Empty exports retain metadata.
 
 ## Same-path content differences
 
@@ -53,7 +101,8 @@ locations. Ignore case only when both roots are case-insensitive.
   Keep all files in the content analysis so move/copy uniqueness remains correct.
   A content group shared across inventories can still report a move or copy in
   addition to a same-path replacement; these describe separate observed changes.
-- Files with the same filename in different folders do not match in this mode.
+- Files with the same filename in different folders do not match in this mode;
+  the optional grouped filename view handles those candidates separately.
 
 The default **Quick differences** filter includes content changes and the existing
 location-change classifications. Keep **Location changes** as a separate filter,
@@ -188,8 +237,10 @@ companion file. Analysis and export never modify the input inventories or files.
 - Same-path comparisons produce one paired row with each side's metadata.
   Different sizes establish a change without hashes; equal sizes require usable
   hashes on both sides. Scan errors prevent a definitive comparison.
-- Matching filenames in different folders never establish a changed-content
-  pairing. Broader filename matching remains deferred.
+- Filename families retain duplicates and every location without arbitrary
+  source/destination pairs. Extension filtering affects only this candidate view.
+- Duplicate counts and savings apply to one selected root at a time, across
+  filenames. Unverified entries never establish duplicate identity.
 - Shared paths are matched before changes are classified, while uniqueness uses
   all original locations. Duplicate groups never receive arbitrary move pairs.
 - Missing or stale hashes cannot establish identity or a definitive location

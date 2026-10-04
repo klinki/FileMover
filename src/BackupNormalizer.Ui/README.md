@@ -99,6 +99,13 @@ Analysis requires complete scans and supports offline inventories. Missing or
 stale hashes and ambiguous duplicate matches remain explicit. See the
 [file differences guide](../../docs/features/file-location-changes/README.md).
 
+For broader comparison, enable **Match filenames across folders**, set the
+extension allowlist, and analyze. **Filename differences** expands repeated names
+into content versions and A/B path lists without guessing replacement pairs.
+**Duplicates** groups identical content across all filenames in the selected A
+or B root, with copy counts and potential savings. Unknown evidence stays separate.
+Exports follow the current view. Changing matching options clears previous results.
+
 Use **File → Export active inventory snapshot...** to save a portable database to a new
 file. The export includes committed SQLite WAL data and preserves the original inventory.
 The app remembers panel sources, root selections, folders, the active panel, divider, and

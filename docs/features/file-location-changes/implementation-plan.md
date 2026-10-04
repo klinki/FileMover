@@ -2,6 +2,23 @@
 
 The [feature specification](feature-spec.md) defines the report's behavior.
 
+## Grouped filename and duplicate discovery extension
+
+1. Extend the read-only report with opt-in extension-constrained filename
+   families, content versions, per-inventory duplicate groups, and raw unknown
+   locations. Build them from the complete eligible snapshots before one-sided
+   row suppression. Preserve existing analysis API and classifications.
+1. Add grouped views and metadata to shared JSON/CSV exports and CLI options.
+   Keep filename candidates separate from proven same-path changes and expose
+   duplicate counts only within the requested inventory.
+1. Add desktop matching controls and expandable family/version/path trees, with
+   duplicate side selection, selection details, active-view export, and background
+   projection. Clear reports when analysis options change.
+1. Verify repeated names, retained versions, unknown evidence, exclusions, case
+   rules, complete copy counts, view lifecycle, exports, CLI validation, and a
+   large duplicate family without a Cartesian expansion. Run Release checks.
+1. Update usage and verification documentation. Leave changes uncommitted.
+
 ## Same-path content comparison extension
 
 1. Index eligible regular files by normalized relative path while loading the

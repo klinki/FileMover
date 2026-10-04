@@ -79,6 +79,8 @@ public static class Cli
               location-changes --source-db A.db --source-root R --target-db B.db --target-root R
                    [--filter quick-differences|content-changed|changes|moved|copied|removed-copies|ambiguous|only-in-a|only-in-b|unverified|unchanged|all-differences|all]
                    [--json | --format csv|json] [--output PATH]
+                   [--match-filenames] [--extensions zip,mp4]
+                   Grouped views: --filter filename-differences|duplicates-in-a|duplicates-in-b
               db-test [--db PATH] | scan-test <path> | --version
             Each database can inventory one drive with multiple named roots. Select the source and target
             for each diff or plan. Automatic plans require fully scanned, disjoint roots.
@@ -216,8 +218,14 @@ public static class Cli
             );
         var report = FileLocationChanges.Analyze(
             new(sourceDb, sourceRoot),
-            new(targetDb, targetRoot)
+            new(targetDb, targetRoot),
+            new FileDifferenceOptions(
+                Has(args, "--match-filenames"),
+                Opt(args, "--extensions", ".zip,.mp4")
+            )
         );
+        if (filter == GroupedFileReports.FilenameDifferences && !report.FilenameMatchingEnabled)
+            return Fail("--filter filename-differences requires --match-filenames");
         if (Has(args, "--output"))
         {
             string path = Opt(args, "--output", "");
@@ -251,6 +259,11 @@ public static class Cli
             Console.WriteLine(
                 $"Unverified files: {report.UnverifiedFiles}; unverified groups: {report.Summary.GetValueOrDefault(FileLocationChanges.Unverified)}"
             );
+            if (GroupedFileReports.IsGroupedView(filter))
+            {
+                WriteGroupedFileReport(report, filter);
+                return 0;
+            }
             foreach (var group in FileLocationChanges.Filter(report, filter))
             {
                 Console.WriteLine(
@@ -269,6 +282,54 @@ public static class Cli
             }
         }
         return 0;
+    }
+
+    private static void WriteGroupedFileReport(LocationChangesReport report, string filter)
+    {
+        if (filter == GroupedFileReports.FilenameDifferences)
+        {
+            Console.WriteLine(
+                $"Filename extensions: {string.Join(", ", report.FilenameExtensions)} | Groups: {report.FilenameGroups.Count:N0}"
+            );
+            foreach (var family in report.FilenameGroups)
+            {
+                Console.WriteLine(
+                    TerminalText(
+                        $"{family.Filename} | {family.Classification} | verified versions A/B: {family.VerifiedVersionsA}/{family.VerifiedVersionsB} | files A/B: {family.CopiesA}/{family.CopiesB} | unverified: {family.UnverifiedFiles}"
+                    )
+                );
+                foreach (var version in family.Versions)
+                {
+                    Console.WriteLine(
+                        $"  {version.State} | {version.Size:N0} bytes | copies A/B: {version.CopiesA}/{version.CopiesB} | SHA-256: {version.Digest ?? "unavailable"}"
+                    );
+                    if (version.VerificationReason != null)
+                        Console.WriteLine(TerminalText("  " + version.VerificationReason));
+                    foreach (var location in version.Locations)
+                        Console.WriteLine(
+                            TerminalText($"    {location.Side}: {location.RelativePath}")
+                        );
+                }
+            }
+            return;
+        }
+        string side = filter == GroupedFileReports.DuplicatesInA ? "A" : "B";
+        var duplicates = side == "A" ? report.DuplicatesA : report.DuplicatesB;
+        Console.WriteLine(
+            $"Inventory {side} only | verified duplicate groups: {duplicates.Count:N0}"
+        );
+        foreach (var group in duplicates)
+        {
+            Console.WriteLine(
+                $"{group.Size:N0} bytes | {group.Copies:N0} copies | {group.ExtraCopies:N0} extra | potential savings: {group.PotentialSavingsBytes:N0} bytes | SHA-256: {group.Digest}"
+            );
+            foreach (var location in group.Locations)
+                Console.WriteLine(TerminalText("  " + location.RelativePath));
+        }
+        foreach (var file in report.UnverifiedLocations.Where(f => f.Location.Side == side))
+            Console.WriteLine(
+                TerminalText($"Unverified: {file.Location.RelativePath} | {file.Reason}")
+            );
     }
 
     private static int Coverage(string[] args)

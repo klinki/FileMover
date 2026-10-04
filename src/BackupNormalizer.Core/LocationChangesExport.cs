@@ -15,6 +15,11 @@ public static class LocationChangesExport
     )
     {
         filter = FileLocationChanges.NormalizeFilter(filter);
+        if (GroupedFileReports.IsGroupedView(filter))
+        {
+            GroupedFileReportsExport.Write(writer, report, format, filter, cancellationToken);
+            return;
+        }
         var groups = FileLocationChanges.Filter(report, filter, cancellationToken);
         if (format.Equals("json", StringComparison.OrdinalIgnoreCase))
         {
@@ -28,6 +33,8 @@ public static class LocationChangesExport
                     Filter = filter,
                     report.Summary,
                     report.UnverifiedFiles,
+                    report.FilenameMatchingEnabled,
+                    report.FilenameExtensions,
                     Groups = groups,
                 },
                 new JsonSerializerOptions
@@ -184,7 +191,7 @@ public static class LocationChangesExport
         }
     }
 
-    private static void Row(TextWriter writer, params string?[] values) =>
+    internal static void Row(TextWriter writer, params string?[] values) =>
         writer.WriteLine(
             string.Join(
                 ",",

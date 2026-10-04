@@ -16,6 +16,127 @@ public sealed class UiLocationChangesTests : IDisposable
     public void Dispose() => _fixture.Dispose();
 
     [Fact]
+    public async Task Grouped_Views_Keep_All_Paths_Export_The_Active_View_And_Clear_On_Options_Changes()
+    {
+        string a = _fixture.Seed("a", ["old/movie.mp4", "copy/movie.mp4"], content: "left");
+        string b = _fixture.Seed("b", ["new/movie.mp4"], content: "rght");
+        _fixture.Seed("b", ["unknown.txt"], hashed: false);
+        using var vm = new LocationChangesViewModel { MatchFilenames = true, Extensions = "MP4" };
+        await vm.LoadAsync("A", a);
+        await vm.LoadAsync("B", b);
+        vm.ReportView = 1;
+        await vm.Analyze();
+        Assert.Equal(GroupedFileReports.FilenameDifferences, vm.Filter);
+        var family = Assert.Single(vm.GroupedEntries);
+        Assert.Equal(2, family.Children.Count);
+        Assert.Equal(
+            3,
+            family.Children.SelectMany(v => v.Children).Sum(side => side.Children.Count)
+        );
+        vm.SelectedGroupedEntry = family
+            .Children.SelectMany(v => v.Children)
+            .SelectMany(s => s.Children)
+            .First();
+        Assert.Contains("SHA-256:", vm.SelectedDetails);
+        string json = Path.Combine(_fixture.DirectoryPath, "filename-ui.json");
+        await vm.ExportAsync(json, "json");
+        Assert.Contains("\"filenameGroups\": [", File.ReadAllText(json));
+        vm.ReportView = 2;
+        await vm.FilterTask;
+        Assert.Equal(GroupedFileReports.DuplicatesInB, vm.Filter);
+        Assert.Contains("Unverified files: 1", Assert.Single(vm.GroupedEntries).Label);
+        Assert.Null(vm.SelectedGroupedEntry);
+        vm.DuplicateSide = "A";
+        await vm.FilterTask;
+        var duplicates = Assert.Single(vm.GroupedEntries);
+        Assert.Contains("2 identical copies", duplicates.Label);
+        Assert.Contains("potential saving: 4 bytes", duplicates.Label);
+        Assert.Equal(2, duplicates.Children.Count);
+        string csv = Path.Combine(_fixture.DirectoryPath, "duplicates-ui.csv");
+        await vm.ExportAsync(csv, "csv");
+        Assert.Contains("Verified duplicates", File.ReadAllText(csv));
+        Assert.Contains("Duplicates in A", File.ReadAllText(csv));
+        vm.Extensions = "zip";
+        Assert.Null(vm.Report);
+        Assert.Empty(vm.GroupedEntries);
+        Assert.False(vm.CanExport);
+        vm.ReportView = 1;
+        await vm.Analyze();
+        Assert.Empty(vm.GroupedEntries);
+        vm.MatchFilenames = false;
+        Assert.Null(vm.Report);
+        await vm.Analyze();
+        Assert.False(vm.CanExport);
+    }
+
+    [Fact]
+    public async Task Invalid_Filename_Options_Do_Not_Publish_A_Report()
+    {
+        string a = _fixture.Seed("a", ["old/movie.mp4"]);
+        string b = _fixture.Seed("b", ["new/movie.mp4"]);
+        using var vm = new LocationChangesViewModel { MatchFilenames = true, Extensions = "*.mp4" };
+        await vm.LoadAsync("A", a);
+        await vm.LoadAsync("B", b);
+        await vm.Analyze();
+        Assert.Null(vm.Report);
+        Assert.False(vm.CanExport);
+        Assert.Contains("Invalid extension", vm.Status);
+    }
+
+    [Fact]
+    public async Task Grouped_Window_Shows_Tree_Content_And_Responds_To_View_Selection()
+    {
+        string a = _fixture.Seed("a", ["old/movie.mp4", "copy/movie.mp4"], content: "left");
+        string b = _fixture.Seed("b", ["new/movie.mp4"], content: "rght");
+        using var vm = new LocationChangesViewModel { MatchFilenames = true, ReportView = 1 };
+        await vm.LoadAsync("A", a);
+        await vm.LoadAsync("B", b);
+        LocationChangesWindow? window = null;
+        Task? analysis = null;
+        try
+        {
+            UiTestHost.Run(() =>
+            {
+                window = new LocationChangesWindow(vm) { Width = 800, Height = 720 };
+                window.Show();
+                analysis = StartOnUi(vm.Analyze);
+            });
+            FinishOnUi(analysis!);
+            UiTestHost.Run(() =>
+            {
+                window!.UpdateLayout();
+                var tabs = window.GetLogicalDescendants().OfType<TabControl>().Single();
+                Assert.Equal(1, tabs.SelectedIndex);
+                var tree = window!.FindControl<TreeView>("FilenameTree")!;
+                Assert.True(tree.Bounds.Height > 0);
+                Assert.Single(tree.Items);
+                var root = tree.GetLogicalDescendants().OfType<TreeViewItem>().First();
+                root.IsExpanded = true;
+                Assert.Equal(2, root.Items.Count);
+                StartOnUi(() =>
+                {
+                    tabs.SelectedIndex = 2;
+                    vm.DuplicateSide = "A";
+                    return vm.FilterTask;
+                });
+            });
+            FinishOnUi(vm.FilterTask);
+            UiTestHost.Run(() =>
+            {
+                Assert.Equal(GroupedFileReports.DuplicatesInA, vm.Filter);
+                window!.UpdateLayout();
+                var tree = window!.FindControl<TreeView>("DuplicateTree")!;
+                Assert.Single(tree.Items);
+                Assert.True(vm.CanExport);
+            });
+        }
+        finally
+        {
+            UiTestHost.Run(() => window?.Close());
+        }
+    }
+
+    [Fact]
     public async Task Quick_Differences_Show_Paired_Content_Metadata_And_Keep_Location_Filter_Separate()
     {
         string a = _fixture.Seed("a", ["photos/image.jpg"], content: "left");
@@ -186,7 +307,7 @@ public sealed class UiLocationChangesTests : IDisposable
         {
             UiTestHost.Run(() =>
             {
-                window = new LocationChangesWindow(vm) { Width = 800, Height = 620 };
+                window = new LocationChangesWindow(vm) { Width = 800, Height = 720 };
                 window.Show();
                 analysis = StartOnUi(vm.Analyze);
             });
@@ -198,7 +319,8 @@ public sealed class UiLocationChangesTests : IDisposable
                 Assert.Equal("r", vm.SelectedB!.Input.RootId);
                 Assert.Equal("old", Assert.Single(vm.Entries).PathA);
                 Assert.Contains("SHA-256: 1/1", vm.SelectedA.Details);
-                var grid = window!.GetLogicalDescendants().OfType<DataGrid>().Single();
+                window!.UpdateLayout();
+                var grid = window.FindControl<DataGrid>("LocationGrid")!;
                 Assert.True(grid.Bounds.Width > 0);
                 Assert.True(grid.Bounds.Height > 0);
                 Assert.All(
@@ -249,6 +371,34 @@ public sealed class UiLocationChangesTests : IDisposable
                 [FileLocationChanges.Moved] = 10000,
                 [FileLocationChanges.Unchanged] = 10000,
             },
+            DuplicatesB = new ObservedList<DuplicateContentGroup>(
+                Enumerable
+                    .Range(0, 1000)
+                    .Select(i => new DuplicateContentGroup(
+                        i.ToString(),
+                        "B",
+                        4,
+                        LocationChangesFixture.Digest("same"),
+                        [
+                            new FileLocation(
+                                "B",
+                                $"{i}/first",
+                                "Recorded",
+                                4,
+                                LocationChangesFixture.Digest("same")
+                            ),
+                            new FileLocation(
+                                "B",
+                                $"{i}/second",
+                                "Recorded",
+                                4,
+                                LocationChangesFixture.Digest("same")
+                            ),
+                        ]
+                    ))
+                    .ToArray(),
+                () => projectionThreads.Add(Environment.CurrentManagedThreadId)
+            ),
         };
         using var analysisStarted = new ManualResetEventSlim();
         using var release = new ManualResetEventSlim();
@@ -285,10 +435,7 @@ public sealed class UiLocationChangesTests : IDisposable
                     buttons.Where(b => b.Content?.ToString()?.StartsWith("Export") == true),
                     b => Assert.False(b.IsEnabled)
                 );
-                Assert.Equal(
-                    5,
-                    window!.GetLogicalDescendants().OfType<DataGrid>().Single().Columns.Count
-                );
+                Assert.Equal(5, window!.FindControl<DataGrid>("LocationGrid")!.Columns.Count);
             });
             release.Set();
             FinishOnUi(analysis!);
@@ -310,8 +457,21 @@ public sealed class UiLocationChangesTests : IDisposable
                 )
             );
             Assert.NotEqual(uiThread, analysisThread);
+            UiTestHost.Run(() =>
+                StartOnUi(() =>
+                {
+                    vm.ReportView = 2;
+                    return vm.FilterTask;
+                })
+            );
+            FinishOnUi(vm.FilterTask);
+            UiTestHost.Run(() =>
+            {
+                Assert.Equal(1000, vm.GroupedEntries.Count);
+                Assert.All(vm.GroupedEntries, entry => Assert.Equal(2, entry.Children.Count));
+            });
             Assert.All(projectionThreads, thread => Assert.NotEqual(uiThread, thread));
-            Assert.True(projectionThreads.Count >= 2);
+            Assert.True(projectionThreads.Count >= 3);
         }
         finally
         {

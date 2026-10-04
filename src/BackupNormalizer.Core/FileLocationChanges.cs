@@ -56,6 +56,12 @@ public sealed record LocationChangesReport(
 )
 {
     public string Direction => "A → B";
+    public bool FilenameMatchingEnabled { get; init; }
+    public IReadOnlyList<string> FilenameExtensions { get; init; } = [];
+    public IReadOnlyList<FilenameDifferenceGroup> FilenameGroups { get; init; } = [];
+    public IReadOnlyList<DuplicateContentGroup> DuplicatesA { get; init; } = [];
+    public IReadOnlyList<DuplicateContentGroup> DuplicatesB { get; init; } = [];
+    public IReadOnlyList<UnverifiedFileLocation> UnverifiedLocations { get; init; } = [];
 }
 
 public static class FileLocationChanges
@@ -84,6 +90,9 @@ public static class FileLocationChanges
         Unverified,
         Unchanged,
         "All results",
+        GroupedFileReports.FilenameDifferences,
+        GroupedFileReports.DuplicatesInA,
+        GroupedFileReports.DuplicatesInB,
     ];
 
     public static LocationChangesReport Analyze(
@@ -91,9 +100,20 @@ public static class FileLocationChanges
         LocationChangeInput b,
         CancellationToken cancellationToken = default,
         IProgress<string>? progress = null
+    ) => Analyze(a, b, new FileDifferenceOptions(), cancellationToken, progress);
+
+    public static LocationChangesReport Analyze(
+        LocationChangeInput a,
+        LocationChangeInput b,
+        FileDifferenceOptions options,
+        CancellationToken cancellationToken = default,
+        IProgress<string>? progress = null
     )
     {
         cancellationToken.ThrowIfCancellationRequested();
+        var extensions = options.MatchFilenames
+            ? GroupedFileReports.NormalizeExtensions(options.Extensions)
+            : [];
         a = a with { DatabasePath = Path.GetFullPath(a.DatabasePath) };
         b = b with { DatabasePath = Path.GetFullPath(b.DatabasePath) };
         progress?.Report("Loading inventory roots...");
@@ -197,6 +217,18 @@ public static class FileLocationChanges
                 )
             );
         }
+        progress?.Report("Grouping filename candidates and duplicate content...");
+        var filenameGroups = options.MatchFilenames
+            ? GroupedFileReports.BuildFilenameGroups(
+                aFiles,
+                bFiles,
+                extensions,
+                comparer,
+                cancellationToken
+            )
+            : [];
+        var duplicatesA = GroupedFileReports.BuildDuplicates(groups, "A", cancellationToken);
+        var duplicatesB = GroupedFileReports.BuildDuplicates(groups, "B", cancellationToken);
         progress?.Report("Matching recorded locations...");
         foreach (
             var group in groups
@@ -315,7 +347,17 @@ public static class FileLocationChanges
             summary,
             unknown.Count,
             results
-        );
+        )
+        {
+            FilenameMatchingEnabled = options.MatchFilenames,
+            FilenameExtensions = extensions,
+            FilenameGroups = filenameGroups,
+            DuplicatesA = duplicatesA,
+            DuplicatesB = duplicatesB,
+            UnverifiedLocations = unknown
+                .Select(f => new UnverifiedFileLocation(f.Location, f.Reason))
+                .ToArray(),
+        };
     }
 
     public static string NormalizeFilter(string filter)
@@ -338,6 +380,10 @@ public static class FileLocationChanges
     )
     {
         filter = NormalizeFilter(filter);
+        if (GroupedFileReports.IsGroupedView(filter))
+            throw new ArgumentException(
+                "Grouped views contain filename versions or duplicates, not location-change rows."
+            );
         var result = new List<LocationChangeGroup>();
         foreach (var group in report.Groups)
         {

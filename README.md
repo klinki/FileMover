@@ -181,6 +181,9 @@ available through `bn location-changes` and **Inventory → File differences...*
 It reports changed content at the same relative path with A/B sizes and hashes,
 and distinguishes unique moves, retained originals with new copies, and ambiguous
 duplicate matches, and exports CSV or JSON without changing either inventory.
+Enable extension-filtered filename matching to compare content versions across
+folders while retaining repeated names. The Duplicates view reports verified
+copies across filenames within A or B, with all locations and potential savings.
 
 Compare content across several disks with [backup coverage](docs/features/backup-coverage/README.md),
 available through `bn coverage` and **Inventory → Backup coverage...** in the desktop app.

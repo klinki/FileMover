@@ -64,6 +64,7 @@ public sealed partial class LocationChangesViewModel : ObservableObject, IDispos
     private readonly Func<
         LocationChangeInput,
         LocationChangeInput,
+        FileDifferenceOptions,
         CancellationToken,
         IProgress<string>?,
         LocationChangesReport
@@ -72,8 +73,7 @@ public sealed partial class LocationChangesViewModel : ObservableObject, IDispos
     private bool _disposed;
     private bool _updatingSources;
 
-    public LocationChangesViewModel()
-        : this(FileLocationChanges.Analyze) { }
+    public LocationChangesViewModel() => _analyze = FileLocationChanges.Analyze;
 
     public LocationChangesViewModel(
         Func<
@@ -83,7 +83,31 @@ public sealed partial class LocationChangesViewModel : ObservableObject, IDispos
             IProgress<string>?,
             LocationChangesReport
         > analyze
-    ) => _analyze = analyze;
+    ) => _analyze = (a, b, options, token, progress) => analyze(a, b, token, progress);
+
+    [ObservableProperty]
+    public partial bool MatchFilenames { get; set; }
+
+    [ObservableProperty]
+    public partial string Extensions { get; set; } = ".zip,.mp4";
+
+    [ObservableProperty]
+    public partial int ReportView { get; set; }
+
+    [ObservableProperty]
+    public partial string DuplicateSide { get; set; } = "B";
+
+    public IReadOnlyList<string> DuplicateSides { get; } = new[] { "A", "B" };
+
+    [ObservableProperty]
+    public partial IReadOnlyList<GroupedFileItem> GroupedEntries { get; set; } =
+        Array.Empty<GroupedFileItem>();
+
+    [ObservableProperty]
+    public partial GroupedFileItem? SelectedGroupedEntry { get; set; }
+
+    public string SelectedDetails =>
+        (ReportView == 0 ? SelectedEntry?.Details : SelectedGroupedEntry?.Details) ?? "";
 
     [ObservableProperty]
     public partial string DatabaseA { get; set; } = "Select inventory A";
@@ -119,17 +143,24 @@ public sealed partial class LocationChangesViewModel : ObservableObject, IDispos
     public partial string Filter { get; set; } = "Quick differences";
 
     [ObservableProperty]
+    public partial string LocationFilter { get; set; } = "Quick differences";
+
+    [ObservableProperty]
     public partial IReadOnlyList<LocationChangeItem> Entries { get; set; } =
         Array.Empty<LocationChangeItem>();
 
     [ObservableProperty]
     public partial LocationChangeItem? SelectedEntry { get; set; }
-    public IReadOnlyList<string> Filters => FileLocationChanges.Filters;
+    public IReadOnlyList<string> Filters { get; } =
+        FileLocationChanges.Filters.Where(f => !GroupedFileReports.IsGroupedView(f)).ToArray();
     public LocationChangesReport? Report { get; private set; }
     public Task FilterTask { get; private set; } = Task.CompletedTask;
     public bool CanEdit => !IsBusy && !_disposed;
     public bool CanAnalyze => CanEdit && SelectedA != null && SelectedB != null;
-    public bool CanExport => CanEdit && Report != null;
+    public bool CanExport =>
+        CanEdit
+        && Report != null
+        && (Filter != GroupedFileReports.FilenameDifferences || Report.FilenameMatchingEnabled);
     public bool CanCancel => IsBusy && _work != null;
 
     public async Task LoadAsync(string side, string path, string? rootId = null)
@@ -177,14 +208,20 @@ public sealed partial class LocationChangesViewModel : ObservableObject, IDispos
         });
         try
         {
-            var report = await Task.Run(() => _analyze(a, b, work.Token, progress), work.Token);
+            var options = new FileDifferenceOptions(MatchFilenames, Extensions);
+            var report = await Task.Run(
+                () => _analyze(a, b, options, work.Token, progress),
+                work.Token
+            );
             var rows = await BuildRowsAsync(report, work.Token);
             work.Token.ThrowIfCancellationRequested();
             UpdateSourceMetadata(report);
             Report = report;
-            Entries = rows;
+            Entries = rows.Rows;
+            GroupedEntries = rows.Tree;
             Summary =
-                string.Join(" | ", report.Summary.Select(s => $"{s.Key}: {s.Value:N0}"))
+                $"Path/location groups: {report.Groups.Count:N0}"
+                + $" | Filename groups: {report.FilenameGroups.Count:N0} | Duplicates A/B: {report.DuplicatesA.Count:N0}/{report.DuplicatesB.Count:N0}"
                 + $" | Unverified files: {report.UnverifiedFiles:N0}";
             Status = "Recorded differences in A → B. Select a group to inspect paths and content.";
         }
@@ -290,10 +327,58 @@ public sealed partial class LocationChangesViewModel : ObservableObject, IDispos
 
     partial void OnSelectedBChanged(LocationRootOption? value) => SourceChanged();
 
+    partial void OnMatchFilenamesChanged(bool value) => SourceChanged();
+
+    partial void OnExtensionsChanged(string value) => SourceChanged();
+
+    partial void OnSelectedEntryChanged(LocationChangeItem? value) =>
+        OnPropertyChanged(nameof(SelectedDetails));
+
+    partial void OnSelectedGroupedEntryChanged(GroupedFileItem? value) =>
+        OnPropertyChanged(nameof(SelectedDetails));
+
+    partial void OnReportViewChanged(int value)
+    {
+        if (value == 1)
+            Filter = GroupedFileReports.FilenameDifferences;
+        else if (value == 2)
+            Filter =
+                DuplicateSide == "A"
+                    ? GroupedFileReports.DuplicatesInA
+                    : GroupedFileReports.DuplicatesInB;
+        else
+            Filter = LocationFilter;
+        OnPropertyChanged(nameof(SelectedDetails));
+    }
+
+    partial void OnDuplicateSideChanged(string value)
+    {
+        if (ReportView == 2)
+            Filter =
+                value == "A" ? GroupedFileReports.DuplicatesInA : GroupedFileReports.DuplicatesInB;
+    }
+
+    partial void OnLocationFilterChanged(string value)
+    {
+        if (ReportView == 0)
+            Filter = value;
+    }
+
     partial void OnIsBusyChanged(bool value) => NotifyCommands();
 
     partial void OnFilterChanged(string value)
     {
+        int view =
+            value == GroupedFileReports.FilenameDifferences ? 1
+            : GroupedFileReports.IsGroupedView(value) ? 2
+            : 0;
+        if (view == 2)
+            DuplicateSide = value == GroupedFileReports.DuplicatesInA ? "A" : "B";
+        if (view == 0 && LocationFilter != value)
+            LocationFilter = value;
+        if (ReportView != view)
+            ReportView = view;
+        OnPropertyChanged(nameof(CanExport));
         if (CanEdit && Report != null)
             FilterTask = ApplyFilterAsync();
     }
@@ -309,7 +394,9 @@ public sealed partial class LocationChangesViewModel : ObservableObject, IDispos
             if (Report != report)
                 return;
             SelectedEntry = null;
-            Entries = rows;
+            SelectedGroupedEntry = null;
+            Entries = rows.Rows;
+            GroupedEntries = rows.Tree;
             Status = "Select a group to inspect every recorded location.";
         }
         catch (OperationCanceledException)
@@ -328,7 +415,7 @@ public sealed partial class LocationChangesViewModel : ObservableObject, IDispos
         }
     }
 
-    private async Task<LocationChangeItem[]> BuildRowsAsync(
+    private async Task<(LocationChangeItem[] Rows, GroupedFileItem[] Tree)> BuildRowsAsync(
         LocationChangesReport report,
         CancellationToken token
     )
@@ -338,14 +425,22 @@ public sealed partial class LocationChangesViewModel : ObservableObject, IDispos
             string filter = Filter;
             var rows = await Task.Run(
                 () =>
-                    FileLocationChanges
-                        .Filter(report, filter, token)
-                        .Select(g =>
-                        {
-                            token.ThrowIfCancellationRequested();
-                            return new LocationChangeItem(g);
-                        })
-                        .ToArray(),
+                    GroupedFileReports.IsGroupedView(filter)
+                        ? (
+                            Rows: Array.Empty<LocationChangeItem>(),
+                            Tree: GroupedFileItem.Build(report, filter, token)
+                        )
+                        : (
+                            Rows: FileLocationChanges
+                                .Filter(report, filter, token)
+                                .Select(g =>
+                                {
+                                    token.ThrowIfCancellationRequested();
+                                    return new LocationChangeItem(g);
+                                })
+                                .ToArray(),
+                            Tree: Array.Empty<GroupedFileItem>()
+                        ),
                 token
             );
             if (filter == Filter)
@@ -467,7 +562,9 @@ public sealed partial class LocationChangesViewModel : ObservableObject, IDispos
     {
         Report = null;
         Entries = Array.Empty<LocationChangeItem>();
+        GroupedEntries = Array.Empty<GroupedFileItem>();
         SelectedEntry = null;
+        SelectedGroupedEntry = null;
         Summary = "No differences report yet.";
         OnPropertyChanged(nameof(CanExport));
     }
