@@ -4,6 +4,25 @@ namespace BackupNormalizer.Tests;
 
 public sealed class PanelViewTests : IDisposable
 {
+    [Theory]
+    [InlineData(".gitignore", ".gitignore", "")]
+    [InlineData(".env", ".env", "")]
+    [InlineData(".config.json", ".config", "json")]
+    [InlineData(".archive.tar.gz", ".archive.tar", "gz")]
+    [InlineData(".env.", ".env.", "")]
+    [InlineData("readme", "readme", "")]
+    [InlineData("file.txt", "file", "txt")]
+    public void Name_And_Extension_Keep_The_Leading_Dot_In_Dotfiles(
+        string name,
+        string baseName,
+        string extension
+    )
+    {
+        var entry = new FileEntryItem(name, name, false, 0, default);
+        Assert.Equal(baseName, entry.BaseName);
+        Assert.Equal(extension, entry.Extension);
+    }
+
     private readonly string _dir = Path.Combine(
         Path.GetTempPath(),
         "bn-panel-" + Guid.NewGuid().ToString("N")

@@ -65,8 +65,8 @@ public sealed partial class FileEntryItem : ObservableObject
             : Name;
     public long Size { get; }
     public DateTime Modified { get; }
-    public string BaseName => IsDirectory ? Name : Path.GetFileNameWithoutExtension(Name);
-    public string Extension => IsDirectory ? "" : Path.GetExtension(Name).TrimStart('.');
+    public string BaseName => DottedExt.Length == 0 ? Name : Name[..^DottedExt.Length];
+    public string Extension => DottedExt.TrimStart('.');
     public string SizeText =>
         IsParentEntry ? ""
         : IsLink ? KindText
@@ -168,7 +168,8 @@ public sealed partial class FileEntryItem : ObservableObject
         ".rs",
     };
 
-    private string DottedExt => IsDirectory ? "" : Path.GetExtension(Name);
+    private string DottedExt =>
+        IsDirectory || Name.LastIndexOf('.') == 0 ? "" : Path.GetExtension(Name);
     public bool IsFolder => IsDirectory && !IsParentEntry;
     public bool IsArchive => !IsDirectory && ArchiveExts.Contains(DottedExt);
     public bool IsImage => !IsDirectory && ImageExts.Contains(DottedExt);
