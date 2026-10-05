@@ -94,4 +94,10 @@ The first EF AOT trial passed all 14 candidate static-query checks on the actual
 
 The retained image is `backup-normalizer:ef-aot-trial-20261005-171638`, with the synthetic static suite as its default command. The unchanged facade is also tested separately; model-backed opening works, while its queries fail without precompilation. This diagnostic image does not perform inventory collection or production upgrades.
 
-[AOT verification](../native-aot-cli/verification.md) records generation adjustments, source, and evidence. ELF alignment and transfer hashes passed, all seven original services remained running, and no existing NAS share was mounted. Inventory query conversion, migration helper implementation, and complete scan/hash/export acceptance remain pending.
+[AOT verification](../native-aot-cli/verification.md) records generation adjustments, source, and evidence. ELF alignment and transfer hashes passed, all seven original services remained running, and no existing NAS share was mounted. Inventory conversion and migration startup were pending at this first-trial milestone.
+
+## Actual AOT inventory application, 2026-10-05
+
+The actual CLI and separate migration helper subsequently passed the synthetic on-device inventory job. The working image is `backup-normalizer:inventory-aot-20261005-182026`. Creation, root updates, scanning, exclusions, links, hashing/reuse, changed-file rescanning, status, export, and a backed-up legacy upgrade passed. The portable export opened through the Windows CLI. Transfer hashes and all original services were verified; no existing NAS share was mounted.
+
+The [application evidence](../native-aot-cli/verification.md#application-verification) includes the original NAS result and logs. The clean runtime image `backup-normalizer:inventory-aot-runtime-20261005-183056` subsequently built through the NAS Docker engine and passed the same inventory acceptance job. It contains the AOT application, migration helper, SQLite library, and job scripts, and does not contain the earlier CoreCLR files. Docker reports 208,600,488 bytes uncompressed. [Clean image evidence](../native-aot-cli/verification.md#clean-runtime-image-verification) records the build and second acceptance result. Comparison and replay are not yet qualified for AOT.

@@ -1,0 +1,10 @@
+{
+  "image": "backup-normalizer:inventory-aot-runtime-20261005-183056",
+  "exitCode": 0,
+  "errors": [],
+  "imageId": "sha256:31f2de7c17faf0d5fd191717af54d9767c444496bc7b62076b083bbe2ebfbd42",
+  "sizeBytes": 208600488,
+  "architecture": "arm",
+  "helpExitCode": 0,
+  "coreClrFilesAbsent": true
+}

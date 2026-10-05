@@ -1,0 +1,46 @@
+[
+  {
+    "root": {
+      "id": "nas",
+      "name": "updated",
+      "path": "/tmp/bn-inventory/data",
+      "writable": true,
+      "fileSystemId": "/|overlay|/",
+      "caseSensitivity": "sensitive",
+      "createdUtc": "2026-10-05T18:20:36.6751307Z"
+    },
+    "latestScan": {
+      "scan": {
+        "id": 2,
+        "storageRootId": "nas",
+        "startedUtc": "2026-10-05T18:20:37.9471231Z",
+        "completedUtc": "2026-10-05T18:20:37.9797476Z",
+        "status": "Completed"
+      },
+      "mode": "Recursive",
+      "scannedCount": 5,
+      "errorCount": 0,
+      "fallbackReason": null
+    },
+    "lastSuccessfulScan": {
+      "id": 2,
+      "storageRootId": "nas",
+      "startedUtc": "2026-10-05T18:20:37.9471231Z",
+      "completedUtc": "2026-10-05T18:20:37.9797476Z",
+      "status": "Completed"
+    },
+    "regularFiles": 4,
+    "links": 1,
+    "missingEntries": 2,
+    "entryErrors": 0,
+    "usableHashes": 4,
+    "missingHashes": 0,
+    "planningReady": true,
+    "blockingReason": null,
+    "checkpoint": null,
+    "errors": [],
+    "excludedPathRegexes": [
+      "^cache/"
+    ]
+  }
+]

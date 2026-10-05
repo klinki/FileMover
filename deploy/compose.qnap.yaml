@@ -1,6 +1,6 @@
 services:
   backup-normalizer:
-    image: backup-normalizer:qnap-arm32
+    image: backup-normalizer:qnap-arm32-aot
     platform: linux/arm/v7
     entrypoint: ["/app/qnap-inventory.sh"]
     command: []

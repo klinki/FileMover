@@ -1,0 +1,13 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <JsonSerializerIsReflectionEnabledByDefault>false</JsonSerializerIsReflectionEnabledByDefault>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Data.Sqlite" Version="10.0.12" />
+    <EmbeddedResource Include="GeneratedMigrations.json" Condition="Exists('GeneratedMigrations.json')" LogicalName="BackupNormalizer.Migrations.json" />
+    <InternalsVisibleTo Include="BackupNormalizer.Tests" />
+  </ItemGroup>
+</Project>

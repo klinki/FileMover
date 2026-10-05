@@ -1,0 +1,119 @@
+COMMAND: root add r /mnt/c/ai-workspace/FileMover/publish/inventory-aot-20261005-v9/managed-acceptance/data --db /mnt/c/ai-workspace/FileMover/publish/inventory-aot-20261005-v9/managed-acceptance/data/inventory.db
+root 'r' -> /mnt/c/ai-workspace/FileMover/publish/inventory-aot-20261005-v9/managed-acceptance/data
+
+Database schema is current.
+
+COMMAND: root add r /mnt/c/ai-workspace/FileMover/publish/inventory-aot-20261005-v9/managed-acceptance/data --name updated --db /mnt/c/ai-workspace/FileMover/publish/inventory-aot-20261005-v9/managed-acceptance/data/inventory.db
+root 'r' -> /mnt/c/ai-workspace/FileMover/publish/inventory-aot-20261005-v9/managed-acceptance/data
+
+
+COMMAND: root add other /mnt/c/ai-workspace/FileMover/publish/inventory-aot-20261005-v9/managed-acceptance/other --db /mnt/c/ai-workspace/FileMover/publish/inventory-aot-20261005-v9/managed-acceptance/data/inventory.db
+root 'other' -> /mnt/c/ai-workspace/FileMover/publish/inventory-aot-20261005-v9/managed-acceptance/other
+
+
+COMMAND: root list --db /mnt/c/ai-workspace/FileMover/publish/inventory-aot-20261005-v9/managed-acceptance/data/inventory.db
+other	other	/mnt/c/ai-workspace/FileMover/publish/inventory-aot-20261005-v9/managed-acceptance/other	writable=True
+r	updated	/mnt/c/ai-workspace/FileMover/publish/inventory-aot-20261005-v9/managed-acceptance/data	writable=True
+
+
+COMMAND: scan r --db /mnt/c/ai-workspace/FileMover/publish/inventory-aot-20261005-v9/managed-acceptance/data/inventory.db --mft off --usn off --no-progress --exclude-path-regex ^cache/
+scan r: 2 entries, 0 errors (complete)
+
+
+COMMAND: scan other --db /mnt/c/ai-workspace/FileMover/publish/inventory-aot-20261005-v9/managed-acceptance/data/inventory.db --mft off --usn off --no-progress
+scan other: 1 entries, 0 errors (complete)
+
+
+COMMAND: scan errors r --scan 1 --db /mnt/c/ai-workspace/FileMover/publish/inventory-aot-20261005-v9/managed-acceptance/data/inventory.db --json
+{
+  "scan": {
+    "scan": {
+      "id": 1,
+      "storageRootId": "r",
+      "startedUtc": "2026-10-05T18:18:34.6643062Z",
+      "completedUtc": "2026-10-05T18:18:35.1777733Z",
+      "status": "Completed"
+    },
+    "mode": "Recursive",
+    "scannedCount": 2,
+    "errorCount": 0,
+    "fallbackReason": null
+  },
+  "errors": []
+}
+
+
+COMMAND: hash r --db /mnt/c/ai-workspace/FileMover/publish/inventory-aot-20261005-v9/managed-acceptance/data/inventory.db --no-progress
+hash r: 2 hashed, 0 skipped, 0 unstable
+
+
+COMMAND: status r --db /mnt/c/ai-workspace/FileMover/publish/inventory-aot-20261005-v9/managed-acceptance/data/inventory.db --json
+[
+  {
+    "root": {
+      "id": "r",
+      "name": "updated",
+      "path": "/mnt/c/ai-workspace/FileMover/publish/inventory-aot-20261005-v9/managed-acceptance/data",
+      "writable": true,
+      "fileSystemId": "/|ext4|/",
+      "caseSensitivity": "sensitive",
+      "createdUtc": "2026-10-05T18:18:32.0298633Z"
+    },
+    "latestScan": {
+      "scan": {
+        "id": 1,
+        "storageRootId": "r",
+        "startedUtc": "2026-10-05T18:18:34.6643062Z",
+        "completedUtc": "2026-10-05T18:18:35.1777733Z",
+        "status": "Completed"
+      },
+      "mode": "Recursive",
+      "scannedCount": 2,
+      "errorCount": 0,
+      "fallbackReason": null
+    },
+    "lastSuccessfulScan": {
+      "id": 1,
+      "storageRootId": "r",
+      "startedUtc": "2026-10-05T18:18:34.6643062Z",
+      "completedUtc": "2026-10-05T18:18:35.1777733Z",
+      "status": "Completed"
+    },
+    "regularFiles": 2,
+    "links": 0,
+    "missingEntries": 0,
+    "entryErrors": 0,
+    "usableHashes": 2,
+    "missingHashes": 0,
+    "planningReady": true,
+    "blockingReason": null,
+    "checkpoint": null,
+    "errors": [],
+    "excludedPathRegexes": [
+      "^cache/"
+    ]
+  }
+]
+
+
+COMMAND: hash r --db /mnt/c/ai-workspace/FileMover/publish/inventory-aot-20261005-v9/managed-acceptance/data/inventory.db --no-progress
+hash r: 0 hashed, 2 skipped, 0 unstable
+
+
+COMMAND: hash --needed --db /mnt/c/ai-workspace/FileMover/publish/inventory-aot-20261005-v9/managed-acceptance/data/inventory.db --no-progress
+hash --needed: 1 hashed, 2 reused, 0 unstable
+
+
+COMMAND: scan r --db /mnt/c/ai-workspace/FileMover/publish/inventory-aot-20261005-v9/managed-acceptance/data/inventory.db --mft off --usn off --no-progress
+scan r: 2 entries, 0 errors (complete)
+
+
+COMMAND: hash --needed --db /mnt/c/ai-workspace/FileMover/publish/inventory-aot-20261005-v9/managed-acceptance/data/inventory.db --no-progress
+hash --needed: 2 hashed, 2 reused, 0 unstable
+
+
+COMMAND: db export --db /mnt/c/ai-workspace/FileMover/publish/inventory-aot-20261005-v9/managed-acceptance/data/inventory.db --output /mnt/c/ai-workspace/FileMover/publish/inventory-aot-20261005-v9/managed-acceptance/export.db --json
+{
+  "source": "/mnt/c/ai-workspace/FileMover/publish/inventory-aot-20261005-v9/managed-acceptance/data/inventory.db",
+  "destination": "/mnt/c/ai-workspace/FileMover/publish/inventory-aot-20261005-v9/managed-acceptance/export.db"
+}

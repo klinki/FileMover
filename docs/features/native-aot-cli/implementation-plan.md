@@ -2,7 +2,7 @@
 
 ## State
 
-Plan agreed, 2026-10-05. The user confirmed NAS inventory collection as the first release, selected a small EF Core AOT trial before considering a database rewrite, and accepted the separate AOT migration helper design. The first stage 1 trial passed all 14 candidate static-query checks on the NAS. [Verification](verification.md) records the results and remaining query conversion work. The first inventory release is not complete.
+Plan agreed, 2026-10-05. The user confirmed NAS inventory collection as the first release, selected an EF Core AOT trial before considering a database rewrite, and accepted the separate AOT migration helper. The trial passed 14 checks. The actual application now passes the synthetic inventory acceptance job on the NAS, including creation, upgrade, scan, hash, and export, in the clean AOT runtime image. [Verification](verification.md) records both milestones. Clean-machine toolchain setup, release hardening, and later CLI qualification remain open.
 
 Canonical path: [implementation-plan.md](implementation-plan.md).
 
@@ -102,7 +102,9 @@ The Windows GUI continues to use the ordinary build. Native AOT publishing for t
 - First release: NAS inventory collection, confirmed by the user.
 - Database approach: trial EF compiled models and precompiled queries first, confirmed by the user.
 - Migration approach: separate AOT helper applying build-generated EF migration SQL, accepted by the user.
-- Current implementation: stage 1 only, covering representative reads, writes, and transactions on synthetic data, authorized by the user's request for a first version.
+- First implementation: stage 1 covered representative reads, writes, and transactions on synthetic data, authorized by the user's request for a first version.
+- Application conversion started, 2026-10-05, following the user's request to proceed to a running application. Implement the agreed inventory scope, shared static EF queries, an AOT migration helper, and an on-device scan/hash/export acceptance job. Use `NATIVE_AOT` only for startup and first-release command availability. No additional product decision is needed for this scope.
+- Application acceptance passed, 2026-10-05. Shared queries, the generated SQL helper, and inventory commands work on synthetic NAS data. The portable NAS export opens through Windows application database code. The clean runtime-image build still needs verification with a running PC Docker engine.
 
 The EF trial determines whether the current database implementation can be retained. A direct SQLite rewrite remains a fallback requiring a decision based on the trial results.
 

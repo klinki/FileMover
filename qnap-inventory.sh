@@ -20,4 +20,6 @@ echo "Scanning $DATA"
 "$BN" scan "$ROOT_ID" --db "$DB" --mft off
 echo "Hashing uncached files, parallelism=$PARALLELISM"
 "$BN" hash "$ROOT_ID" --db "$DB" --parallelism "$PARALLELISM"
+echo "Checking inventory completeness"
+"$BN" status "$ROOT_ID" --db "$DB"
 echo "Inventory job finished. Database: $DB"

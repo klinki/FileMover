@@ -19,6 +19,21 @@ public static class Cli
             }
 
             string cmd = args[0].ToLowerInvariant();
+#if NATIVE_AOT
+            if (
+                cmd
+                is "plan"
+                    or "execute"
+                    or "verify"
+                    or "purge"
+                    or "diff"
+                    or "coverage"
+                    or "location-changes"
+            )
+                return Fail(
+                    $"'{cmd}' is not yet qualified for the NAS AOT inventory release. Use the Windows application for comparison and replay."
+                );
+#endif
             return cmd switch
             {
                 "--version" or "version" => Version(args[1..]),
@@ -30,6 +45,7 @@ public static class Cli
                 "status" => Status(args[1..]),
                 "db" => Db(args[1..]),
                 "hash" => Hash(args[1..]),
+#if !NATIVE_AOT
                 "plan" => Plan(args[1..]),
                 "execute" => Execute(args[1..]),
                 "verify" => Verify(args[1..]),
@@ -37,6 +53,7 @@ public static class Cli
                 "diff" => Diff(args[1..]),
                 "coverage" => Coverage(args[1..]),
                 "location-changes" => LocationChanges(args[1..]),
+#endif
                 "db-test" => DbTest(args[1..]),
                 "scan-test" => ScanTest(args[1..]),
                 _ => Fail($"unknown command '{args[0]}'. Try 'help'."),
@@ -51,6 +68,31 @@ public static class Cli
 
     private static int Help()
     {
+#if NATIVE_AOT
+        Console.WriteLine(
+            $"""
+            backup-normalizer {BuildInfo.FromAssembly(
+                typeof(Cli).Assembly
+            ).ShortVersion} — NAS inventory
+              init [--db PATH] [--config PATH]
+              config init|show [--config PATH]
+              root add <id> <path> [--name N] [--writable true|false] [--db PATH]
+              root list [--db PATH]
+              scan <rootId|--all> [--db PATH] [--mft off] [--usn off] [--full] [--no-progress]
+                   [--exclude-path-regex REGEX ... | --no-exclusions]
+              scan errors <rootId> [--scan ID] [--db PATH] [--json]
+              hash <rootId> [--all] | hash --needed [--db PATH] [--parallelism N] [--no-progress]
+              status [rootId] [--db PATH] [--hash-algo ALGORITHM] [--json]
+              db export --db SOURCE --output DESTINATION [--json]
+              db-test | scan-test <path> | --version [--json]
+            The matching migration helper must remain beside this executable.
+            Comparison, planning and replay are available in the Windows application.
+            --config PATH selects JSON defaults. CLI values override BN_* variables and JSON defaults.
+            Stored exclusion rules apply to scans and hashing. Links are recorded without following targets.
+            """
+        );
+        return 0;
+#else
         Console.WriteLine(
             $"""
             backup-normalizer {BuildInfo.FromAssembly(
@@ -97,6 +139,7 @@ public static class Cli
             """
         );
         return 0;
+#endif
     }
 
     private static int Version(string[] a)
@@ -657,7 +700,7 @@ public static class Cli
         string db = Opt(a, "--db", LoadConfig(a).Database);
         if (a[0] == "list")
         {
-            using var d = new Database(db);
+            using var d = Database.OpenReadOnly(db);
             foreach (var r in d.ListRoots())
             {
                 Console.WriteLine($"{r.Id}\t{r.Name}\t{r.Path}\twritable={r.Writable}");

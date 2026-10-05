@@ -1,0 +1,12 @@
+<Project>
+  <PropertyGroup>
+    <NativeAotBuild Condition="'$(PublishAot)' == 'true'">true</NativeAotBuild>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(NativeAotBuild)' == 'true'">
+    <DefineConstants>$(DefineConstants);NATIVE_AOT</DefineConstants>
+    <InterceptorsNamespaces>$(InterceptorsNamespaces);Microsoft.EntityFrameworkCore.GeneratedInterceptors</InterceptorsNamespaces>
+  </PropertyGroup>
+  <ItemGroup Condition="'$(NativeAotBuild)' != 'true'">
+    <Compile Remove="GeneratedModel/**/*.cs;GeneratedQueries/**/*.cs" />
+  </ItemGroup>
+</Project>

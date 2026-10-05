@@ -1,0 +1,23 @@
+Checking NAS compatibility before inventorying /app/inventory-fixture
+== platform ==
+arch=armv7l pagesize=32768
+== app ==
+PASS: db-test (SQLite roundtrip + txn commit/rollback)
+PASS: scan-test /app/inventory-fixture
+ALL CHECKS PASSED — NAS scanner supported.
+Registering root nas in /tmp/job-state/inventory.db
+root 'nas' -> /app/inventory-fixture
+Scanning /app/inventory-fixture
+scan nas: 6 entries, 0 errors (complete)
+Hashing uncached files, parallelism=1
+hash nas: 6 hashed, 0 skipped, 0 unstable
+Checking inventory completeness
+root nas: /app/inventory-fixture
+  scan #1: Completed, Recursive, 6 entries, 0 errors
+  last successful scan: 2026-10-05T18:34:19.7500962Z
+  files: 6; skipped links: 0; missing entries: 0; entry errors: 0
+  sha256 hashes: 6 usable, 0 needed
+  USN checkpoint: none; next scan uses full enumeration
+  fallback: USN journal unavailable; using a full scan.
+  planning: ready for content planning
+Inventory job finished. Database: /tmp/job-state/inventory.db

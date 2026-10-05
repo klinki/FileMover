@@ -1,0 +1,133 @@
+{"stream":"Step 1/9 : FROM alpine:3.17"}
+
+{"stream":"\n"}
+
+{"status":"Pulling from library/alpine","id":"3.17"}
+
+{"status":"Pulling fs layer","progressDetail":{},"id":"845348bd1dac"}
+
+{"status":"Downloading","progressDetail":{"current":32129,"total":2880509},"progress":"[\u003e                                                  ]  32.13kB/2.881MB","id":"845348bd1dac"}
+
+{"status":"Downloading","progressDetail":{"current":1250688,"total":2880509},"progress":"[=====================\u003e                             ]  1.251MB/2.881MB","id":"845348bd1dac"}
+
+{"status":"Downloading","progressDetail":{"current":2794576,"total":2880509},"progress":"[================================================\u003e  ]  2.795MB/2.881MB","id":"845348bd1dac"}
+
+{"status":"Verifying Checksum","progressDetail":{},"id":"845348bd1dac"}
+
+{"status":"Download complete","progressDetail":{},"id":"845348bd1dac"}
+
+{"status":"Extracting","progressDetail":{"current":32768,"total":2880509},"progress":"[\u003e                                                  ]  32.77kB/2.881MB","id":"845348bd1dac"}
+
+{"status":"Extracting","progressDetail":{"current":65536,"total":2880509},"progress":"[=\u003e                                                 ]  65.54kB/2.881MB","id":"845348bd1dac"}
+
+{"status":"Extracting","progressDetail":{"current":557056,"total":2880509},"progress":"[=========\u003e                                         ]  557.1kB/2.881MB","id":"845348bd1dac"}
+
+{"status":"Extracting","progressDetail":{"current":1081344,"total":2880509},"progress":"[==================\u003e                                ]  1.081MB/2.881MB","id":"845348bd1dac"}
+
+{"status":"Extracting","progressDetail":{"current":1769472,"total":2880509},"progress":"[==============================\u003e                    ]  1.769MB/2.881MB","id":"845348bd1dac"}
+
+{"status":"Extracting","progressDetail":{"current":2686976,"total":2880509},"progress":"[==============================================\u003e    ]  2.687MB/2.881MB","id":"845348bd1dac"}
+
+{"status":"Extracting","progressDetail":{"current":2880509,"total":2880509},"progress":"[==================================================\u003e]  2.881MB/2.881MB","id":"845348bd1dac"}
+
+{"status":"Extracting","progressDetail":{"current":2880509,"total":2880509},"progress":"[==================================================\u003e]  2.881MB/2.881MB","id":"845348bd1dac"}
+
+{"status":"Pull complete","progressDetail":{},"id":"845348bd1dac"}
+
+{"status":"Digest: sha256:8fc3dacfb6d69da8d44e42390de777e48577085db99aa4e4af35f483eb08b989"}
+
+{"status":"Status: Downloaded newer image for alpine:3.17"}
+
+{"stream":" ---\u003e 9505e3d1113c\n"}
+
+{"stream":"Step 2/9 : RUN apk add --no-cache libgcc libstdc++ icu-libs musl-utils"}
+
+{"stream":"\n"}
+
+{"stream":" ---\u003e Running in ac903ae97f59\n"}
+
+{"stream":"fetch https://dl-cdn.alpinelinux.org/alpine/v3.17/main/armv7/APKINDEX.tar.gz\n"}
+
+{"stream":"fetch https://dl-cdn.alpinelinux.org/alpine/v3.17/community/armv7/APKINDEX.tar.gz\n"}
+
+{"stream":"(1/4) Installing icu-data-en (72.1-r1)\n"}
+
+{"stream":"Executing icu-data-en-72.1-r1.post-install\n"}
+
+{"stream":"\u001b[91m*\n* If you need ICU with non-English locales and legacy charset support, install\n* package icu-data-full.\n*\n\u001b[0m"}
+
+{"stream":"(2/4) Installing libgcc (12.2.1_git20220924-r4)\n"}
+
+{"stream":"(3/4) Installing libstdc++ (12.2.1_git20220924-r4)\n"}
+
+{"stream":"(4/4) Installing icu-libs (72.1-r1)\n"}
+
+{"stream":"OK: 13 MiB in 19 packages\n"}
+
+{"stream":" ---\u003e Removed intermediate container ac903ae97f59\n"}
+
+{"stream":" ---\u003e 517ecd567573\n"}
+
+{"stream":"Step 3/9 : WORKDIR /app"}
+
+{"stream":"\n"}
+
+{"stream":" ---\u003e Running in 9e2b08261c21\n"}
+
+{"stream":" ---\u003e Removed intermediate container 9e2b08261c21\n"}
+
+{"stream":" ---\u003e e436a23c1234\n"}
+
+{"stream":"Step 4/9 : COPY BackupNormalizer BackupNormalizer.Migrations libe_sqlite3.so ./"}
+
+{"stream":"\n"}
+
+{"stream":" ---\u003e 99456813875c\n"}
+
+{"stream":"Step 5/9 : COPY qnap-check.sh ."}
+
+{"stream":"\n"}
+
+{"stream":" ---\u003e 0f72aad99002\n"}
+
+{"stream":"Step 6/9 : COPY qnap-inventory.sh ."}
+
+{"stream":"\n"}
+
+{"stream":" ---\u003e a8bf194c076c\n"}
+
+{"stream":"Step 7/9 : RUN chmod +x BackupNormalizer BackupNormalizer.Migrations qnap-check.sh qnap-inventory.sh"}
+
+{"stream":"\n"}
+
+{"stream":" ---\u003e Running in fed9332dfec3\n"}
+
+{"stream":" ---\u003e Removed intermediate container fed9332dfec3\n"}
+
+{"stream":" ---\u003e 012c956f4651\n"}
+
+{"stream":"Step 8/9 : ENTRYPOINT [\"./BackupNormalizer\"]"}
+
+{"stream":"\n"}
+
+{"stream":" ---\u003e Running in 3ca7855babc0\n"}
+
+{"stream":" ---\u003e Removed intermediate container 3ca7855babc0\n"}
+
+{"stream":" ---\u003e 3c08146f5a44\n"}
+
+{"stream":"Step 9/9 : CMD [\"--help\"]"}
+
+{"stream":"\n"}
+
+{"stream":" ---\u003e Running in f5f7d75ac7d9\n"}
+
+{"stream":" ---\u003e Removed intermediate container f5f7d75ac7d9\n"}
+
+{"stream":" ---\u003e 31f2de7c17fa\n"}
+
+{"aux":{"ID":"sha256:31f2de7c17faf0d5fd191717af54d9767c444496bc7b62076b083bbe2ebfbd42"}}
+
+{"stream":"Successfully built 31f2de7c17fa\n"}
+
+{"stream":"Successfully tagged backup-normalizer:inventory-aot-runtime-20261005-183056\n"}

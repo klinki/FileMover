@@ -1,0 +1,55 @@
+{
+  "baseImage": "backup-normalizer:qnap-arm32",
+  "files": {
+    "BackupNormalizer": {
+      "sha256": "3a4c4d667b51470a144a27ddff8ab8274eaebf52b4f3c67dded7ff1b4970e888",
+      "size": 86571928,
+      "loadAlignment": 65536
+    },
+    "BackupNormalizer.Migrations": {
+      "sha256": "9dc9de0fa120261ec9a9800e18a8d632424b53232e8443ef7530aa054b8bfaba",
+      "size": 10390960,
+      "loadAlignment": 65536
+    },
+    "libe_sqlite3.so": {
+      "sha256": "7fec7057d16e8b5ae54fed0c42a0e6b85e40df0d57092ef20cd647a4e1c1e0ed",
+      "size": 1322584,
+      "loadAlignment": 65536
+    },
+    "qnap-check.sh": {
+      "sha256": "728f7c8efce9a688369beba06cb4cc93fea11eb528e585a75bf1ae93fdc06165",
+      "size": 1174
+    },
+    "qnap-inventory.sh": {
+      "sha256": "3781d3075b66fb0a99cf910e80f5874fca827911ae66787a9b4f63de961945f7",
+      "size": 866
+    },
+    "inventory-acceptance.sh": {
+      "sha256": "3b73a16ced2c67d2148d488b40c20fdab1c58c1f4def38f591f7f292952f4a66",
+      "size": 2635
+    },
+    "legacy.db": {
+      "sha256": "d5ea15e747453a477d88e90e5dd333a56dbb68023896a31d2696ec62101f4c69",
+      "size": 94208
+    }
+  },
+  "image": "backup-normalizer:inventory-aot-20261005-182026",
+  "container": "backup-normalizer-inventory-aot-20261005-182026-acceptance",
+  "exitCode": 0,
+  "oomKilled": false,
+  "mounts": [],
+  "exportVerified": true,
+  "stdout": "Architecture: armv7l\nPage size: 32768\nBackupNormalizer 0.2.0+af1ad593d6d1.unverified (Release; linux-musl-arm; source unknown)\ndb-test: PASS (create/insert/read/commit/rollback ok)\nPASS: database creation, writes and transactions\nroot 'nas' -> /tmp/bn-inventory/data\nroot 'nas' -> /tmp/bn-inventory/data\nnas\tupdated\t/tmp/bn-inventory/data\twritable=True\nPASS: root insert, update and list\nscan nas: 6 entries, 0 errors (complete)\n{\n  \"scan\": {\n    \"scan\": {\n      \"id\": 1,\n      \"storageRootId\": \"nas\",\n      \"startedUtc\": \"2026-10-05T18:20:37.1090582Z\",\n      \"completedUtc\": \"2026-10-05T18:20:37.1444207Z\",\n      \"status\": \"Completed\"\n    },\n    \"mode\": \"Recursive\",\n    \"scannedCount\": 6,\n    \"errorCount\": 0,\n    \"fallbackReason\": null\n  },\n  \"errors\": []\n}\nPASS: scan, exclusion, link metadata and diagnostics\nhash --needed: 5 hashed, 1 reused, 0 unstable\nhash --needed: 0 hashed, 6 reused, 0 unstable\n[\n  {\n    \"root\": {\n      \"id\": \"nas\",\n      \"name\": \"updated\",\n      \"path\": \"/tmp/bn-inventory/data\",\n      \"writable\": true,\n      \"fileSystemId\": \"/|overlay|/\",\n      \"caseSensitivity\": \"sensitive\",\n      \"createdUtc\": \"2026-10-05T18:20:36.6751307Z\"\n    },\n    \"latestScan\": {\n      \"scan\": {\n        \"id\": 1,\n        \"storageRootId\": \"nas\",\n        \"startedUtc\": \"2026-10-05T18:20:37.1090582Z\",\n        \"completedUtc\": \"2026-10-05T18:20:37.1444207Z\",\n        \"status\": \"Completed\"\n      },\n      \"mode\": \"Recursive\",\n      \"scannedCount\": 6,\n      \"errorCount\": 0,\n      \"fallbackReason\": null\n    },\n    \"lastSuccessfulScan\": {\n      \"id\": 1,\n      \"storageRootId\": \"nas\",\n      \"startedUtc\": \"2026-10-05T18:20:37.1090582Z\",\n      \"completedUtc\": \"2026-10-05T18:20:37.1444207Z\",\n      \"status\": \"Completed\"\n    },\n    \"regularFiles\": 5,\n    \"links\": 1,\n    \"missingEntries\": 0,\n    \"entryErrors\": 0,\n    \"usableHashes\": 5,\n    \"missingHashes\": 0,\n    \"planningReady\": true,\n    \"blockingReason\": null,\n    \"checkpoint\": null,\n    \"errors\": [],\n    \"excludedPathRegexes\": [\n      \"^cache/\"\n    ]\n  }\n]\nPASS: hashes, cache reuse and inventory status\nscan nas: 5 entries, 0 errors (complete)\nhash --needed: 2 hashed, 5 reused, 0 unstable\n[\n  {\n    \"root\": {\n      \"id\": \"nas\",\n      \"name\": \"updated\",\n      \"path\": \"/tmp/bn-inventory/data\",\n      \"writable\": true,\n      \"fileSystemId\": \"/|overlay|/\",\n      \"caseSensitivity\": \"sensitive\",\n      \"createdUtc\": \"2026-10-05T18:20:36.6751307Z\"\n    },\n    \"latestScan\": {\n      \"scan\": {\n        \"id\": 2,\n        \"storageRootId\": \"nas\",\n        \"startedUtc\": \"2026-10-05T18:20:37.9471231Z\",\n        \"completedUtc\": \"2026-10-05T18:20:37.9797476Z\",\n        \"status\": \"Completed\"\n      },\n      \"mode\": \"Recursive\",\n      \"scannedCount\": 5,\n      \"errorCount\": 0,\n      \"fallbackReason\": null\n    },\n    \"lastSuccessfulScan\": {\n      \"id\": 2,\n      \"storageRootId\": \"nas\",\n      \"startedUtc\": \"2026-10-05T18:20:37.9471231Z\",\n      \"completedUtc\": \"2026-10-05T18:20:37.9797476Z\",\n      \"status\": \"Completed\"\n    },\n    \"regularFiles\": 4,\n    \"links\": 1,\n    \"missingEntries\": 2,\n    \"entryErrors\": 0,\n    \"usableHashes\": 4,\n    \"missingHashes\": 0,\n    \"planningReady\": true,\n    \"blockingReason\": null,\n    \"checkpoint\": null,\n    \"errors\": [],\n    \"excludedPathRegexes\": [\n      \"^cache/\"\n    ]\n  }\n]\n{\n  \"source\": \"/tmp/bn-inventory/data/inventory.db\",\n  \"destination\": \"/tmp/bn-inventory/export.db\"\n}\n[\n  {\n    \"root\": {\n      \"id\": \"nas\",\n      \"name\": \"updated\",\n      \"path\": \"/tmp/bn-inventory/data\",\n      \"writable\": true,\n      \"fileSystemId\": \"/|overlay|/\",\n      \"caseSensitivity\": \"sensitive\",\n      \"createdUtc\": \"2026-10-05T18:20:36.6751307Z\"\n    },\n    \"latestScan\": {\n      \"scan\": {\n        \"id\": 2,\n        \"storageRootId\": \"nas\",\n        \"startedUtc\": \"2026-10-05T18:20:37.9471231Z\",\n        \"completedUtc\": \"2026-10-05T18:20:37.9797476Z\",\n        \"status\": \"Completed\"\n      },\n      \"mode\": \"Recursive\",\n      \"scannedCount\": 5,\n      \"errorCount\": 0,\n      \"fallbackReason\": null\n    },\n    \"lastSuccessfulScan\": {\n      \"id\": 2,\n      \"storageRootId\": \"nas\",\n      \"startedUtc\": \"2026-10-05T18:20:37.9471231Z\",\n      \"completedUtc\": \"2026-10-05T18:20:37.9797476Z\",\n      \"status\": \"Completed\"\n    },\n    \"regularFiles\": 4,\n    \"links\": 1,\n    \"missingEntries\": 2,\n    \"entryErrors\": 0,\n    \"usableHashes\": 4,\n    \"missingHashes\": 0,\n    \"planningReady\": true,\n    \"blockingReason\": null,\n    \"checkpoint\": null,\n    \"errors\": [],\n    \"excludedPathRegexes\": [\n      \"^cache/\"\n    ]\n  }\n]\nPASS: rescan changes, stored exclusions and portable export\nseed\tseed\t/fixture/seed\twritable=True\nroot 'added' -> /tmp/bn-inventory/data\nadded\tadded\t/tmp/bn-inventory/data\twritable=True\nseed\tseed\t/fixture/seed\twritable=True\nPASS: legacy read-only access and backed-up schema upgrade\nPASS: mismatched migration package rejected before writes\nPASS: unqualified commands rejected before database writes\nEXPORT_BASE64_BEGIN\n[portable database saved locally]\nEXPORT_BASE64_END\nRESULT: inventory acceptance passed\n",
+  "stderr": "Database schema is current.\nDatabase schema is current.\nDatabase upgraded. Backup: /tmp/bn-inventory/state/legacy.db.before-migration-215b2299aaf04e7f8ebaeec6199fbb39.db\nMigration helper and application packages do not match.\nerror: 'execute' is not yet qualified for the NAS AOT inventory release. Use the Windows application for comparison and replay.\n",
+  "hashesMatch": true,
+  "originalRunningServices": [
+    "stash",
+    "stash_atk",
+    "qbitorrent-qbittorrent-1",
+    "gluetun",
+    "c345a9f8d683_calibre-calibre-web-1",
+    "portainer",
+    "jdownloader-1"
+  ],
+  "allOriginalServicesStillRunning": true
+}

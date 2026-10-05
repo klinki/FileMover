@@ -6,28 +6,27 @@ Docker containers share the host kernel. The actual NAS must pass the bundled co
 
 ## Build on the PC
 
-Start Docker Desktop with Linux containers, then run from the repository:
+The QNAP image now packages the Native AOT inventory CLI and its matching migration helper. Follow the [AOT build instructions](../native-aot-cli/README.md) to prepare the tested WSL SDK and ARM toolchain, then start Docker Desktop with Linux containers and run:
 
 ```powershell
 .\deploy\build-qnap.ps1
 ```
 
-The generated deployment folder contains the image archive, Compose file, and example environment file. The helper creates or reuses a dedicated Buildx builder with the `docker-container` driver, which supports archive export without changing Docker Desktop settings. The builder runs the SDK on the PC architecture and cross-publishes a self-contained `linux-musl-arm` CLI. Neither .NET nor SQLite needs to be installed on the NAS host.
-
-The equivalent image build command is:
+For an existing AOT publication:
 
 ```powershell
-docker buildx create --name backup-normalizer-nas --driver docker-container
-docker buildx build --builder backup-normalizer-nas --platform linux/arm/v7 -f Dockerfile.qnap --tag backup-normalizer:qnap-arm32 --provenance=false --output type=docker,dest=backup-normalizer-qnap-arm32.tar .
+.\deploy\build-qnap.ps1 -SkipNativeBuild -NativeBuildDirectory .\publish\inventory-aot-local
 ```
 
-Buildx's [Docker exporter](https://docs.docker.com/build/exporters/oci-docker/) creates a single-platform Docker image archive. The build does not push to a registry.
+The helper generates EF migration SQL and precompiled queries on the PC, publishes the CLI and helper through WSL, and prepares a Docker context containing only the native runtime files and job scripts. Buildx exports the image archive, Compose file, and example environment file. The runtime image contains no SDK or CoreCLR. Neither .NET nor SQLite needs installation on the NAS host.
+
+Buildx's [Docker exporter](https://docs.docker.com/build/exporters/oci-docker/) creates a single-platform image archive. The build does not push to a registry.
 
 ## Import into Container Station
 
 1. Ensure Container Station is installed on the NAS.
 1. Create a small test directory with a few representative files, for example `/share/BackupNormalizerTest`. Create a separate persistent state directory, for example `/share/BackupNormalizerState`.
-1. In Container Station, import the generated image archive. Confirm the imported tag is `backup-normalizer:qnap-arm32`.
+1. In Container Station, import the generated image archive. Confirm the imported tag is `backup-normalizer:qnap-arm32-aot`.
 1. Create a Compose application using the generated configuration. Replace both `${NAS_DATA_PATH:?...}` and `${NAS_STATE_PATH:?...}` values with the actual absolute NAS directories in the YAML. Container Station's editor need not support a separate environment file.
 1. Start the application and inspect its logs. It runs compatibility checks, registers the root, scans it, and hashes its files. A successful job exits with code `0`; it does not restart automatically.
 
@@ -44,7 +43,7 @@ For a fresh small-folder test, verify that the scan reports `complete`, the hash
 Alternatively, copy the image archive and configuration to a NAS directory accessible through SSH, then load the image:
 
 ```sh
-docker load -i backup-normalizer-qnap-arm32.tar
+docker load -i backup-normalizer-qnap-arm32-aot.tar
 ```
 
 Copy the example environment file to `.env` and replace the share paths. From the directory containing the Compose file:
@@ -62,7 +61,7 @@ docker run --rm -t --platform linux/arm/v7 \
   --mount type=bind,source=/share/BackupNormalizerTest,target=/data,readonly \
   --mount type=bind,source=/share/BackupNormalizerState,target=/state \
   --entrypoint /app/qnap-inventory.sh \
-  backup-normalizer:qnap-arm32
+  backup-normalizer:qnap-arm32-aot
 ```
 
 The terminal allocation enables live scan/hash progress. Hashing defaults to one worker for the first NAS test. Increase `BN_HASH_PARALLELISM` only after observing throughput and NAS load.
@@ -73,7 +72,7 @@ To run just the compatibility check:
 docker run --rm -t --platform linux/arm/v7 \
   --mount type=bind,source=/share/BackupNormalizerTest,target=/data,readonly \
   --entrypoint /app/qnap-check.sh \
-  backup-normalizer:qnap-arm32 /app/BackupNormalizer /data
+  backup-normalizer:qnap-arm32-aot /app/BackupNormalizer /data
 ```
 
 ## Expand and repeat
@@ -84,7 +83,15 @@ Rerunning the job rescans the same root and reuses valid hashes. A root path ins
 
 ## Bring the inventory back to the PC
 
-Wait until the job exits and no other process is writing the database. Copy `nas.db` and any existing `nas.db-wal` alongside it into a fresh folder on the PC. Keep both files together; committed pages may still be in the WAL. Do not copy only the main database during an active job. SQLite explains this in its [WAL documentation](https://www.sqlite.org/wal.html).
+Use `db export` to create a standalone inventory through SQLite's backup API, including committed WAL data. Run with the existing state directory mounted and choose a fresh output filename:
+
+```sh
+docker run --rm --platform linux/arm/v7 \
+  --mount type=bind,source=/share/BackupNormalizerState,target=/state \
+  backup-normalizer:qnap-arm32-aot db export --db /state/nas.db --output /state/portable.db
+```
+
+Copy `portable.db` to the PC and open it in the Windows application. Export refuses to overwrite an existing destination. See the [portable export guide](../portable-inventory-export/README.md).
 
 The root paths stored in the NAS database use `/data`. Diff and planning compare inventories and do not need to read NAS content. Execution that later copies source files must use an accessible path through `--source-path`. Use the documented fresh-database import workflow for replaying plans on another root.
 

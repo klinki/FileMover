@@ -1,30 +1,12 @@
-# QNAP TS-431P3 target: Alpine 3.17 ARMv7, .NET 10 linux-musl-arm (§28)
-# Build (on x64/ARM64 host with Docker buildx):
-#   docker buildx build --platform linux/arm/v7 -f Dockerfile.qnap -t backup-normalizer:qnap-arm32 .
-# Publish equivalent (no Docker):
-#   dotnet publish src/BackupNormalizer/BackupNormalizer.csproj \
-#       -c Release -r linux-musl-arm --self-contained true
-#
-# NOTE: the build stage runs on the host platform ($BUILDPLATFORM) and
-# cross-publishes the linux-musl-arm RID. Running the .NET SDK itself under
-# QEMU arm emulation segfaults (TCG thumb assertion), so do NOT force the
-# build stage onto the target platform.
-FROM --platform=$BUILDPLATFORM mcr.microsoft.com/dotnet/sdk:10.0-alpine AS build
-WORKDIR /src
-COPY src/BackupNormalizer/BackupNormalizer.csproj src/BackupNormalizer/
-COPY src/BackupNormalizer.Core/BackupNormalizer.Core.csproj src/BackupNormalizer.Core/
-RUN dotnet restore src/BackupNormalizer/BackupNormalizer.csproj -r linux-musl-arm
-COPY src/BackupNormalizer/ src/BackupNormalizer/
-COPY src/BackupNormalizer.Core/ src/BackupNormalizer.Core/
-RUN dotnet publish src/BackupNormalizer/BackupNormalizer.csproj --no-restore -c Release -r linux-musl-arm --self-contained true -o /publish
-
+# Native AOT CLI/helper must be generated and cross-published first with the
+# tested 64 KiB ELF alignment. deploy/build-qnap.ps1 prepares the image context.
+# No .NET SDK or CoreCLR is needed in the runtime image.
 FROM alpine:3.17
 RUN apk add --no-cache libgcc libstdc++ icu-libs musl-utils
-
 WORKDIR /app
-COPY --from=build /publish/ .
+COPY BackupNormalizer BackupNormalizer.Migrations libe_sqlite3.so ./
 COPY qnap-check.sh .
 COPY qnap-inventory.sh .
-RUN chmod +x qnap-check.sh qnap-inventory.sh
+RUN chmod +x BackupNormalizer BackupNormalizer.Migrations qnap-check.sh qnap-inventory.sh
 ENTRYPOINT ["./BackupNormalizer"]
 CMD ["--help"]

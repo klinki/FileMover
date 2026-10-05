@@ -86,6 +86,7 @@ public sealed class Scanner
             db.DbPath + "-wal",
             db.DbPath + "-shm",
             db.DbPath + "-journal",
+            db.DbPath + ".bn-migration.lock",
         };
     }
 

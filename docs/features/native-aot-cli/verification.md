@@ -2,7 +2,7 @@
 
 ## State
 
-First EF Core trial completed, 2026-10-05. All 14 candidate static-query checks passed on the actual NAS. EF Core remains a viable approach for further conversion. Production inventory collection and migration deployment are not implemented yet.
+Application inventory acceptance passed, 2026-10-05. The actual AOT CLI and separate migration helper run on the 32 KiB-page NAS using synthetic data. Earlier sections preserve the first EF trial; the application results below record the subsequent conversion. Comparison and replay remain outside the qualified NAS command set.
 
 ## Implemented trial
 
@@ -53,8 +53,49 @@ Captured logs:
 - [Source verification](evidence/source-verification.json), recording 47 unchanged core source files and matching tested trial sources
 - [Tested source snapshot](../../../publish/ef-aot-trial-manual-20261005/source/tools/BackupNormalizer.AotTrial/StaticTrial.cs)
 
-## Remaining work
+## Remaining work after the first trial
 
 Continue with EF and convert the inventory query paths using the demonstrated static shapes. Broader conversion, custom collation, old file-metadata projections, complete inventory status, exclusions, and parameter combinations remain unverified. Implement the AOT migration helper and full scan/hash/export job separately. Full CLI compatibility and the existing NAS compatibility bug remain open. Production source was unchanged.
 
 Python syntax, shell syntax, C# formatting, and documentation links were checked. The final candidate source passed its Windows 14-check baseline after the query-shape changes. The full application test suite was not rerun because this trial adds isolated tooling and leaves production source unchanged.
+
+## Actual application implementation
+
+The [application instructions](README.md) describe the maintained build. Shared database queries now use complete expressions, local scalar/context captures, and expression setters. Optional filters select complete query branches outside LINQ expressions. Legacy projections remain separate so historical read-only databases do not require newer columns. Windows uses these same query shapes.
+
+[AOT build properties](../../../src/BackupNormalizer.Core/NativeAot.props) define `NATIVE_AOT` during managed generation and native publication. Conditional compilation controls startup migrations, the build-machine SQL generator, and the qualified CLI command set. Inventory logic remains shared. The [schema library](../../../src/BackupNormalizer.Schema/DatabaseSchema.cs) checks history before writable EF construction and invokes the matching helper. [SQL generation](../../../src/BackupNormalizer.Core/MigrationManifestGenerator.cs) uses existing EF migrations; the [generated package](evidence/inventory-migrations.json) is preserved with this build's evidence.
+
+The helper checks the package hash, retains a consistent backup for older inventories, serializes helper attempts, rechecks history under SQLite write locks, and commits each migration with its history row. Unknown, newer, or incomplete histories fail. Transaction-suppressed commands fail generation. Read-only startup never migrates. Root listing opens read-only in both builds, and scanning excludes the active database's migration lock.
+
+## Application generation findings
+
+The generator rejected record-property captures, array membership, unnamed anonymous join members, and implicit nullable numeric setter conversions. Scalar locals, `List.Contains`, explicit member names, and casts resolved those failures. Optional filters needed complete query branches to preserve runtime expression bindings.
+
+The first application NAS run exposed reversed extraction of chained setter values, corrupting the synthetic root path. The [failed result](../../../publish/inventory-aot-20261005-v5/nas-result.json) remains local. The pinned EF 10.0.12 [generation corrections](../../../deploy/fix-ef-interceptors.py) align runtime extraction positions with generated setter order and add a `Database` type alias. Fifty parameter bindings receive the correction; single-setter positions are unchanged. Review this workaround when changing EF versions.
+
+The [precompiled managed acceptance log](evidence/inventory-precompiled-managed.log) verifies generated-query execution before ARM publication. It covers separate roots, root-specific filtering and hashing, scans, selected-scan diagnostics, updates, cache reuse, a database inside its scanned root, and export. It independently checks stored paths, sizes, timestamps, and digests.
+
+## Application verification
+
+- Windows compatibility suite: 481 passed, 20 skipped. Twelve new migration cases cover all seven known starting states, preservation, rollback/retry, history rejection, package mismatch, helper locking, and read-only root listing.
+- After the final optional-filter and lock-exclusion changes, 54 targeted inventory, hashing, export, exclusion, migration, and JSON checks passed.
+- Native publication completed with SDK 10.0.302, EF 10.0.12, and ARM runtime 10.0.10. EF/provider trimming and AOT warnings remain, together with SpatiaLite-loading warnings. This workflow uses no spatial extensions. Experimental warnings still need release review.
+- [NAS application result](evidence/inventory-nas-result.json): exit 0, ARMv7, 32,768-byte pages. The [console log](evidence/inventory-nas.log) records creation/transactions, root insertion/update/listing, scans, stored exclusions, links, diagnostics, two-worker hashing, reuse, changed/moved/removed-file rescanning, status, export, and a backed-up legacy upgrade.
+- Mismatched migration packages and unqualified replay commands failed before creating the requested databases.
+- Independent SQLite checks verified integrity, foreign keys, six migration rows, correct root values, missing/moved paths, Unicode filenames, exclusions, sizes, hash metadata, and exact SHA256 digests. The NAS export opened through the ordinary Windows CLI and reported four usable files, one link, two missing entries, and no entry errors.
+- All transferred hashes matched. CLI, helper, and SQLite have 65,536-byte load alignment. No existing share was mounted, no container was OOM-killed, and all seven original services stayed running.
+- [Source verification](evidence/inventory-source-verification.json): all 60 maintained source files match the tested snapshot. Models and interceptors remain build artifacts.
+
+The first working NAS image is `backup-normalizer:inventory-aot-20261005-182026`. Its entrypoint is the actual application; help lists qualified inventory commands. This diagnostic image uses the earlier Alpine test base, which retains unused CoreCLR files. Executables, the export, snapshots, and full build logs remain under local `publish/inventory-aot-20261005-v9` output.
+
+## Clean runtime image verification
+
+The maintained Dockerfile subsequently built directly through the NAS Docker engine. The PC Docker engine was stopped, and Docker CLI stdin staging failed because the NAS's 64 MiB `/tmp` was full. Streaming the context to the daemon's Unix socket over SSH succeeded without clearing files. The [build log](evidence/inventory-runtime-image-build.log) and [result](evidence/inventory-runtime-image-result.json) record the clean image `backup-normalizer:inventory-aot-runtime-20261005-183056`, ID `sha256:31f2de7c17faf0d5fd191717af54d9767c444496bc7b62076b083bbe2ebfbd42`. Docker reports ARM and 208,600,488 bytes uncompressed. Help ran successfully and checks confirmed that `/app/libcoreclr.so` and `/app/System.Private.CoreLib.dll` are absent. Native executables retain debug symbols; size optimization remains open.
+
+The full synthetic inventory acceptance job passed again using this clean image as its base: [result](evidence/inventory-clean-nas-result.json), [log](evidence/inventory-clean-nas.log). Its retained acceptance image is `backup-normalizer:inventory-aot-20261005-183216`. Export contents and transfer hashes passed independent checks, no existing share was mounted, and all seven original services remained running. The fixture layer is used only by the acceptance job; the clean runtime image contains the application and job scripts.
+
+The packaged `qnap-inventory.sh` also completed independently against the six internal fixture files: [job log](evidence/inventory-job-nas.log). Platform checks, database creation, registration, scan, hashing, and final status passed with a read-only container root and temporary state. The clean-image export opened through the ordinary Windows CLI: [status](evidence/inventory-clean-export-windows.log). Existing NAS shares and state remained unmounted.
+
+## Remaining release work
+
+Provide clean-machine toolchain setup, verify archive import through Container Station, review experimental warnings and binary size, and qualify cancellation/restart and additional parameter combinations on the NAS. Existing NAS inventories and shares have not been tested or upgraded. Comparison, duplicates, planning, and replay remain a separate milestone. Verification used an uncommitted source snapshot; no image was pushed to a registry.

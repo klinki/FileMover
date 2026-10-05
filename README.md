@@ -1,6 +1,6 @@
 # BackupNormalizer
 
-BackupNormalizer compares two file trees and can plan changes that make the target match the source. It uses .NET 10, EF Core, and SQLite. The command line tool runs on Windows, macOS, Linux, and QNAP Linux. The Avalonia desktop UI stages manual file operations.
+BackupNormalizer compares two file trees and can plan changes that make the target match the source. It uses .NET 10, EF Core, and SQLite. The command line tool runs on Windows, macOS, and Linux, with an [inventory-only Native AOT build for ARMv7 QNAP](docs/features/native-aot-cli/README.md). The Avalonia desktop UI stages manual file operations.
 
 The source and target are choices for each comparison. Neither database nor root has a permanent role. Keep one inventory database per drive if that makes the files easier to manage; each database can contain several named roots.
 

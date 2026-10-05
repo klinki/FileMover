@@ -1,0 +1,69 @@
+{
+  "Format": 1,
+  "Steps": [
+    {
+      "Id": "20260925052612_InitialCreate",
+      "ProductVersion": "10.0.12",
+      "Commands": [
+        "CREATE TABLE \u0022ExecutionLog\u0022 (\n    \u0022Id\u0022 INTEGER NOT NULL CONSTRAINT \u0022PK_ExecutionLog\u0022 PRIMARY KEY AUTOINCREMENT,\n    \u0022PlanOperationId\u0022 INTEGER NOT NULL,\n    \u0022TimestampUtc\u0022 TEXT NOT NULL,\n    \u0022Level\u0022 TEXT NOT NULL,\n    \u0022Message\u0022 TEXT NOT NULL\n);\n",
+        "CREATE TABLE \u0022Plan\u0022 (\n    \u0022Id\u0022 TEXT NOT NULL CONSTRAINT \u0022PK_Plan\u0022 PRIMARY KEY,\n    \u0022CreatedUtc\u0022 TEXT NOT NULL,\n    \u0022SourceDatabasePath\u0022 TEXT NOT NULL,\n    \u0022SourceRootId\u0022 TEXT NOT NULL,\n    \u0022SourceRootPath\u0022 TEXT NOT NULL,\n    \u0022TargetRootId\u0022 TEXT NOT NULL,\n    \u0022TargetRootPath\u0022 TEXT NOT NULL,\n    \u0022Status\u0022 TEXT NOT NULL DEFAULT \u0027Planned\u0027,\n    \u0022EstimatedBytesCopied\u0022 INTEGER NOT NULL DEFAULT 0\n);\n",
+        "CREATE TABLE \u0022StorageRoot\u0022 (\n    \u0022Id\u0022 TEXT NOT NULL CONSTRAINT \u0022PK_StorageRoot\u0022 PRIMARY KEY,\n    \u0022Name\u0022 TEXT NOT NULL,\n    \u0022Path\u0022 TEXT NOT NULL,\n    \u0022Writable\u0022 INTEGER NOT NULL DEFAULT 1,\n    \u0022FileSystemId\u0022 TEXT NOT NULL DEFAULT \u0027unknown\u0027,\n    \u0022CaseSensitivity\u0022 TEXT NOT NULL DEFAULT \u0027unknown\u0027,\n    \u0022CreatedUtc\u0022 TEXT NOT NULL\n);\n",
+        "CREATE TABLE \u0022PlanOperation\u0022 (\n    \u0022Id\u0022 INTEGER NOT NULL CONSTRAINT \u0022PK_PlanOperation\u0022 PRIMARY KEY AUTOINCREMENT,\n    \u0022PlanId\u0022 TEXT NOT NULL,\n    \u0022Sequence\u0022 INTEGER NOT NULL,\n    \u0022Type\u0022 TEXT NOT NULL,\n    \u0022SourceKind\u0022 TEXT NULL,\n    \u0022SourceRootId\u0022 TEXT NULL,\n    \u0022SourcePath\u0022 TEXT NULL,\n    \u0022DestinationRootId\u0022 TEXT NULL,\n    \u0022DestinationPath\u0022 TEXT NULL,\n    \u0022ExpectedSize\u0022 INTEGER NOT NULL DEFAULT 0,\n    \u0022ExpectedHash\u0022 TEXT NULL,\n    \u0022Status\u0022 TEXT NOT NULL DEFAULT \u0027Planned\u0027,\n    \u0022StartedUtc\u0022 TEXT NULL,\n    \u0022CompletedUtc\u0022 TEXT NULL,\n    \u0022Error\u0022 TEXT NULL,\n    CONSTRAINT \u0022FK_PlanOperation_Plan_PlanId\u0022 FOREIGN KEY (\u0022PlanId\u0022) REFERENCES \u0022Plan\u0022 (\u0022Id\u0022) ON DELETE CASCADE\n);\n",
+        "CREATE TABLE \u0022FileEntry\u0022 (\n    \u0022Id\u0022 INTEGER NOT NULL CONSTRAINT \u0022PK_FileEntry\u0022 PRIMARY KEY AUTOINCREMENT,\n    \u0022StorageRootId\u0022 TEXT NOT NULL,\n    \u0022RelativePath\u0022 TEXT NOT NULL,\n    \u0022Name\u0022 TEXT NOT NULL,\n    \u0022Size\u0022 INTEGER NOT NULL,\n    \u0022ModifiedUtc\u0022 TEXT NOT NULL,\n    \u0022CreatedUtc\u0022 TEXT NULL,\n    \u0022FileIdentity\u0022 TEXT NULL,\n    \u0022LastSeenScanId\u0022 INTEGER NOT NULL,\n    \u0022Status\u0022 TEXT NOT NULL DEFAULT \u0027Ok\u0027,\n    \u0022Error\u0022 TEXT NULL,\n    CONSTRAINT \u0022AK_FileEntry_StorageRootId_RelativePath\u0022 UNIQUE (\u0022StorageRootId\u0022, \u0022RelativePath\u0022),\n    CONSTRAINT \u0022FK_FileEntry_StorageRoot_StorageRootId\u0022 FOREIGN KEY (\u0022StorageRootId\u0022) REFERENCES \u0022StorageRoot\u0022 (\u0022Id\u0022)\n);\n",
+        "CREATE TABLE \u0022Scan\u0022 (\n    \u0022Id\u0022 INTEGER NOT NULL CONSTRAINT \u0022PK_Scan\u0022 PRIMARY KEY AUTOINCREMENT,\n    \u0022StorageRootId\u0022 TEXT NOT NULL,\n    \u0022StartedUtc\u0022 TEXT NOT NULL,\n    \u0022CompletedUtc\u0022 TEXT NULL,\n    \u0022Status\u0022 TEXT NOT NULL DEFAULT \u0027Started\u0027,\n    CONSTRAINT \u0022FK_Scan_StorageRoot_StorageRootId\u0022 FOREIGN KEY (\u0022StorageRootId\u0022) REFERENCES \u0022StorageRoot\u0022 (\u0022Id\u0022)\n);\n",
+        "CREATE TABLE \u0022FileHash\u0022 (\n    \u0022FileEntryId\u0022 INTEGER NOT NULL,\n    \u0022Algorithm\u0022 TEXT NOT NULL,\n    \u0022Digest\u0022 TEXT NOT NULL,\n    \u0022SizeAtHash\u0022 INTEGER NOT NULL,\n    \u0022ModifiedUtcAtHash\u0022 TEXT NOT NULL,\n    \u0022CalculatedUtc\u0022 TEXT NOT NULL,\n    \u0022State\u0022 TEXT NOT NULL DEFAULT \u0027Ok\u0027,\n    CONSTRAINT \u0022PK_FileHash\u0022 PRIMARY KEY (\u0022FileEntryId\u0022, \u0022Algorithm\u0022),\n    CONSTRAINT \u0022FK_FileHash_FileEntry_FileEntryId\u0022 FOREIGN KEY (\u0022FileEntryId\u0022) REFERENCES \u0022FileEntry\u0022 (\u0022Id\u0022) ON DELETE CASCADE\n);\n",
+        "CREATE INDEX \u0022IX_FileEntry_Root\u0022 ON \u0022FileEntry\u0022 (\u0022StorageRootId\u0022);\n",
+        "CREATE INDEX \u0022IX_FileEntry_Size\u0022 ON \u0022FileEntry\u0022 (\u0022Size\u0022);\n",
+        "CREATE INDEX \u0022IX_FileHash_Digest\u0022 ON \u0022FileHash\u0022 (\u0022Algorithm\u0022, \u0022Digest\u0022);\n",
+        "CREATE INDEX \u0022IX_PlanOp_Plan\u0022 ON \u0022PlanOperation\u0022 (\u0022PlanId\u0022, \u0022Sequence\u0022);\n",
+        "CREATE INDEX \u0022IX_Scan_StorageRootId\u0022 ON \u0022Scan\u0022 (\u0022StorageRootId\u0022);\n"
+      ]
+    },
+    {
+      "Id": "20260929221047_BindExecutionRoots",
+      "ProductVersion": "10.0.12",
+      "Commands": [
+        "ALTER TABLE \u0022Plan\u0022 ADD \u0022ExecutionSourceRootPath\u0022 TEXT NULL;\n",
+        "ALTER TABLE \u0022Plan\u0022 ADD \u0022ExecutionTargetRootPath\u0022 TEXT NULL;\n"
+      ]
+    },
+    {
+      "Id": "20261002075521_RecordLinks",
+      "ProductVersion": "10.0.12",
+      "Commands": [
+        "ALTER TABLE \u0022PlanOperation\u0022 ADD \u0022SkipReason\u0022 TEXT NULL;\n",
+        "ALTER TABLE \u0022FileEntry\u0022 ADD \u0022EntryKind\u0022 TEXT NOT NULL DEFAULT \u0027File\u0027;\n",
+        "ALTER TABLE \u0022FileEntry\u0022 ADD \u0022LinkNote\u0022 TEXT NULL;\n",
+        "ALTER TABLE \u0022FileEntry\u0022 ADD \u0022LinkTarget\u0022 TEXT NULL;\n",
+        "ALTER TABLE \u0022FileEntry\u0022 ADD \u0022TargetPath\u0022 TEXT NULL;\n",
+        "UPDATE FileHash SET State = \u0027Stale\u0027\r\nWHERE FileEntryId IN (SELECT Id FROM FileEntry WHERE Status = \u0027UnsupportedEntry\u0027 AND Error = \u0027symlink\u0027);\r\nUPDATE FileEntry SET EntryKind = \u0027ReparsePoint\u0027, Status = \u0027Ok\u0027, Error = NULL,\r\n    LinkNote = \u0027Rescan to record link metadata.\u0027\r\nWHERE Status = \u0027UnsupportedEntry\u0027 AND Error = \u0027symlink\u0027;\n"
+      ]
+    },
+    {
+      "Id": "20261002173131_TrackUsnCheckpoints",
+      "ProductVersion": "10.0.12",
+      "Commands": [
+        "CREATE TABLE \u0022ScanCheckpoint\u0022 (\n    \u0022StorageRootId\u0022 TEXT NOT NULL CONSTRAINT \u0022PK_ScanCheckpoint\u0022 PRIMARY KEY,\n    \u0022RootPath\u0022 TEXT NOT NULL,\n    \u0022VolumeIdentity\u0022 TEXT NOT NULL,\n    \u0022RootIdentity\u0022 TEXT NOT NULL,\n    \u0022JournalId\u0022 TEXT NOT NULL,\n    \u0022NextUsn\u0022 INTEGER NOT NULL,\n    \u0022ScanId\u0022 INTEGER NOT NULL,\n    CONSTRAINT \u0022FK_ScanCheckpoint_StorageRoot_StorageRootId\u0022 FOREIGN KEY (\u0022StorageRootId\u0022) REFERENCES \u0022StorageRoot\u0022 (\u0022Id\u0022) ON DELETE CASCADE\n);\n"
+      ]
+    },
+    {
+      "Id": "20261003132247_RecordScanDiagnostics",
+      "ProductVersion": "10.0.12",
+      "Commands": [
+        "ALTER TABLE \u0022Scan\u0022 ADD \u0022ErrorCount\u0022 INTEGER NULL;\n",
+        "ALTER TABLE \u0022Scan\u0022 ADD \u0022FallbackReason\u0022 TEXT NULL;\n",
+        "ALTER TABLE \u0022Scan\u0022 ADD \u0022Mode\u0022 TEXT NULL;\n",
+        "ALTER TABLE \u0022Scan\u0022 ADD \u0022ScannedCount\u0022 INTEGER NULL;\n",
+        "CREATE TABLE \u0022ScanDiagnostic\u0022 (\n    \u0022Id\u0022 INTEGER NOT NULL CONSTRAINT \u0022PK_ScanDiagnostic\u0022 PRIMARY KEY AUTOINCREMENT,\n    \u0022ScanId\u0022 INTEGER NOT NULL,\n    \u0022Path\u0022 TEXT NOT NULL,\n    \u0022Message\u0022 TEXT NOT NULL,\n    \u0022RecordedUtc\u0022 TEXT NOT NULL,\n    CONSTRAINT \u0022FK_ScanDiagnostic_Scan_ScanId\u0022 FOREIGN KEY (\u0022ScanId\u0022) REFERENCES \u0022Scan\u0022 (\u0022Id\u0022) ON DELETE CASCADE\n);\n",
+        "CREATE INDEX \u0022IX_ScanDiagnostic_ScanId\u0022 ON \u0022ScanDiagnostic\u0022 (\u0022ScanId\u0022);\n"
+      ]
+    },
+    {
+      "Id": "20261003182818_StoreRootScanPolicies",
+      "ProductVersion": "10.0.12",
+      "Commands": [
+        "CREATE TABLE \u0022RootScanPolicy\u0022 (\n    \u0022StorageRootId\u0022 TEXT NOT NULL CONSTRAINT \u0022PK_RootScanPolicy\u0022 PRIMARY KEY,\n    \u0022ExcludedPathRegexesJson\u0022 TEXT NOT NULL,\n    CONSTRAINT \u0022FK_RootScanPolicy_StorageRoot_StorageRootId\u0022 FOREIGN KEY (\u0022StorageRootId\u0022) REFERENCES \u0022StorageRoot\u0022 (\u0022Id\u0022) ON DELETE CASCADE\n);\n"
+      ]
+    }
+  ]
+}
