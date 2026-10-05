@@ -1,0 +1,43 @@
+Execution platform: armv7l, pages 32768
+initialized /tmp/bn-execution/state/new.db
+PASS: AOT database creation and schema helper
+Plan main: COPY 2  KEEP 1  MKDIR 1  MOVE 1  SKIP_LINK 1  TRASH 2  VERIFY 1  estBytes=34
+Execute 9 operations (34 bytes to copy)? [y/N] Aborted (nothing was modified). Use --yes to approve non-interactively.
+PASS: confirmation decline preserves files
+Plan main: COPY 2  KEEP 1  MKDIR 1  MOVE 1  SKIP_LINK 1  TRASH 2  VERIFY 1  estBytes=34
+Execute 9 operations (34 bytes to copy)? [y/N] [2026-10-05T19:00:13.9566726Z] INFO [1/9] MKDIR target:album {"opId":1,"level":"INFO"}
+[2026-10-05T19:00:13.9808581Z] INFO [2/9] MOVE ok target:old/video.mp4 -> target:album/video-from-vienna-č.mp4 size=18 hash=e0fe1d187e12118ad1d9fbdb67b1a8458fc883007de202f65b0c48ad32c6866d {"opId":2,"level":"INFO"}
+[2026-10-05T19:00:14.0026998Z] INFO [3/9] COPY ok target:duplicate.zip -> target:album/gallery-us-in-vienna.zip size=20 hash=bb64eed5fc7026bf35e9097a27e480f5b8b34d20c4ce59369a348927dc988fb0 {"opId":3,"level":"INFO"}
+[2026-10-05T19:00:14.0158733Z] INFO [4/9] COPY ok source:remote.zip -> target:album/from-source.zip size=14 hash=202f1a225007891414813d86b2fda1260c5e6aa2a35e7aac18484c9dc5072200 {"opId":4,"level":"INFO"}
+[2026-10-05T19:00:14.0282232Z] INFO [5/9] KEEP ok : -> target:keep.txt size=5 hash=f660a7996deacfbc7560e4240054a8ad82eb02fe25a95064257e07084bcacb85 {"opId":5,"level":"INFO"}
+[2026-10-05T19:00:14.0407077Z] INFO [6/9] VERIFY ok : -> target:album/video-from-vienna-č.mp4 size=18 hash=e0fe1d187e12118ad1d9fbdb67b1a8458fc883007de202f65b0c48ad32c6866d {"opId":6,"level":"INFO"}
+[2026-10-05T19:00:14.0646075Z] INFO [7/9] TRASH ok target:duplicate.zip -> : size=20 hash=bb64eed5fc7026bf35e9097a27e480f5b8b34d20c4ce59369a348927dc988fb0 {"opId":7,"level":"INFO"}
+[2026-10-05T19:00:14.0983100Z] INFO [8/9] TRASH ok target:indexed-trash.zip -> : size=17 hash=cb169173e1aa20c23aeb729e010445eb1216be6053f50580472b61254f3b33be {"opId":8,"level":"INFO"}
+[2026-10-05T19:00:14.1002119Z] INFO SKIPPED: PC excluded link {"opId":9,"level":"INFO"}
+execute main: completed=8 skipped=1 failed=0 conflicts=0
+[2026-10-05T19:00:14.2578030Z] INFO SKIPPED: PC excluded link {"opId":9,"level":"INFO"}
+execute main: completed=8 skipped=1 failed=0 conflicts=0
+[2026-10-05T19:00:14.4058976Z] ERROR Plan 'main' is bound to different execution roots. Import the original plan JSON into a fresh database to execute on another root.
+PASS: moves, copies, verification, safe trash, reuse and root binding
+[2026-10-05T19:00:14.5592603Z] INFO [1/2] CONFLICT destination exists with different content: /tmp/bn-execution/target/conflict-dest.txt (refusing overwrite, Invariant 6) {"opId":10,"level":"WARN"}
+execute conflict: completed=0 skipped=0 failed=0 conflicts=1
+[2026-10-05T19:00:14.7245631Z] INFO [1/1] CONFLICT source content changed (hash mismatch): /tmp/bn-execution/target/hash-source.txt {"opId":12,"level":"WARN"}
+execute hash-conflict: completed=0 skipped=0 failed=0 conflicts=1
+[2026-10-05T19:00:14.8873035Z] INFO [1/1] CONFLICT refusing trash: no surviving verified copy of content: /tmp/bn-execution/target/unsafe-trash.zip {"opId":13,"level":"WARN"}
+execute unsafe-trash: completed=0 skipped=0 failed=0 conflicts=1
+[2026-10-05T19:00:15.0398007Z] INFO [1/1] Could not find a part of the path '/tmp/bn-execution/target/blocker/child'. {"opId":14,"level":"ERROR"}
+execute failure: completed=0 skipped=0 failed=1 conflicts=0
+[2026-10-05T19:00:15.1989759Z] INFO SKIPPED: Path '/tmp/bn-execution/target/link.txt' is excluded because '/tmp/bn-execution/target/link.txt' is a link or reparse point. {"opId":15,"level":"INFO"}
+execute link: completed=0 skipped=1 failed=0 conflicts=0
+PASS: conflicts, stop-on-error, failed operations and link guards
+[2026-10-05T19:00:15.3576863Z] INFO [1/1] CONFLICT source disappeared: /tmp/bn-execution/target/recovery-source.mp4 {"opId":16,"level":"WARN"}
+execute recovery: completed=0 skipped=0 failed=0 conflicts=1
+[2026-10-05T19:00:15.5198861Z] INFO [1/1] MOVE ok target:recovery-source.mp4 -> target:recovery-dest.mp4 size=19 hash=593095551935a1e3c2ca362d45191e9425cd6adc39a354bb16dca539b8c61d2d {"opId":16,"level":"INFO"}
+execute recovery: completed=1 skipped=0 failed=0 conflicts=0
+PASS: recover move that landed before completion was journaled
+exported inventory snapshot: /tmp/bn-execution/state/portable.db
+EXECUTION_BASE64_BEGIN
+[portable execution database saved locally]
+EXECUTION_BASE64_END
+RESULT: execution acceptance passed
+Database schema is current.

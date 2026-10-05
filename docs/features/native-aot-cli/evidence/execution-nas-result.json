@@ -1,0 +1,138 @@
+{
+  "baseImage": "backup-normalizer:inventory-aot-runtime-20261005-185747",
+  "files": {
+    "BackupNormalizer": {
+      "sha256": "3c4d7079c0dbea7f48a69a4e04ec7028d11369b8d85c6fab7ba97ba552a1ddd0",
+      "size": 87490052,
+      "loadAlignment": 65536
+    },
+    "BackupNormalizer.Migrations": {
+      "sha256": "bdd9c752338ea1f083af4b811f0c80d7bfda1ae5bce2f7cb13562ad018bc72af",
+      "size": 10390956,
+      "loadAlignment": 65536
+    },
+    "libe_sqlite3.so": {
+      "sha256": "7fec7057d16e8b5ae54fed0c42a0e6b85e40df0d57092ef20cd647a4e1c1e0ed",
+      "size": 1322584,
+      "loadAlignment": 65536
+    },
+    "qnap-check.sh": {
+      "sha256": "728f7c8efce9a688369beba06cb4cc93fea11eb528e585a75bf1ae93fdc06165",
+      "size": 1174
+    },
+    "qnap-inventory.sh": {
+      "sha256": "3781d3075b66fb0a99cf910e80f5874fca827911ae66787a9b4f63de961945f7",
+      "size": 866
+    },
+    "inventory-acceptance.sh": {
+      "sha256": "270cd530c7928b560879996e36d112ad93aefe6578a177d962519349a5e5381d",
+      "size": 2634
+    },
+    "legacy.db": {
+      "sha256": "d5ea15e747453a477d88e90e5dd333a56dbb68023896a31d2696ec62101f4c69",
+      "size": 94208
+    },
+    "execution-acceptance.sh": {
+      "sha256": "6b8b6722c83d59c98fa0cbc03d265f210377fbc7a462ce5a8a3c377ce8564933",
+      "size": 3445
+    },
+    "execution-fixture/plans.db": {
+      "sha256": "a65e993e0e47040faba778df884cc1efaebf76a87773bea238a332ceced891df",
+      "size": 118784
+    },
+    "execution-fixture/manifest.json": {
+      "sha256": "54c7725f21997f6ded0644d85fe68345abfbb29a314b61f17f2b870ffee4cc5c",
+      "size": 1516
+    },
+    "execution-fixture/target/after-conflict.txt": {
+      "sha256": "1b8795718298d7685ebdd2a5f3a5e633e14e9b6effaf43f8c19bc6cd6c403ab9",
+      "size": 15
+    },
+    "execution-fixture/target/blocker": {
+      "sha256": "177507a4ee8737f0930661b3261e9e50edcec96d5cca59b7a4ef3b260936ce09",
+      "size": 13
+    },
+    "execution-fixture/target/conflict-dest.txt": {
+      "sha256": "10f0bc8d9c3fb4d49a55e289239694b7588d4cd9a285a7b2751d361100099aeb",
+      "size": 17
+    },
+    "execution-fixture/target/conflict-source.txt": {
+      "sha256": "1c3ef9a7c817b4642bcb3cb1456fbce92a6f992df2e1d6ad9d8a2dfb4fdf42f6",
+      "size": 12
+    },
+    "execution-fixture/target/duplicate.zip": {
+      "sha256": "bb64eed5fc7026bf35e9097a27e480f5b8b34d20c4ce59369a348927dc988fb0",
+      "size": 20
+    },
+    "execution-fixture/target/hash-source.txt": {
+      "sha256": "d121be3103007b41edf96f8262925f8c7d61894afe9a041843b631f69445bc57",
+      "size": 8
+    },
+    "execution-fixture/target/indexed-survivor.zip": {
+      "sha256": "cb169173e1aa20c23aeb729e010445eb1216be6053f50580472b61254f3b33be",
+      "size": 17
+    },
+    "execution-fixture/target/indexed-trash.zip": {
+      "sha256": "cb169173e1aa20c23aeb729e010445eb1216be6053f50580472b61254f3b33be",
+      "size": 17
+    },
+    "execution-fixture/target/keep.txt": {
+      "sha256": "f660a7996deacfbc7560e4240054a8ad82eb02fe25a95064257e07084bcacb85",
+      "size": 5
+    },
+    "execution-fixture/target/link-source.txt": {
+      "sha256": "4a8af676bd49bbb11a1f6ab480aab0cb3ecc601a6ea0198b63b377b18df402ad",
+      "size": 15
+    },
+    "execution-fixture/target/unsafe-trash.zip": {
+      "sha256": "accbdfde990f0a64961c36d1237fd0e9997778783ba320de42ffe605b2891351",
+      "size": 10
+    },
+    "execution-fixture/target/old/video.mp4": {
+      "sha256": "e0fe1d187e12118ad1d9fbdb67b1a8458fc883007de202f65b0c48ad32c6866d",
+      "size": 18
+    },
+    "execution-fixture/source/recovery.bin": {
+      "sha256": "593095551935a1e3c2ca362d45191e9425cd6adc39a354bb16dca539b8c61d2d",
+      "size": 19
+    },
+    "execution-fixture/source/remote.zip": {
+      "sha256": "202f1a225007891414813d86b2fda1260c5e6aa2a35e7aac18484c9dc5072200",
+      "size": 14
+    }
+  },
+  "image": "backup-normalizer:inventory-aot-20261005-185951",
+  "container": "backup-normalizer-inventory-aot-20261005-185951-acceptance",
+  "exitCode": 0,
+  "oomKilled": false,
+  "mounts": [],
+  "exportVerified": true,
+  "stdout": "Architecture: armv7l\nPage size: 32768\nBackupNormalizer 0.2.0+4e31e116d3ee.unverified (Release; linux-musl-arm; source unknown)\ndb-test: PASS (create/insert/read/commit/rollback ok)\nPASS: database creation, writes and transactions\nroot 'nas' -> /tmp/bn-inventory/data\nroot 'nas' -> /tmp/bn-inventory/data\nnas\tupdated\t/tmp/bn-inventory/data\twritable=True\nPASS: root insert, update and list\nscan nas: 6 entries, 0 errors (complete)\n{\n  \"scan\": {\n    \"scan\": {\n      \"id\": 1,\n      \"storageRootId\": \"nas\",\n      \"startedUtc\": \"2026-10-05T19:00:06.1002547Z\",\n      \"completedUtc\": \"2026-10-05T19:00:06.1542288Z\",\n      \"status\": \"Completed\"\n    },\n    \"mode\": \"Recursive\",\n    \"scannedCount\": 6,\n    \"errorCount\": 0,\n    \"fallbackReason\": null\n  },\n  \"errors\": []\n}\nPASS: scan, exclusion, link metadata and diagnostics\nhash --needed: 5 hashed, 1 reused, 0 unstable\nhash --needed: 0 hashed, 6 reused, 0 unstable\n[\n  {\n    \"root\": {\n      \"id\": \"nas\",\n      \"name\": \"updated\",\n      \"path\": \"/tmp/bn-inventory/data\",\n      \"writable\": true,\n      \"fileSystemId\": \"/|overlay|/\",\n      \"caseSensitivity\": \"sensitive\",\n      \"createdUtc\": \"2026-10-05T19:00:05.0948151Z\"\n    },\n    \"latestScan\": {\n      \"scan\": {\n        \"id\": 1,\n        \"storageRootId\": \"nas\",\n        \"startedUtc\": \"2026-10-05T19:00:06.1002547Z\",\n        \"completedUtc\": \"2026-10-05T19:00:06.1542288Z\",\n        \"status\": \"Completed\"\n      },\n      \"mode\": \"Recursive\",\n      \"scannedCount\": 6,\n      \"errorCount\": 0,\n      \"fallbackReason\": null\n    },\n    \"lastSuccessfulScan\": {\n      \"id\": 1,\n      \"storageRootId\": \"nas\",\n      \"startedUtc\": \"2026-10-05T19:00:06.1002547Z\",\n      \"completedUtc\": \"2026-10-05T19:00:06.1542288Z\",\n      \"status\": \"Completed\"\n    },\n    \"regularFiles\": 5,\n    \"links\": 1,\n    \"missingEntries\": 0,\n    \"entryErrors\": 0,\n    \"usableHashes\": 5,\n    \"missingHashes\": 0,\n    \"planningReady\": true,\n    \"blockingReason\": null,\n    \"checkpoint\": null,\n    \"errors\": [],\n    \"excludedPathRegexes\": [\n      \"^cache/\"\n    ]\n  }\n]\nPASS: hashes, cache reuse and inventory status\nscan nas: 5 entries, 0 errors (complete)\nhash --needed: 2 hashed, 5 reused, 0 unstable\n[\n  {\n    \"root\": {\n      \"id\": \"nas\",\n      \"name\": \"updated\",\n      \"path\": \"/tmp/bn-inventory/data\",\n      \"writable\": true,\n      \"fileSystemId\": \"/|overlay|/\",\n      \"caseSensitivity\": \"sensitive\",\n      \"createdUtc\": \"2026-10-05T19:00:05.0948151Z\"\n    },\n    \"latestScan\": {\n      \"scan\": {\n        \"id\": 2,\n        \"storageRootId\": \"nas\",\n        \"startedUtc\": \"2026-10-05T19:00:07.6916726Z\",\n        \"completedUtc\": \"2026-10-05T19:00:07.7754099Z\",\n        \"status\": \"Completed\"\n      },\n      \"mode\": \"Recursive\",\n      \"scannedCount\": 5,\n      \"errorCount\": 0,\n      \"fallbackReason\": null\n    },\n    \"lastSuccessfulScan\": {\n      \"id\": 2,\n      \"storageRootId\": \"nas\",\n      \"startedUtc\": \"2026-10-05T19:00:07.6916726Z\",\n      \"completedUtc\": \"2026-10-05T19:00:07.7754099Z\",\n      \"status\": \"Completed\"\n    },\n    \"regularFiles\": 4,\n    \"links\": 1,\n    \"missingEntries\": 2,\n    \"entryErrors\": 0,\n    \"usableHashes\": 4,\n    \"missingHashes\": 0,\n    \"planningReady\": true,\n    \"blockingReason\": null,\n    \"checkpoint\": null,\n    \"errors\": [],\n    \"excludedPathRegexes\": [\n      \"^cache/\"\n    ]\n  }\n]\n{\n  \"source\": \"/tmp/bn-inventory/data/inventory.db\",\n  \"destination\": \"/tmp/bn-inventory/export.db\"\n}\n[\n  {\n    \"root\": {\n      \"id\": \"nas\",\n      \"name\": \"updated\",\n      \"path\": \"/tmp/bn-inventory/data\",\n      \"writable\": true,\n      \"fileSystemId\": \"/|overlay|/\",\n      \"caseSensitivity\": \"sensitive\",\n      \"createdUtc\": \"2026-10-05T19:00:05.0948151Z\"\n    },\n    \"latestScan\": {\n      \"scan\": {\n        \"id\": 2,\n        \"storageRootId\": \"nas\",\n        \"startedUtc\": \"2026-10-05T19:00:07.6916726Z\",\n        \"completedUtc\": \"2026-10-05T19:00:07.7754099Z\",\n        \"status\": \"Completed\"\n      },\n      \"mode\": \"Recursive\",\n      \"scannedCount\": 5,\n      \"errorCount\": 0,\n      \"fallbackReason\": null\n    },\n    \"lastSuccessfulScan\": {\n      \"id\": 2,\n      \"storageRootId\": \"nas\",\n      \"startedUtc\": \"2026-10-05T19:00:07.6916726Z\",\n      \"completedUtc\": \"2026-10-05T19:00:07.7754099Z\",\n      \"status\": \"Completed\"\n    },\n    \"regularFiles\": 4,\n    \"links\": 1,\n    \"missingEntries\": 2,\n    \"entryErrors\": 0,\n    \"usableHashes\": 4,\n    \"missingHashes\": 0,\n    \"planningReady\": true,\n    \"blockingReason\": null,\n    \"checkpoint\": null,\n    \"errors\": [],\n    \"excludedPathRegexes\": [\n      \"^cache/\"\n    ]\n  }\n]\nPASS: rescan changes, stored exclusions and portable export\nseed\tseed\t/fixture/seed\twritable=True\nroot 'added' -> /tmp/bn-inventory/data\nadded\tadded\t/tmp/bn-inventory/data\twritable=True\nseed\tseed\t/fixture/seed\twritable=True\nPASS: legacy read-only access and backed-up schema upgrade\nPASS: mismatched migration package rejected before writes\nPASS: unqualified commands rejected before database writes\nEXPORT_BASE64_BEGIN\n[portable database saved locally]\nEXPORT_BASE64_END\nRESULT: inventory acceptance passed\n",
+  "stderr": "Database schema is current.\nDatabase schema is current.\nDatabase upgraded. Backup: /tmp/bn-inventory/state/legacy.db.before-migration-21970cc1883b4bacb419ea3a8f344b58.db\nMigration helper and application packages do not match.\nerror: 'plan' is not available in the NAS AOT build. Prepare plans and comparisons on the PC.\n",
+  "execution": {
+    "container": "backup-normalizer-inventory-aot-20261005-185951-execution",
+    "exitCode": 0,
+    "oomKilled": false,
+    "mounts": [],
+    "verification": {
+      "plansChecked": 7,
+      "operationsChecked": 16,
+      "journalRows": 17,
+      "integrity": "ok",
+      "foreignKeyViolations": 0
+    },
+    "stdout": "Execution platform: armv7l, pages 32768\ninitialized /tmp/bn-execution/state/new.db\nPASS: AOT database creation and schema helper\nPlan main: COPY 2  KEEP 1  MKDIR 1  MOVE 1  SKIP_LINK 1  TRASH 2  VERIFY 1  estBytes=34\nExecute 9 operations (34 bytes to copy)? [y/N] Aborted (nothing was modified). Use --yes to approve non-interactively.\nPASS: confirmation decline preserves files\nPlan main: COPY 2  KEEP 1  MKDIR 1  MOVE 1  SKIP_LINK 1  TRASH 2  VERIFY 1  estBytes=34\nExecute 9 operations (34 bytes to copy)? [y/N] [2026-10-05T19:00:13.9566726Z] INFO [1/9] MKDIR target:album {\"opId\":1,\"level\":\"INFO\"}\n[2026-10-05T19:00:13.9808581Z] INFO [2/9] MOVE ok target:old/video.mp4 -> target:album/video-from-vienna-\u010d.mp4 size=18 hash=e0fe1d187e12118ad1d9fbdb67b1a8458fc883007de202f65b0c48ad32c6866d {\"opId\":2,\"level\":\"INFO\"}\n[2026-10-05T19:00:14.0026998Z] INFO [3/9] COPY ok target:duplicate.zip -> target:album/gallery-us-in-vienna.zip size=20 hash=bb64eed5fc7026bf35e9097a27e480f5b8b34d20c4ce59369a348927dc988fb0 {\"opId\":3,\"level\":\"INFO\"}\n[2026-10-05T19:00:14.0158733Z] INFO [4/9] COPY ok source:remote.zip -> target:album/from-source.zip size=14 hash=202f1a225007891414813d86b2fda1260c5e6aa2a35e7aac18484c9dc5072200 {\"opId\":4,\"level\":\"INFO\"}\n[2026-10-05T19:00:14.0282232Z] INFO [5/9] KEEP ok : -> target:keep.txt size=5 hash=f660a7996deacfbc7560e4240054a8ad82eb02fe25a95064257e07084bcacb85 {\"opId\":5,\"level\":\"INFO\"}\n[2026-10-05T19:00:14.0407077Z] INFO [6/9] VERIFY ok : -> target:album/video-from-vienna-\u010d.mp4 size=18 hash=e0fe1d187e12118ad1d9fbdb67b1a8458fc883007de202f65b0c48ad32c6866d {\"opId\":6,\"level\":\"INFO\"}\n[2026-10-05T19:00:14.0646075Z] INFO [7/9] TRASH ok target:duplicate.zip -> : size=20 hash=bb64eed5fc7026bf35e9097a27e480f5b8b34d20c4ce59369a348927dc988fb0 {\"opId\":7,\"level\":\"INFO\"}\n[2026-10-05T19:00:14.0983100Z] INFO [8/9] TRASH ok target:indexed-trash.zip -> : size=17 hash=cb169173e1aa20c23aeb729e010445eb1216be6053f50580472b61254f3b33be {\"opId\":8,\"level\":\"INFO\"}\n[2026-10-05T19:00:14.1002119Z] INFO SKIPPED: PC excluded link {\"opId\":9,\"level\":\"INFO\"}\nexecute main: completed=8 skipped=1 failed=0 conflicts=0\n[2026-10-05T19:00:14.2578030Z] INFO SKIPPED: PC excluded link {\"opId\":9,\"level\":\"INFO\"}\nexecute main: completed=8 skipped=1 failed=0 conflicts=0\n[2026-10-05T19:00:14.4058976Z] ERROR Plan 'main' is bound to different execution roots. Import the original plan JSON into a fresh database to execute on another root.\nPASS: moves, copies, verification, safe trash, reuse and root binding\n[2026-10-05T19:00:14.5592603Z] INFO [1/2] CONFLICT destination exists with different content: /tmp/bn-execution/target/conflict-dest.txt (refusing overwrite, Invariant 6) {\"opId\":10,\"level\":\"WARN\"}\nexecute conflict: completed=0 skipped=0 failed=0 conflicts=1\n[2026-10-05T19:00:14.7245631Z] INFO [1/1] CONFLICT source content changed (hash mismatch): /tmp/bn-execution/target/hash-source.txt {\"opId\":12,\"level\":\"WARN\"}\nexecute hash-conflict: completed=0 skipped=0 failed=0 conflicts=1\n[2026-10-05T19:00:14.8873035Z] INFO [1/1] CONFLICT refusing trash: no surviving verified copy of content: /tmp/bn-execution/target/unsafe-trash.zip {\"opId\":13,\"level\":\"WARN\"}\nexecute unsafe-trash: completed=0 skipped=0 failed=0 conflicts=1\n[2026-10-05T19:00:15.0398007Z] INFO [1/1] Could not find a part of the path '/tmp/bn-execution/target/blocker/child'. {\"opId\":14,\"level\":\"ERROR\"}\nexecute failure: completed=0 skipped=0 failed=1 conflicts=0\n[2026-10-05T19:00:15.1989759Z] INFO SKIPPED: Path '/tmp/bn-execution/target/link.txt' is excluded because '/tmp/bn-execution/target/link.txt' is a link or reparse point. {\"opId\":15,\"level\":\"INFO\"}\nexecute link: completed=0 skipped=1 failed=0 conflicts=0\nPASS: conflicts, stop-on-error, failed operations and link guards\n[2026-10-05T19:00:15.3576863Z] INFO [1/1] CONFLICT source disappeared: /tmp/bn-execution/target/recovery-source.mp4 {\"opId\":16,\"level\":\"WARN\"}\nexecute recovery: completed=0 skipped=0 failed=0 conflicts=1\n[2026-10-05T19:00:15.5198861Z] INFO [1/1] MOVE ok target:recovery-source.mp4 -> target:recovery-dest.mp4 size=19 hash=593095551935a1e3c2ca362d45191e9425cd6adc39a354bb16dca539b8c61d2d {\"opId\":16,\"level\":\"INFO\"}\nexecute recovery: completed=1 skipped=0 failed=0 conflicts=0\nPASS: recover move that landed before completion was journaled\nexported inventory snapshot: /tmp/bn-execution/state/portable.db\nEXECUTION_BASE64_BEGIN\n[portable execution database saved locally]\nEXECUTION_BASE64_END\nRESULT: execution acceptance passed\n",
+    "stderr": "Database schema is current.\n"
+  },
+  "hashesMatch": true,
+  "originalRunningServices": [
+    "stash",
+    "stash_atk",
+    "qbitorrent-qbittorrent-1",
+    "gluetun",
+    "c345a9f8d683_calibre-calibre-web-1",
+    "portainer",
+    "jdownloader-1"
+  ],
+  "allOriginalServicesStillRunning": true
+}

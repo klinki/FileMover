@@ -1,0 +1,38 @@
+{"stream":"Step 1/9 : FROM alpine:3.17"}
+{"stream":"\n"}
+{"stream":" ---\u003e 9505e3d1113c\n"}
+{"stream":"Step 2/9 : RUN apk add --no-cache libgcc libstdc++ icu-libs musl-utils"}
+{"stream":"\n"}
+{"stream":" ---\u003e Using cache\n"}
+{"stream":" ---\u003e 517ecd567573\n"}
+{"stream":"Step 3/9 : WORKDIR /app"}
+{"stream":"\n"}
+{"stream":" ---\u003e Using cache\n"}
+{"stream":" ---\u003e e436a23c1234\n"}
+{"stream":"Step 4/9 : COPY BackupNormalizer BackupNormalizer.Migrations libe_sqlite3.so ./"}
+{"stream":"\n"}
+{"stream":" ---\u003e d8c458560e70\n"}
+{"stream":"Step 5/9 : COPY qnap-check.sh ."}
+{"stream":"\n"}
+{"stream":" ---\u003e 6bdfb9447971\n"}
+{"stream":"Step 6/9 : COPY qnap-inventory.sh ."}
+{"stream":"\n"}
+{"stream":" ---\u003e ac38c972dec0\n"}
+{"stream":"Step 7/9 : RUN chmod +x BackupNormalizer BackupNormalizer.Migrations qnap-check.sh qnap-inventory.sh"}
+{"stream":"\n"}
+{"stream":" ---\u003e Running in 490c04c91c9e\n"}
+{"stream":" ---\u003e Removed intermediate container 490c04c91c9e\n"}
+{"stream":" ---\u003e 2c73429f902c\n"}
+{"stream":"Step 8/9 : ENTRYPOINT [\"./BackupNormalizer\"]"}
+{"stream":"\n"}
+{"stream":" ---\u003e Running in 887f1a879aeb\n"}
+{"stream":" ---\u003e Removed intermediate container 887f1a879aeb\n"}
+{"stream":" ---\u003e 3314653e2f79\n"}
+{"stream":"Step 9/9 : CMD [\"--help\"]"}
+{"stream":"\n"}
+{"stream":" ---\u003e Running in 7296d44057fd\n"}
+{"stream":" ---\u003e Removed intermediate container 7296d44057fd\n"}
+{"stream":" ---\u003e 2de405a696a6\n"}
+{"aux":{"ID":"sha256:2de405a696a612bbc10686b2a399bbe11a76c15899e7d51ef3e12706bff4dc4c"}}
+{"stream":"Successfully built 2de405a696a6\n"}
+{"stream":"Successfully tagged backup-normalizer:inventory-aot-runtime-20261005-185747\n"}

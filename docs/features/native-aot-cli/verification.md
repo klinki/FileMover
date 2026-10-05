@@ -2,7 +2,7 @@
 
 ## State
 
-Application inventory acceptance passed, 2026-10-05. The actual AOT CLI and separate migration helper run on the 32 KiB-page NAS using synthetic data. Earlier sections preserve the first EF trial; the application results below record the subsequent conversion. Comparison and replay remain outside the qualified NAS command set.
+Application inventory and execution acceptance passed, 2026-10-05. The actual AOT CLI and separate migration helper run on the 32 KiB-page NAS using synthetic data. Earlier sections preserve the first EF trial and inventory milestone; subsequent sections record execution qualification. Comparison, plan preparation, standalone verification, and purge remain PC workflows.
 
 ## Implemented trial
 
@@ -98,4 +98,22 @@ The packaged `qnap-inventory.sh` also completed independently against the six in
 
 ## Remaining release work
 
-Provide clean-machine toolchain setup, verify archive import through Container Station, review experimental warnings and binary size, and qualify cancellation/restart and additional parameter combinations on the NAS. Existing NAS inventories and shares have not been tested or upgraded. Comparison, duplicates, planning, and replay remain a separate milestone. Verification used an uncommitted source snapshot; no image was pushed to a registry.
+Provide clean-machine toolchain setup, verify archive import through Container Station, review experimental warnings and binary size, and qualify process-kill/cancellation recovery and additional parameter combinations on the NAS. Existing NAS inventories and shares have not been tested or upgraded. Comparison, duplicates, plan preparation, standalone verification, and purge remain PC workflows. Verification used an uncommitted source snapshot; no image was pushed to a registry.
+
+## NAS execution qualification
+
+The user requested execution alongside database creation and schema migration execution, with preparation on the PC. The AOT CLI now exposes the existing shared executor. [PC fixture preparation](../../../deploy/prepare-execution-fixture.py) uses the ordinary application's root registration, scan/hash, plan import, and portable export commands. The NAS receives a ready plan database and uses execution path overrides. Plan creation/import remains disabled on the NAS.
+
+The first generated-query run failed with `unbound variable: x` before file operations. Plan listing combined its optional problem-status filter in one predicate. [Complete query branches](../../../src/BackupNormalizer.Core/Database.cs) fixed the binding error while retaining SQL-side filtering and legacy projections. A subsequent harness run caught a test expectation mismatch: existing root-binding failures return exit `2`, not `1`. The application behavior was retained and the expectation corrected. Failed logs remain under the local execution build outputs.
+
+Verification results:
+
+- Windows execution, plan, trash-survivor, and migration compatibility: 67 passed, 2 platform-specific link cases skipped. The source snapshot contains the final CLI and query changes. [Test log](evidence/execution-windows-tests.log).
+- [Generated managed-query acceptance](evidence/execution-precompiled-managed.log) and independent SQLite checks passed seven plans and sixteen operations before native publication.
+- [NAS result](evidence/execution-nas-result.json): inventory and execution jobs both exit `0`, ARMv7, 32,768-byte pages. The [execution log](evidence/execution-nas.log) covers confirmation decline/acceptance, MKDIR, Unicode MOVE, target-local and external COPY, KEEP, VERIFY, two recoverable TRASH operations, staged and runtime link skipping, completed-operation reuse, conflicting roots/destinations/content, stop-on-error, a filesystem failure, and recovery with a verified destination present and source absent.
+- Safe trash checks exercised both a copy completed by the plan and a separately indexed surviving file. Rejected trash retained the only copy. Shell comparisons verified resulting file bytes and preserved conflict sources/destinations.
+- Independent SQLite checks verified sixteen operation states, plan states, bound roots, timestamps, errors, skip reasons, seventeen journal rows, six migration rows, integrity, and foreign keys. The exported execution database opened through the Windows CLI: [plan output](evidence/execution-windows-open.log).
+- Database creation through `init`, the legacy schema upgrade with backup, package mismatch rejection, and unsupported plan-command rejection passed. The inventory regression export remained valid.
+- [Source verification](evidence/execution-source-verification.json) confirms all sixty maintained source files match the tested snapshot. Transferred file hashes and 65,536-byte native load alignment passed; both jobs had no share mounts, no OOM kill, and all seven original services remained running.
+
+The clean runtime image is `backup-normalizer:inventory-aot-runtime-20261005-185747`, ID `sha256:2de405a696a612bbc10686b2a399bbe11a76c15899e7d51ef3e12706bff4dc4c`. Docker reports ARM and 210,436,728 bytes uncompressed. [Build result](evidence/execution-runtime-image-result.json), [build log](evidence/execution-runtime-image-build.log), and [native help](evidence/execution-native-help.log) are retained. CoreCLR files are absent. The acceptance fixture image is `backup-normalizer:inventory-aot-20261005-185951`. CLI and migration helper are 87,490,052 and 10,390,956 bytes respectively, with debug symbols retained. Existing EF/provider AOT warnings and the pinned interceptor workaround still need release review.

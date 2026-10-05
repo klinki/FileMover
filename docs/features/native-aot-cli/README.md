@@ -1,8 +1,8 @@
-# Native AOT inventory on QNAP
+# Native AOT inventory and execution on QNAP
 
 The first AOT application build collects inventories using the actual CLI and shared EF Core database code. It targets the ARMv7 QNAP with 32,768-byte pages. The [verification record](verification.md) distinguishes the first EF trial from application acceptance.
 
-Supported commands are `init`, `config`, `root`, `scan`, `hash`, `status`, `db export`, `db-test`, `scan-test`, help, and version. Comparison, planning, and replay remain a later qualification milestone and the AOT CLI rejects those commands before database access. The Windows build retains its complete command set.
+Supported commands are `init`, `config`, `root`, `scan`, `hash`, `status`, `db export`, `execute`, `db-test`, `scan-test`, help, and version. Prepare plans and comparisons on the PC. The AOT CLI rejects plan creation/import, comparison, standalone verification, and purge commands before database access. Execution retains the existing content checks, operation journals, confirmation, resume, stop-on-error, and root binding. The Windows build retains its complete command set.
 
 ## Build the application
 
@@ -37,6 +37,21 @@ python deploy/test-inventory-aot-nas.py publish/inventory-aot-local --host nas -
 
 The [acceptance job](../../../deploy/inventory-aot-acceptance.sh) creates temporary files and databases inside a new container. It tests creation, root updates, exclusions, links, hashing, cache reuse, file changes/moves/removal, diagnostics, export, and a backed-up legacy upgrade. Python independently checks the exported database's schema, file metadata, and SHA256 digests. The runner verifies binary alignment, transferred hashes, and original services. It mounts no existing NAS shares and preserves the image, logs, and stopped containers.
 
+The build also prepares a portable execution fixture through the ordinary application and tests it through generated managed queries before ARM publication. Include it in NAS acceptance with `--execution-fixture publish/inventory-aot-local/execution-fixture`. The [execution acceptance job](../../../deploy/execution-aot-acceptance.sh) checks replayed files, conflicts, recovery, and root binding. [Independent database checks](../../../deploy/verify-execution-database.py) validate operation states, timestamps, errors, skip reasons, and journals.
+
+## Prepare on the PC, execute on the NAS
+
+Import the reviewed plan JSON into a fresh execution database on the PC, then export a standalone copy. Keep an original plan JSON for future execution on a different root:
+
+```powershell
+.\BackupNormalizer.exe plan import plan.json --db execution.db --target-path D:\Original
+.\BackupNormalizer.exe db export --db execution.db --output execution-portable.db
+```
+
+Copy `execution-portable.db` into the NAS state directory as `execution.db`. Run the native application with the NAS target path override and a writable target mount. The [deployment guide](../nas-container/README.md#execute-a-pc-prepared-plan) shows the container command. MOVE operations use target-local paths and need no source share. COPY operations with `Source` scope also need an accessible source mount and `--source-path`.
+
+`--yes` confirms execution non-interactively. `--resume` uses the recorded execution roots, and completed operations remain completed. Conflicts or failed operations return exit code `3`; `--stop-on-error` leaves subsequent operations untouched. A plan already bound to one target cannot run against another target. Import its original JSON into a fresh database on the PC for a separate replay. The AOT schema helper creates/upgrades writable databases before execution; read-only opens do not migrate.
+
 ## Package an inventory job
 
 Start Docker Desktop with Linux containers, then run:
@@ -59,4 +74,4 @@ Alternatively, build directly through the NAS's Docker engine using the existing
 python deploy/build-inventory-image-nas.py publish/inventory-aot-local --host nas
 ```
 
-This streams the same Docker context to the local daemon socket over SSH, avoiding Docker CLI staging in the NAS's small `/tmp`. It records a unique image tag and build log beside the native output. The verified clean image already on the NAS is `backup-normalizer:inventory-aot-runtime-20261005-183056`; its default command displays inventory help. No existing shares have been scanned with it yet.
+This streams the same Docker context to the local daemon socket over SSH, avoiding Docker CLI staging in the NAS's small `/tmp`. It records a unique image tag and build log beside the native output. The verified clean image already on the NAS is `backup-normalizer:inventory-aot-runtime-20261005-185747`; its default command displays inventory/execution help. It passed synthetic inventory and execution acceptance. No existing NAS shares or inventories were modified.

@@ -1,0 +1,42 @@
+COMMAND: root add target /mnt/c/ai-workspace/FileMover/publish/execution-aot-20261005-v2/execution-fixture/target --db /mnt/c/ai-workspace/FileMover/publish/execution-aot-20261005-v2/execution-fixture/pc.db
+root 'target' -> /mnt/c/ai-workspace/FileMover/publish/execution-aot-20261005-v2/execution-fixture/target
+
+
+COMMAND: scan target --db /mnt/c/ai-workspace/FileMover/publish/execution-aot-20261005-v2/execution-fixture/pc.db --mft off --usn off --no-progress
+scan target: 12 entries, 0 errors (complete)
+
+
+COMMAND: hash target --db /mnt/c/ai-workspace/FileMover/publish/execution-aot-20261005-v2/execution-fixture/pc.db --no-progress
+hash target: 12 hashed, 0 skipped, 0 unstable
+
+
+COMMAND: plan import /mnt/c/ai-workspace/FileMover/publish/execution-aot-20261005-v2/execution-fixture/main.json --db /mnt/c/ai-workspace/FileMover/publish/execution-aot-20261005-v2/execution-fixture/pc.db
+imported plan main (9 ops) into /mnt/c/ai-workspace/FileMover/publish/execution-aot-20261005-v2/execution-fixture/pc.db
+
+
+COMMAND: plan import /mnt/c/ai-workspace/FileMover/publish/execution-aot-20261005-v2/execution-fixture/conflict.json --db /mnt/c/ai-workspace/FileMover/publish/execution-aot-20261005-v2/execution-fixture/pc.db
+imported plan conflict (2 ops) into /mnt/c/ai-workspace/FileMover/publish/execution-aot-20261005-v2/execution-fixture/pc.db
+
+
+COMMAND: plan import /mnt/c/ai-workspace/FileMover/publish/execution-aot-20261005-v2/execution-fixture/hash-conflict.json --db /mnt/c/ai-workspace/FileMover/publish/execution-aot-20261005-v2/execution-fixture/pc.db
+imported plan hash-conflict (1 ops) into /mnt/c/ai-workspace/FileMover/publish/execution-aot-20261005-v2/execution-fixture/pc.db
+
+
+COMMAND: plan import /mnt/c/ai-workspace/FileMover/publish/execution-aot-20261005-v2/execution-fixture/unsafe-trash.json --db /mnt/c/ai-workspace/FileMover/publish/execution-aot-20261005-v2/execution-fixture/pc.db
+imported plan unsafe-trash (1 ops) into /mnt/c/ai-workspace/FileMover/publish/execution-aot-20261005-v2/execution-fixture/pc.db
+
+
+COMMAND: plan import /mnt/c/ai-workspace/FileMover/publish/execution-aot-20261005-v2/execution-fixture/failure.json --db /mnt/c/ai-workspace/FileMover/publish/execution-aot-20261005-v2/execution-fixture/pc.db
+imported plan failure (1 ops) into /mnt/c/ai-workspace/FileMover/publish/execution-aot-20261005-v2/execution-fixture/pc.db
+
+
+COMMAND: plan import /mnt/c/ai-workspace/FileMover/publish/execution-aot-20261005-v2/execution-fixture/link.json --db /mnt/c/ai-workspace/FileMover/publish/execution-aot-20261005-v2/execution-fixture/pc.db
+imported plan link (1 ops) into /mnt/c/ai-workspace/FileMover/publish/execution-aot-20261005-v2/execution-fixture/pc.db
+
+
+COMMAND: plan import /mnt/c/ai-workspace/FileMover/publish/execution-aot-20261005-v2/execution-fixture/recovery.json --db /mnt/c/ai-workspace/FileMover/publish/execution-aot-20261005-v2/execution-fixture/pc.db
+imported plan recovery (1 ops) into /mnt/c/ai-workspace/FileMover/publish/execution-aot-20261005-v2/execution-fixture/pc.db
+
+
+COMMAND: db export --db /mnt/c/ai-workspace/FileMover/publish/execution-aot-20261005-v2/execution-fixture/pc.db --output /mnt/c/ai-workspace/FileMover/publish/execution-aot-20261005-v2/execution-fixture/plans.db
+exported inventory snapshot: /mnt/c/ai-workspace/FileMover/publish/execution-aot-20261005-v2/execution-fixture/plans.db

@@ -1,4 +1,4 @@
-# Run an inventory on the QNAP NAS
+# Run inventories and prepared plans on the QNAP NAS
 
 The image targets the repository's QNAP TS-431P3 environment, ARMv7 with a 32 KiB kernel page size. The job uses the NAS's Docker engine through Container Station. It scans and hashes a mounted NAS directory and persists its SQLite inventory in a separate share. The desktop planner stays on the PC.
 
@@ -6,7 +6,7 @@ Docker containers share the host kernel. The actual NAS must pass the bundled co
 
 ## Build on the PC
 
-The QNAP image now packages the Native AOT inventory CLI and its matching migration helper. Follow the [AOT build instructions](../native-aot-cli/README.md) to prepare the tested WSL SDK and ARM toolchain, then start Docker Desktop with Linux containers and run:
+The QNAP image packages the Native AOT inventory/execution CLI and its matching migration helper. Follow the [AOT build instructions](../native-aot-cli/README.md) to prepare the tested WSL SDK and ARM toolchain, then start Docker Desktop with Linux containers and run:
 
 ```powershell
 .\deploy\build-qnap.ps1
@@ -80,6 +80,22 @@ docker run --rm -t --platform linux/arm/v7 \
 After the small-folder job succeeds on the NAS, select the intended share for `/data`. Use a different state directory for that full inventory, so the test database remains separate.
 
 Rerunning the job rescans the same root and reuses valid hashes. A root path inside the container must always represent the same NAS directory for a given state directory. If you change the host directory bound to `/data`, choose a fresh state directory as well. This avoids treating files from a different physical directory as an existing cache.
+
+## Execute a PC-prepared plan
+
+Create/import the plan on the PC and export its database as described in the [AOT execution guide](../native-aot-cli/README.md#prepare-on-the-pc-execute-on-the-nas). Copy the portable database into a separate NAS state directory as `execution.db`. Select a test target before using actual data. Execution needs a writable target mount:
+
+```sh
+docker run --platform linux/arm/v7 \
+  --mount type=bind,source=/share/ReplayTest,target=/target \
+  --mount type=bind,source=/share/ExecutionState,target=/state \
+  backup-normalizer:qnap-arm32-aot execute PLAN_ID \
+  --db /state/execution.db --target-path /target --yes --resume --stop-on-error
+```
+
+For external COPY operations, also mount the source read-only and pass `--source-path /source`. Target-local moves and copies need only the target mount. `--yes` supplies non-interactive confirmation for the reviewed plan. Conflicts and errors return a nonzero exit and remain recorded in the execution database. Reuse the same database and mounts to resume. An executed plan cannot be rebound to another target; import the original plan JSON into a fresh execution database on the PC instead.
+
+Export the execution database after the job to inspect its journal on the PC. The NAS build creates/upgrades databases with the matching native migration helper; comparison and plan preparation stay on the PC.
 
 ## Bring the inventory back to the PC
 

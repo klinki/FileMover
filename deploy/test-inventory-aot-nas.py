@@ -4,6 +4,7 @@ import base64
 from datetime import datetime, timezone
 import hashlib
 import io
+import importlib.util
 import json
 from pathlib import Path
 import shlex
@@ -17,6 +18,7 @@ parser.add_argument("output", type=Path)
 parser.add_argument("--host", required=True)
 parser.add_argument("--base-image", default="backup-normalizer:qnap-arm32")
 parser.add_argument("--legacy-fixture", type=Path, required=True)
+parser.add_argument("--execution-fixture", type=Path)
 args = parser.parse_args()
 repo = Path(__file__).resolve().parents[1]
 output = args.output.resolve()
@@ -40,6 +42,15 @@ files = {name: output / "app" / name for name in
 files.update({name: repo / name for name in ("qnap-check.sh", "qnap-inventory.sh")})
 files["inventory-acceptance.sh"] = repo / "deploy/inventory-aot-acceptance.sh"
 files["legacy.db"] = args.legacy_fixture.resolve()
+if args.execution_fixture:
+    fixture = args.execution_fixture.resolve()
+    files["execution-acceptance.sh"] = repo / "deploy/execution-aot-acceptance.sh"
+    for name in ("plans.db", "manifest.json"):
+        files["execution-fixture/" + name] = fixture / name
+    for directory in ("target", "source"):
+        for path in (fixture / directory).rglob("*"):
+            if path.is_file():
+                files["execution-fixture/" + path.relative_to(fixture).as_posix()] = path
 record = {"baseImage": args.base_image, "files": {}}
 for name, path in files.items():
     binary = path.read_bytes()
@@ -116,6 +127,34 @@ if "EXPORT_BASE64_BEGIN\n" in stdout:
 record["stdout"] = stdout
 record["stderr"] = stderr
 (output / "inventory-nas.log").write_text(stdout + stderr, encoding="utf-8")
+if args.execution_fixture and result.returncode == 0:
+    execution_container = prefix + "-execution"
+    execution = docker(["run", "--name", execution_container, "--network", "none", "--read-only",
+                        "--tmpfs", "/tmp:rw,size=256m", "--cap-drop", "ALL", "--security-opt", "no-new-privileges",
+                        "--entrypoint", "/bin/sh", image, "/app/execution-acceptance.sh", "/app/BackupNormalizer",
+                        "/app/execution-fixture", "/tmp/bn-execution", "nas"], check=False)
+    execution_stdout = execution.stdout.decode("utf-8", errors="replace")
+    execution_stderr = execution.stderr.decode("utf-8", errors="replace")
+    state = json.loads(docker(["inspect", execution_container]).stdout)[0]
+    assert not state["Mounts"]
+    replay = {"container": execution_container, "exitCode": execution.returncode,
+              "oomKilled": state["State"]["OOMKilled"], "mounts": state["Mounts"]}
+    if "EXECUTION_BASE64_BEGIN\n" in execution_stdout:
+        encoded = execution_stdout.split("EXECUTION_BASE64_BEGIN\n", 1)[1].split("EXECUTION_BASE64_END", 1)[0]
+        database = output / "execution-export.db"
+        database.write_bytes(base64.b64decode(encoded))
+        execution_stdout = execution_stdout.replace(encoded, "[portable execution database saved locally]\n")
+        spec = importlib.util.spec_from_file_location("execution_database", repo / "deploy/verify-execution-database.py")
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        try:
+            replay["verification"] = module.verify_database(database, "/tmp/bn-execution/target", "/tmp/bn-execution/source")
+        except (AssertionError, sqlite3.Error) as error:
+            # Preserve the exported database and console evidence even when value checks fail.
+            replay["verificationError"] = repr(error)
+    replay.update({"stdout": execution_stdout, "stderr": execution_stderr})
+    record["execution"] = replay
+    (output / "execution-nas.log").write_text(execution_stdout + execution_stderr, encoding="utf-8")
 integrity = docker(["run", "--name", prefix + "-integrity", "--network", "none", "--read-only",
                     "--cap-drop", "ALL", "--security-opt", "no-new-privileges",
                     "--entrypoint", "/usr/bin/sha256sum", image, *["/app/" + name for name in files]])
@@ -128,4 +167,7 @@ record["allOriginalServicesStillRunning"] = set(original).issubset(after)
 print(stdout + stderr)
 print("Image:", image)
 assert record["hashesMatch"] and record["allOriginalServicesStillRunning"]
+if args.execution_fixture:
+    print(record.get("execution", {}).get("stdout", "") + record.get("execution", {}).get("stderr", ""))
+    assert record.get("execution", {}).get("exitCode") == 0 and record["execution"].get("verification")
 raise SystemExit(0 if result.returncode == 0 and record.get("exportVerified") else 1)

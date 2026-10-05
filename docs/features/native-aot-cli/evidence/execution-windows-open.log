@@ -1,0 +1,12 @@
+Plan main created 2026-10-05T18:50:28.7707846Z estBytes=34
+Source: source at /mnt/c/ai-workspace/FileMover/publish/execution-aot-20261005-v2/execution-fixture/source
+Target: target at /mnt/c/ai-workspace/FileMover/publish/execution-aot-20261005-v2/execution-fixture/target
+  0001 MKDIR   Target:: -> target:album size=0
+  0002 MOVE    Target:target:old/video.mp4 -> target:album/video-from-vienna-č.mp4 size=18
+  0003 COPY    Target:target:duplicate.zip -> target:album/gallery-us-in-vienna.zip size=20
+  0004 COPY    Source:source:remote.zip -> target:album/from-source.zip size=14
+  0005 KEEP    Target:: -> target:keep.txt size=5
+  0006 VERIFY  Target:: -> target:album/video-from-vienna-č.mp4 size=18
+  0007 TRASH   Target:target:duplicate.zip -> : size=20
+  0008 TRASH   Target:target:indexed-trash.zip -> : size=17
+  0009 SKIP_LINK Target:target:not-a-content-file -> : size=0 reason=PC excluded link

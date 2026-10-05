@@ -10,7 +10,17 @@ Canonical path: [implementation-plan.md](implementation-plan.md).
 
 Deliver a reproducible Native AOT command-line application that works on the actual ARMv7 QNAP TS-431P3 with 32,768-byte pages. Preserve the inventory database format, JSON contracts, and compatibility with the Windows application.
 
-The first release collects inventories on the NAS: database creation and upgrades, root registration, directory scanning, exclusions, hashing and cache reuse, inventory diagnostics, and portable database export. Comparison, duplicates, planning, and replay follow as a second acceptance milestone.
+The inventory milestone covers database creation and upgrades, root registration, directory scanning, exclusions, hashing and cache reuse, inventory diagnostics, and portable database export. The user subsequently requested execution of PC-prepared plans on the NAS. Comparison, duplicates, and plan creation remain on the PC.
+
+## NAS execution scope, confirmed 2026-10-05
+
+The user requested execution in addition to database creation and schema migration execution. Plans are prepared on the PC, exported as portable databases, and executed on the NAS through `execute <plan-id> --db PATH`. Existing inventory commands remain available. Comparison and plan creation stay on the PC.
+
+Enable the shared executor in the AOT CLI, retaining path overrides, confirmation, resume, stop-on-error, content checks, root binding, and operation journaling. Qualify every database query reached by execution, including the confirmation summary and trash survivor checks. Keep unsupported planning/comparison commands rejected before database access.
+
+Prepare synthetic plan databases through the ordinary application on the build machine. Run the same fixtures through generated managed queries before native publication and then through the AOT application on the actual NAS. Check resulting file contents and journal/status/root-binding values independently. Cover moves, local and external copies, verification, recoverable trash, link skipping, destination/content conflicts, filesystem failures, completed-operation reuse, recovery, and refusal to rebind an executed plan. Test only generated files in new containers, with no existing NAS shares mounted.
+
+Update help, deployment instructions, and verification evidence for the PC preparation/NAS execution workflow. Keep the matching AOT schema helper beside the CLI. No additional product decision is required for this scope.
 
 ## Evidence and remaining work
 
@@ -93,7 +103,7 @@ Deliverable: reproducible image and import bundle that pass the complete first-r
 
 ## Later acceptance milestone
 
-After the inventory release, qualify comparison, file differences, duplicate groups, plan import/export, and replay separately. Exercise copy and move operations only on generated files, including conflict checks, verification, failure logs, and interrupted execution. Do not run the existing D replay report during AOT qualification; its real source data resides on another computer.
+Comparison, file differences, duplicate groups, and plan import/export remain PC workflows. NAS execution is now part of the requested scope above. Exercise copy and move operations only on generated files, including conflict checks, verification, failure logs, and recovery. Do not run the existing D replay report during AOT qualification; its real source data resides on another computer.
 
 The Windows GUI continues to use the ordinary build. Native AOT publishing for the GUI and .NET 11 adoption are separate decisions.
 
@@ -104,7 +114,9 @@ The Windows GUI continues to use the ordinary build. Native AOT publishing for t
 - Migration approach: separate AOT helper applying build-generated EF migration SQL, accepted by the user.
 - First implementation: stage 1 covered representative reads, writes, and transactions on synthetic data, authorized by the user's request for a first version.
 - Application conversion started, 2026-10-05, following the user's request to proceed to a running application. Implement the agreed inventory scope, shared static EF queries, an AOT migration helper, and an on-device scan/hash/export acceptance job. Use `NATIVE_AOT` only for startup and first-release command availability. No additional product decision is needed for this scope.
-- Application acceptance passed, 2026-10-05. Shared queries, the generated SQL helper, and inventory commands work on synthetic NAS data. The portable NAS export opens through Windows application database code. The clean runtime-image build still needs verification with a running PC Docker engine.
+- Application acceptance passed, 2026-10-05. Shared queries, the generated SQL helper, and inventory commands work on synthetic NAS data. The portable NAS export opens through Windows application database code. The clean runtime image subsequently built through the NAS Docker engine and passed inventory acceptance.
+- NAS execution requested, 2026-10-05. Add the shared `execute` command alongside database creation and schema migration execution. Plans and comparisons are prepared on the PC; qualify replay only on generated data.
+- NAS execution acceptance passed, 2026-10-05. The clean native runtime image executes PC-prepared synthetic plans on the actual QNAP. Seven plans, sixteen operations, and seventeen journal entries passed independent checks, including conflicts, recovery, root binding, and safe trash. Windows execution compatibility passed 67 tests with two platform skips. Existing NAS shares remained unmounted.
 
 The EF trial determines whether the current database implementation can be retained. A direct SQLite rewrite remains a fallback requiring a decision based on the trial results.
 

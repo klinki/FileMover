@@ -20,18 +20,9 @@ public static class Cli
 
             string cmd = args[0].ToLowerInvariant();
 #if NATIVE_AOT
-            if (
-                cmd
-                is "plan"
-                    or "execute"
-                    or "verify"
-                    or "purge"
-                    or "diff"
-                    or "coverage"
-                    or "location-changes"
-            )
+            if (cmd is "plan" or "verify" or "purge" or "diff" or "coverage" or "location-changes")
                 return Fail(
-                    $"'{cmd}' is not yet qualified for the NAS AOT inventory release. Use the Windows application for comparison and replay."
+                    $"'{cmd}' is not available in the NAS AOT build. Prepare plans and comparisons on the PC."
                 );
 #endif
             return cmd switch
@@ -45,9 +36,9 @@ public static class Cli
                 "status" => Status(args[1..]),
                 "db" => Db(args[1..]),
                 "hash" => Hash(args[1..]),
+                "execute" => Execute(args[1..]),
 #if !NATIVE_AOT
                 "plan" => Plan(args[1..]),
-                "execute" => Execute(args[1..]),
                 "verify" => Verify(args[1..]),
                 "purge" => Purge(args[1..]),
                 "diff" => Diff(args[1..]),
@@ -73,7 +64,7 @@ public static class Cli
             $"""
             backup-normalizer {BuildInfo.FromAssembly(
                 typeof(Cli).Assembly
-            ).ShortVersion} — NAS inventory
+            ).ShortVersion} — NAS inventory and execution
               init [--db PATH] [--config PATH]
               config init|show [--config PATH]
               root add <id> <path> [--name N] [--writable true|false] [--db PATH]
@@ -84,9 +75,12 @@ public static class Cli
               hash <rootId> [--all] | hash --needed [--db PATH] [--parallelism N] [--no-progress]
               status [rootId] [--db PATH] [--hash-algo ALGORITHM] [--json]
               db export --db SOURCE --output DESTINATION [--json]
+              execute <plan-id> [--db PATH] [--source-path PATH] [--target-path PATH]
+                      [--yes] [--resume] [--stop-on-error]
               db-test | scan-test <path> | --version [--json]
             The matching migration helper must remain beside this executable.
-            Comparison, planning and replay are available in the Windows application.
+            Prepare plans on the PC and transfer a portable plan database to the NAS.
+            Comparison and plan creation are available in the Windows application.
             --config PATH selects JSON defaults. CLI values override BN_* variables and JSON defaults.
             Stored exclusion rules apply to scans and hashing. Links are recorded without following targets.
             """

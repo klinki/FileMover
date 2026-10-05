@@ -1,0 +1,19 @@
+backup-normalizer 0.2.0+4e31e116d3ee.unverified — NAS inventory and execution
+  init [--db PATH] [--config PATH]
+  config init|show [--config PATH]
+  root add <id> <path> [--name N] [--writable true|false] [--db PATH]
+  root list [--db PATH]
+  scan <rootId|--all> [--db PATH] [--mft off] [--usn off] [--full] [--no-progress]
+       [--exclude-path-regex REGEX ... | --no-exclusions]
+  scan errors <rootId> [--scan ID] [--db PATH] [--json]
+  hash <rootId> [--all] | hash --needed [--db PATH] [--parallelism N] [--no-progress]
+  status [rootId] [--db PATH] [--hash-algo ALGORITHM] [--json]
+  db export --db SOURCE --output DESTINATION [--json]
+  execute <plan-id> [--db PATH] [--source-path PATH] [--target-path PATH]
+          [--yes] [--resume] [--stop-on-error]
+  db-test | scan-test <path> | --version [--json]
+The matching migration helper must remain beside this executable.
+Prepare plans on the PC and transfer a portable plan database to the NAS.
+Comparison and plan creation are available in the Windows application.
+--config PATH selects JSON defaults. CLI values override BN_* variables and JSON defaults.
+Stored exclusion rules apply to scans and hashing. Links are recorded without following targets.

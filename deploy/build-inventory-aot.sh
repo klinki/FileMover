@@ -12,6 +12,9 @@ export DOTNET_CLI_TELEMETRY_OPTOUT=1
 dotnet run --project tools/BackupNormalizer.MigrationGenerator -c Release \
     -p:RestoreConfigFile="$TOOLCHAIN/NuGet.Linux.Config" -p:NuGetAudit=false \
     -- src/BackupNormalizer.Schema/GeneratedMigrations.json
+dotnet build src/BackupNormalizer/BackupNormalizer.csproj -c Release -p:NativeAotBuild=false \
+    -p:RestoreConfigFile="$TOOLCHAIN/NuGet.Linux.Config" -p:NuGetAudit=false
+python3 "$(dirname "$0")/prepare-execution-fixture.py" "$OUTPUT"
 export NativeAotBuild=true
 dotnet build src/BackupNormalizer/BackupNormalizer.csproj -c Release \
     -p:RestoreConfigFile="$TOOLCHAIN/NuGet.Linux.Config" -p:NuGetAudit=false
@@ -30,6 +33,7 @@ dotnet build src/BackupNormalizer/BackupNormalizer.csproj -c Release \
 dotnet build src/BackupNormalizer.Migrations/BackupNormalizer.Migrations.csproj -c Release \
     -p:RestoreConfigFile="$TOOLCHAIN/NuGet.Linux.Config" -p:NuGetAudit=false
 python3 "$(dirname "$0")/verify-precompiled-inventory.py" "$OUTPUT"
+python3 "$(dirname "$0")/verify-precompiled-execution.py" "$OUTPUT"
 for project in BackupNormalizer BackupNormalizer.Migrations; do
     dotnet publish "src/$project/$project.csproj" -c Release -r linux-musl-arm \
         -p:PublishAot=true -p:StripSymbols=false -p:InvariantGlobalization=true -p:NuGetAudit=false \

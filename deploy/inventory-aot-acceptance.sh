@@ -48,8 +48,8 @@ if /app/BackupNormalizer.Migrations --db "$WORK/state/mismatch.db" --manifest-ha
 fi
 [ ! -e "$WORK/state/mismatch.db" ]
 echo 'PASS: mismatched migration package rejected before writes'
-if "$BN" execute test --db "$WORK/state/must-not-exist.db"; then
-    echo 'FAIL: unqualified replay command accepted'; exit 1
+if "$BN" plan test --db "$WORK/state/must-not-exist.db"; then
+    echo 'FAIL: unqualified planning command accepted'; exit 1
 fi
 [ ! -e "$WORK/state/must-not-exist.db" ]
 echo 'PASS: unqualified commands rejected before database writes'

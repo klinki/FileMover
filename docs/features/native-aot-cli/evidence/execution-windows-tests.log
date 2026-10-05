@@ -1,0 +1,14 @@
+  BackupNormalizer.Schema -> C:\ai-workspace\FileMover\publish\inventory-managed-20261005\source\src\BackupNormalizer.Schema\bin\Release\net10.0\BackupNormalizer.Schema.dll
+  BackupNormalizer.Core -> C:\ai-workspace\FileMover\publish\inventory-managed-20261005\source\src\BackupNormalizer.Core\bin\Release\net10.0\BackupNormalizer.Core.dll
+  BackupNormalizer -> C:\ai-workspace\FileMover\publish\inventory-managed-20261005\source\src\BackupNormalizer\bin\Release\net10.0\BackupNormalizer.dll
+  BackupNormalizer.Ui -> C:\ai-workspace\FileMover\publish\inventory-managed-20261005\source\src\BackupNormalizer.Ui\bin\Release\net10.0\BackupNormalizer.Ui.dll
+  BackupNormalizer.Tests -> C:\ai-workspace\FileMover\publish\inventory-managed-20261005\source\tests\BackupNormalizer.Tests\bin\Release\net10.0\BackupNormalizer.Tests.dll
+Testovací běh pro C:\ai-workspace\FileMover\publish\inventory-managed-20261005\source\tests\BackupNormalizer.Tests\bin\Release\net10.0\BackupNormalizer.Tests.dll (.NETCoreApp,Version=v10.0)
+Celkový počet testovacích souborů, které odpovídají zadanému vzoru: 1
+[xUnit.net 00:00:00.19]     BackupNormalizer.Tests.SymlinkTests.Executor_Skips_Links_Introduced_After_Planning_And_Continues [SKIP]
+[xUnit.net 00:00:00.20]     BackupNormalizer.Tests.SymlinkTests.Planning_Exports_Skips_Preserves_Source_Link_Counterparts_And_Processes_Other_Files [SKIP]
+  Přeskočeno BackupNormalizer.Tests.SymlinkTests.Executor_Skips_Links_Introduced_After_Planning_And_Continues [1 ms]
+  Přeskočeno BackupNormalizer.Tests.SymlinkTests.Planning_Exports_Skips_Preserves_Source_Link_Counterparts_And_Processes_Other_Files [1 ms]
+Soubor výsledků: C:\ai-workspace\FileMover\publish\inventory-managed-20261005\source\tests\BackupNormalizer.Tests\TestResults\execution-updated.trx
+
+Úspěšné!    - Neúspěšné:     0, Úspěšné:    67, Přeskočeno:     2, Celkem:    69, Doba trvání: 24 s - BackupNormalizer.Tests.dll (net10.0)

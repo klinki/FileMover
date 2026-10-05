@@ -1,0 +1,191 @@
+Architecture: armv7l
+Page size: 32768
+BackupNormalizer 0.2.0+4e31e116d3ee.unverified (Release; linux-musl-arm; source unknown)
+db-test: PASS (create/insert/read/commit/rollback ok)
+PASS: database creation, writes and transactions
+root 'nas' -> /tmp/bn-inventory/data
+root 'nas' -> /tmp/bn-inventory/data
+nas	updated	/tmp/bn-inventory/data	writable=True
+PASS: root insert, update and list
+scan nas: 6 entries, 0 errors (complete)
+{
+  "scan": {
+    "scan": {
+      "id": 1,
+      "storageRootId": "nas",
+      "startedUtc": "2026-10-05T19:00:06.1002547Z",
+      "completedUtc": "2026-10-05T19:00:06.1542288Z",
+      "status": "Completed"
+    },
+    "mode": "Recursive",
+    "scannedCount": 6,
+    "errorCount": 0,
+    "fallbackReason": null
+  },
+  "errors": []
+}
+PASS: scan, exclusion, link metadata and diagnostics
+hash --needed: 5 hashed, 1 reused, 0 unstable
+hash --needed: 0 hashed, 6 reused, 0 unstable
+[
+  {
+    "root": {
+      "id": "nas",
+      "name": "updated",
+      "path": "/tmp/bn-inventory/data",
+      "writable": true,
+      "fileSystemId": "/|overlay|/",
+      "caseSensitivity": "sensitive",
+      "createdUtc": "2026-10-05T19:00:05.0948151Z"
+    },
+    "latestScan": {
+      "scan": {
+        "id": 1,
+        "storageRootId": "nas",
+        "startedUtc": "2026-10-05T19:00:06.1002547Z",
+        "completedUtc": "2026-10-05T19:00:06.1542288Z",
+        "status": "Completed"
+      },
+      "mode": "Recursive",
+      "scannedCount": 6,
+      "errorCount": 0,
+      "fallbackReason": null
+    },
+    "lastSuccessfulScan": {
+      "id": 1,
+      "storageRootId": "nas",
+      "startedUtc": "2026-10-05T19:00:06.1002547Z",
+      "completedUtc": "2026-10-05T19:00:06.1542288Z",
+      "status": "Completed"
+    },
+    "regularFiles": 5,
+    "links": 1,
+    "missingEntries": 0,
+    "entryErrors": 0,
+    "usableHashes": 5,
+    "missingHashes": 0,
+    "planningReady": true,
+    "blockingReason": null,
+    "checkpoint": null,
+    "errors": [],
+    "excludedPathRegexes": [
+      "^cache/"
+    ]
+  }
+]
+PASS: hashes, cache reuse and inventory status
+scan nas: 5 entries, 0 errors (complete)
+hash --needed: 2 hashed, 5 reused, 0 unstable
+[
+  {
+    "root": {
+      "id": "nas",
+      "name": "updated",
+      "path": "/tmp/bn-inventory/data",
+      "writable": true,
+      "fileSystemId": "/|overlay|/",
+      "caseSensitivity": "sensitive",
+      "createdUtc": "2026-10-05T19:00:05.0948151Z"
+    },
+    "latestScan": {
+      "scan": {
+        "id": 2,
+        "storageRootId": "nas",
+        "startedUtc": "2026-10-05T19:00:07.6916726Z",
+        "completedUtc": "2026-10-05T19:00:07.7754099Z",
+        "status": "Completed"
+      },
+      "mode": "Recursive",
+      "scannedCount": 5,
+      "errorCount": 0,
+      "fallbackReason": null
+    },
+    "lastSuccessfulScan": {
+      "id": 2,
+      "storageRootId": "nas",
+      "startedUtc": "2026-10-05T19:00:07.6916726Z",
+      "completedUtc": "2026-10-05T19:00:07.7754099Z",
+      "status": "Completed"
+    },
+    "regularFiles": 4,
+    "links": 1,
+    "missingEntries": 2,
+    "entryErrors": 0,
+    "usableHashes": 4,
+    "missingHashes": 0,
+    "planningReady": true,
+    "blockingReason": null,
+    "checkpoint": null,
+    "errors": [],
+    "excludedPathRegexes": [
+      "^cache/"
+    ]
+  }
+]
+{
+  "source": "/tmp/bn-inventory/data/inventory.db",
+  "destination": "/tmp/bn-inventory/export.db"
+}
+[
+  {
+    "root": {
+      "id": "nas",
+      "name": "updated",
+      "path": "/tmp/bn-inventory/data",
+      "writable": true,
+      "fileSystemId": "/|overlay|/",
+      "caseSensitivity": "sensitive",
+      "createdUtc": "2026-10-05T19:00:05.0948151Z"
+    },
+    "latestScan": {
+      "scan": {
+        "id": 2,
+        "storageRootId": "nas",
+        "startedUtc": "2026-10-05T19:00:07.6916726Z",
+        "completedUtc": "2026-10-05T19:00:07.7754099Z",
+        "status": "Completed"
+      },
+      "mode": "Recursive",
+      "scannedCount": 5,
+      "errorCount": 0,
+      "fallbackReason": null
+    },
+    "lastSuccessfulScan": {
+      "id": 2,
+      "storageRootId": "nas",
+      "startedUtc": "2026-10-05T19:00:07.6916726Z",
+      "completedUtc": "2026-10-05T19:00:07.7754099Z",
+      "status": "Completed"
+    },
+    "regularFiles": 4,
+    "links": 1,
+    "missingEntries": 2,
+    "entryErrors": 0,
+    "usableHashes": 4,
+    "missingHashes": 0,
+    "planningReady": true,
+    "blockingReason": null,
+    "checkpoint": null,
+    "errors": [],
+    "excludedPathRegexes": [
+      "^cache/"
+    ]
+  }
+]
+PASS: rescan changes, stored exclusions and portable export
+seed	seed	/fixture/seed	writable=True
+root 'added' -> /tmp/bn-inventory/data
+added	added	/tmp/bn-inventory/data	writable=True
+seed	seed	/fixture/seed	writable=True
+PASS: legacy read-only access and backed-up schema upgrade
+PASS: mismatched migration package rejected before writes
+PASS: unqualified commands rejected before database writes
+EXPORT_BASE64_BEGIN
+[portable database saved locally]
+EXPORT_BASE64_END
+RESULT: inventory acceptance passed
+Database schema is current.
+Database schema is current.
+Database upgraded. Backup: /tmp/bn-inventory/state/legacy.db.before-migration-21970cc1883b4bacb419ea3a8f344b58.db
+Migration helper and application packages do not match.
+error: 'plan' is not available in the NAS AOT build. Prepare plans and comparisons on the PC.

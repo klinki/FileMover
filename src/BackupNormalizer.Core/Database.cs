@@ -1154,8 +1154,56 @@ public sealed partial class Database : IDisposable
     public List<PlanOperationRow> ListPlanOperations(string planId, bool onlyProblems = false)
     {
         var queryPlanId = planId;
-        var queryOnlyProblems = onlyProblems;
         var context = Context;
+        // EF precompilation needs complete branches for the optional status filter.
+        if (!onlyProblems)
+        {
+            if (!_hasSkipReason)
+            {
+                return context
+                    .PlanOperations.AsNoTracking()
+                    .Where(x => x.PlanId == queryPlanId)
+                    .OrderBy(x => x.Sequence)
+                    .Select(x => new PlanOperationRow(
+                        x.Id,
+                        x.Sequence,
+                        x.Type,
+                        x.SourceKind,
+                        x.SourceRootId,
+                        x.SourcePath,
+                        x.DestinationRootId,
+                        x.DestinationPath,
+                        x.ExpectedSize,
+                        x.ExpectedHash,
+                        x.Status,
+                        x.Error,
+                        null
+                    ))
+                    .ToList();
+            }
+
+            return context
+                .PlanOperations.AsNoTracking()
+                .Where(x => x.PlanId == queryPlanId)
+                .OrderBy(x => x.Sequence)
+                .Select(x => new PlanOperationRow(
+                    x.Id,
+                    x.Sequence,
+                    x.Type,
+                    x.SourceKind,
+                    x.SourceRootId,
+                    x.SourcePath,
+                    x.DestinationRootId,
+                    x.DestinationPath,
+                    x.ExpectedSize,
+                    x.ExpectedHash,
+                    x.Status,
+                    x.Error,
+                    x.SkipReason
+                ))
+                .ToList();
+        }
+
         if (!_hasSkipReason)
         {
             return context
@@ -1163,8 +1211,7 @@ public sealed partial class Database : IDisposable
                 .Where(x =>
                     x.PlanId == queryPlanId
                     && (
-                        !queryOnlyProblems
-                        || x.Status == OpStatus.Conflict
+                        x.Status == OpStatus.Conflict
                         || x.Status == OpStatus.Failed
                         || x.Status == OpStatus.Skipped
                     )
@@ -1193,8 +1240,7 @@ public sealed partial class Database : IDisposable
             .Where(x =>
                 x.PlanId == queryPlanId
                 && (
-                    !queryOnlyProblems
-                    || x.Status == OpStatus.Conflict
+                    x.Status == OpStatus.Conflict
                     || x.Status == OpStatus.Failed
                     || x.Status == OpStatus.Skipped
                 )
