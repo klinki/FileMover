@@ -23,6 +23,7 @@ public sealed partial class Database
 
     public List<ExecutionLogRow> ListExecutionLog(string planId)
     {
+        var queryPlanId = planId;
         var context = Context;
         return context
             .ExecutionLogs.AsNoTracking()
@@ -32,7 +33,7 @@ public sealed partial class Database
                 operation => operation.Id,
                 (log, operation) => new { log = log, operation = operation }
             )
-            .Where(x => x.operation.PlanId == planId)
+            .Where(x => x.operation.PlanId == queryPlanId)
             .OrderBy(x => x.log.Id)
             .Select(x => new ExecutionLogRow(
                 x.operation.Id,

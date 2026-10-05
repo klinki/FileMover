@@ -185,13 +185,14 @@ public sealed partial class Database : IDisposable
     // ---- Roots ----
     public void UpsertRoot(StorageRootRow r)
     {
-        var rootId = r.Id;
-        var rootName = r.Name;
-        var rootPath = r.Path;
-        var rootWritable = r.Writable;
-        var rootFileSystemId = r.FileSystemId;
-        var rootCaseSensitivity = r.CaseSensitivity;
-        var rootCreatedUtc = r.CreatedUtc;
+        var queryR = r;
+        var rootId = queryR.Id;
+        var rootName = queryR.Name;
+        var rootPath = queryR.Path;
+        var rootWritable = queryR.Writable;
+        var rootFileSystemId = queryR.FileSystemId;
+        var rootCaseSensitivity = queryR.CaseSensitivity;
+        var rootCreatedUtc = queryR.CreatedUtc;
         var context = Context;
         EnsureWritable();
         var previousPath = context
@@ -272,10 +273,11 @@ public sealed partial class Database : IDisposable
 
     public StorageRootRow? GetRoot(string id)
     {
+        var queryId = id;
         var context = Context;
         return context
             .StorageRoots.AsNoTracking()
-            .Where(x => x.Id == id)
+            .Where(x => x.Id == queryId)
             .Select(x => new StorageRootRow(
                 x.Id,
                 x.Name,
@@ -290,11 +292,12 @@ public sealed partial class Database : IDisposable
 
     public long BeginScan(string rootId)
     {
+        var queryRootId = rootId;
         var context = Context;
         EnsureWritable();
         var scan = new ScanEntity
         {
-            StorageRootId = rootId,
+            StorageRootId = queryRootId,
             StartedUtc = UtcNow(),
             Status = ScanStatus.Started,
         };
@@ -305,23 +308,26 @@ public sealed partial class Database : IDisposable
     public void FinishScan(long scanId, string status)
     {
         var completedUtc = UtcNow();
+        var queryScanId = scanId;
+        var queryStatus = status;
         var context = Context;
         EnsureWritable();
         context
-            .Scans.Where(x => x.Id == scanId)
+            .Scans.Where(x => x.Id == queryScanId)
             .ExecuteUpdate(setters =>
                 setters
                     .SetProperty(x => x.CompletedUtc, x => completedUtc)
-                    .SetProperty(x => x.Status, x => status)
+                    .SetProperty(x => x.Status, x => queryStatus)
             );
     }
 
     public string? LatestScanStatus(string rootId)
     {
+        var queryRootId = rootId;
         var context = Context;
         return context
             .Scans.AsNoTracking()
-            .Where(x => x.StorageRootId == rootId)
+            .Where(x => x.StorageRootId == queryRootId)
             .OrderByDescending(x => x.Id)
             .Select(x => x.Status)
             .FirstOrDefault();
@@ -329,10 +335,11 @@ public sealed partial class Database : IDisposable
 
     public ScanRow? LatestScan(string rootId)
     {
+        var queryRootId = rootId;
         var context = Context;
         return context
             .Scans.AsNoTracking()
-            .Where(x => x.StorageRootId == rootId)
+            .Where(x => x.StorageRootId == queryRootId)
             .OrderByDescending(x => x.Id)
             .Select(x => new ScanRow(x.Id, x.StorageRootId, x.StartedUtc, x.CompletedUtc, x.Status))
             .FirstOrDefault();
@@ -340,10 +347,11 @@ public sealed partial class Database : IDisposable
 
     public ScanCheckpointRow? GetScanCheckpoint(string rootId)
     {
+        var queryRootId = rootId;
         var context = Context;
         return context
             .ScanCheckpoints.AsNoTracking()
-            .Where(x => x.StorageRootId == rootId)
+            .Where(x => x.StorageRootId == queryRootId)
             .Select(x => new ScanCheckpointRow(
                 x.StorageRootId,
                 x.RootPath,
@@ -358,39 +366,42 @@ public sealed partial class Database : IDisposable
 
     public void SaveScanCheckpoint(ScanCheckpointRow checkpoint)
     {
+        var queryCheckpoint = checkpoint;
         var context = Context;
         EnsureWritable();
-        ClearScanCheckpoint(checkpoint.StorageRootId);
+        ClearScanCheckpoint(queryCheckpoint.StorageRootId);
         AddAndSave(
             context.ScanCheckpoints,
             new ScanCheckpointEntity
             {
-                StorageRootId = checkpoint.StorageRootId,
-                RootPath = checkpoint.RootPath,
-                VolumeIdentity = checkpoint.VolumeIdentity,
-                RootIdentity = checkpoint.RootIdentity,
-                JournalId = checkpoint.JournalId,
-                NextUsn = checkpoint.NextUsn,
-                ScanId = checkpoint.ScanId,
+                StorageRootId = queryCheckpoint.StorageRootId,
+                RootPath = queryCheckpoint.RootPath,
+                VolumeIdentity = queryCheckpoint.VolumeIdentity,
+                RootIdentity = queryCheckpoint.RootIdentity,
+                JournalId = queryCheckpoint.JournalId,
+                NextUsn = queryCheckpoint.NextUsn,
+                ScanId = queryCheckpoint.ScanId,
             }
         );
     }
 
     public void ClearScanCheckpoint(string rootId)
     {
+        var queryRootId = rootId;
         var context = Context;
         EnsureWritable();
-        context.ScanCheckpoints.Where(x => x.StorageRootId == rootId).ExecuteDelete();
+        context.ScanCheckpoints.Where(x => x.StorageRootId == queryRootId).ExecuteDelete();
     }
 
     public void MarkRootHashesStale(string rootId)
     {
+        var queryRootId = rootId;
         var context = Context;
         EnsureWritable();
         context
             .FileHashes.Where(h =>
                 context.FileEntries.Any(e =>
-                    e.Id == h.FileEntryId && e.StorageRootId == rootId
+                    e.Id == h.FileEntryId && e.StorageRootId == queryRootId
                 )
             )
             .ExecuteUpdate(setters => setters.SetProperty(h => h.State, h => HashState.Stale));
@@ -398,14 +409,16 @@ public sealed partial class Database : IDisposable
 
     public void MarkPathHashesStale(string rootId, string relativePath)
     {
+        var queryRootId = rootId;
+        var queryRelativePath = relativePath;
         var context = Context;
         EnsureWritable();
         context
             .FileHashes.Where(h =>
                 context.FileEntries.Any(e =>
                     e.Id == h.FileEntryId
-                    && e.StorageRootId == rootId
-                    && e.RelativePath == relativePath
+                    && e.StorageRootId == queryRootId
+                    && e.RelativePath == queryRelativePath
                 )
             )
             .ExecuteUpdate(setters => setters.SetProperty(h => h.State, h => HashState.Stale));
@@ -413,11 +426,13 @@ public sealed partial class Database : IDisposable
 
     public void MarkPathMissing(string rootId, string relativePath)
     {
+        var queryRootId = rootId;
+        var queryRelativePath = relativePath;
         var context = Context;
         EnsureWritable();
         context
             .FileEntries.Where(e =>
-                e.StorageRootId == rootId && e.RelativePath == relativePath
+                e.StorageRootId == queryRootId && e.RelativePath == queryRelativePath
             )
             .ExecuteUpdate(setters =>
                 setters
@@ -428,6 +443,7 @@ public sealed partial class Database : IDisposable
 
     internal void RetireDatabasePaths(string rootId, string[] relativePaths)
     {
+        var queryRootId = rootId;
         var queryRelativePaths = relativePaths.ToList();
         var context = Context;
         EnsureWritable();
@@ -437,14 +453,14 @@ public sealed partial class Database : IDisposable
             .FileHashes.Where(h =>
                 context.FileEntries.Any(e =>
                     e.Id == h.FileEntryId
-                    && e.StorageRootId == rootId
+                    && e.StorageRootId == queryRootId
                     && queryRelativePaths.Contains(EF.Functions.Collate(e.RelativePath, "BN_PATH"))
                 )
             )
             .ExecuteUpdate(setters => setters.SetProperty(h => h.State, h => HashState.Stale));
         context
             .FileEntries.Where(e =>
-                e.StorageRootId == rootId
+                e.StorageRootId == queryRootId
                 && queryRelativePaths.Contains(EF.Functions.Collate(e.RelativePath, "BN_PATH"))
                 && e.Status != FileStatus.Missing
             )
@@ -457,12 +473,14 @@ public sealed partial class Database : IDisposable
 
     public int MarkUnseenFilesMissing(string rootId, long scanId)
     {
+        var queryRootId = rootId;
+        var queryScanId = scanId;
         var context = Context;
         EnsureWritable();
         return context
             .FileEntries.Where(x =>
-                x.StorageRootId == rootId
-                && x.LastSeenScanId != scanId
+                x.StorageRootId == queryRootId
+                && x.LastSeenScanId != queryScanId
                 && x.Status != FileStatus.Missing
             )
             .ExecuteUpdate(setters =>
@@ -474,10 +492,12 @@ public sealed partial class Database : IDisposable
 
     public FileEntryRow? GetFileEntry(string rootId, string rel)
     {
+        var queryRootId = rootId;
+        var queryRel = rel;
         var context = Context;
         return context
             .FileEntries.AsNoTracking()
-            .Where(x => x.StorageRootId == rootId && x.RelativePath == rel)
+            .Where(x => x.StorageRootId == queryRootId && x.RelativePath == queryRel)
             .Select(x => new FileEntryRow(
                 x.Id,
                 x.StorageRootId,
@@ -500,20 +520,21 @@ public sealed partial class Database : IDisposable
 
     public long UpsertFileEntry(FileEntryRow e)
     {
-        var entryStorageRootId = e.StorageRootId;
-        var entryRelativePath = e.RelativePath;
-        var entryName = e.Name;
-        var entrySize = e.Size;
-        var entryModifiedUtc = e.ModifiedUtc;
-        var entryCreatedUtc = e.CreatedUtc;
-        var entryFileIdentity = e.FileIdentity;
-        var entryLastSeenScanId = e.LastSeenScanId;
-        var entryStatus = e.Status;
-        var entryError = e.Error;
-        var entryEntryKind = e.EntryKind;
-        var entryLinkTarget = e.LinkTarget;
-        var entryTargetPath = e.TargetPath;
-        var entryLinkNote = e.LinkNote;
+        var queryE = e;
+        var entryStorageRootId = queryE.StorageRootId;
+        var entryRelativePath = queryE.RelativePath;
+        var entryName = queryE.Name;
+        var entrySize = queryE.Size;
+        var entryModifiedUtc = queryE.ModifiedUtc;
+        var entryCreatedUtc = queryE.CreatedUtc;
+        var entryFileIdentity = queryE.FileIdentity;
+        var entryLastSeenScanId = queryE.LastSeenScanId;
+        var entryStatus = queryE.Status;
+        var entryError = queryE.Error;
+        var entryEntryKind = queryE.EntryKind;
+        var entryLinkTarget = queryE.LinkTarget;
+        var entryTargetPath = queryE.TargetPath;
+        var entryLinkNote = queryE.LinkNote;
         var context = Context;
         EnsureWritable();
         var previous = context
@@ -573,8 +594,9 @@ public sealed partial class Database : IDisposable
 
     public List<FileEntryRow> ListFiles(string? rootId = null)
     {
+        var queryRootId = rootId;
         var context = Context;
-        return rootId == null
+        return queryRootId == null
             ? context
                 .FileEntries.AsNoTracking()
                 .OrderBy(x => x.StorageRootId)
@@ -599,7 +621,7 @@ public sealed partial class Database : IDisposable
                 .ToList()
             : context
                 .FileEntries.AsNoTracking()
-                .Where(x => x.StorageRootId == rootId)
+                .Where(x => x.StorageRootId == queryRootId)
                 .OrderBy(x => x.StorageRootId)
                 .ThenBy(x => x.RelativePath)
                 .Select(x => new FileEntryRow(
@@ -624,10 +646,11 @@ public sealed partial class Database : IDisposable
 
     public int CountFiles(string rootId)
     {
+        var queryRootId = rootId;
         var context = Context;
         return context
             .FileEntries.AsNoTracking()
-            .Where(x => x.StorageRootId == rootId)
+            .Where(x => x.StorageRootId == queryRootId)
             .Count();
     }
 
@@ -656,8 +679,10 @@ public sealed partial class Database : IDisposable
     /// </summary>
     public List<FileWithHashRow> ListFilesWithHashes(string? rootId, string algorithm)
     {
+        var queryRootId = rootId;
+        var queryAlgorithm = algorithm;
         var context = Context;
-        return rootId == null
+        return queryRootId == null
             ? context
                 .FileEntries.AsNoTracking()
                 .OrderBy(entry => entry.StorageRootId)
@@ -678,7 +703,7 @@ public sealed partial class Database : IDisposable
                         ? context
                             .FileHashes.Where(h =>
                                 h.FileEntryId == entry.Id
-                                && h.Algorithm == algorithm
+                                && h.Algorithm == queryAlgorithm
                                 && h.State == HashState.Ok
                                 && h.SizeAtHash == entry.Size
                                 && h.ModifiedUtcAtHash == entry.ModifiedUtc
@@ -694,7 +719,7 @@ public sealed partial class Database : IDisposable
                 .ToList()
             : context
                 .FileEntries.AsNoTracking()
-                .Where(entry => entry.StorageRootId == rootId)
+                .Where(entry => entry.StorageRootId == queryRootId)
                 .OrderBy(entry => entry.StorageRootId)
                 .ThenBy(entry => entry.RelativePath)
                 .Select(entry => new FileWithHashRow(
@@ -713,7 +738,7 @@ public sealed partial class Database : IDisposable
                         ? context
                             .FileHashes.Where(h =>
                                 h.FileEntryId == entry.Id
-                                && h.Algorithm == algorithm
+                                && h.Algorithm == queryAlgorithm
                                 && h.State == HashState.Ok
                                 && h.SizeAtHash == entry.Size
                                 && h.ModifiedUtcAtHash == entry.ModifiedUtc
@@ -731,10 +756,12 @@ public sealed partial class Database : IDisposable
 
     public FileHashRow? GetHash(long fileEntryId, string algo)
     {
+        var queryFileEntryId = fileEntryId;
+        var queryAlgo = algo;
         var context = Context;
         return context
             .FileHashes.AsNoTracking()
-            .Where(x => x.FileEntryId == fileEntryId && x.Algorithm == algo)
+            .Where(x => x.FileEntryId == queryFileEntryId && x.Algorithm == queryAlgo)
             .Select(x => new FileHashRow(
                 x.FileEntryId,
                 x.Algorithm,
@@ -749,13 +776,14 @@ public sealed partial class Database : IDisposable
 
     public void UpsertHash(FileHashRow h)
     {
-        var hashFileEntryId = h.FileEntryId;
-        var hashAlgorithm = h.Algorithm;
-        var hashDigest = h.Digest;
-        var hashSizeAtHash = h.SizeAtHash;
-        var hashModifiedUtcAtHash = h.ModifiedUtcAtHash;
-        var hashCalculatedUtc = h.CalculatedUtc;
-        var hashState = h.State;
+        var queryH = h;
+        var hashFileEntryId = queryH.FileEntryId;
+        var hashAlgorithm = queryH.Algorithm;
+        var hashDigest = queryH.Digest;
+        var hashSizeAtHash = queryH.SizeAtHash;
+        var hashModifiedUtcAtHash = queryH.ModifiedUtcAtHash;
+        var hashCalculatedUtc = queryH.CalculatedUtc;
+        var hashState = queryH.State;
         var context = Context;
         EnsureWritable();
         var exists = context.FileHashes.Any(x =>
@@ -795,19 +823,22 @@ public sealed partial class Database : IDisposable
 
     public void MarkHashStale(long fileEntryId, string algo)
     {
+        var queryFileEntryId = fileEntryId;
+        var queryAlgo = algo;
         var context = Context;
         EnsureWritable();
         context
-            .FileHashes.Where(x => x.FileEntryId == fileEntryId && x.Algorithm == algo)
+            .FileHashes.Where(x => x.FileEntryId == queryFileEntryId && x.Algorithm == queryAlgo)
             .ExecuteUpdate(setters => setters.SetProperty(x => x.State, x => HashState.Stale));
     }
 
     public void MarkFileHashesStale(long fileEntryId)
     {
+        var queryFileEntryId = fileEntryId;
         var context = Context;
         EnsureWritable();
         context
-            .FileHashes.Where(x => x.FileEntryId == fileEntryId)
+            .FileHashes.Where(x => x.FileEntryId == queryFileEntryId)
             .ExecuteUpdate(setters => setters.SetProperty(x => x.State, x => HashState.Stale));
     }
 
@@ -823,21 +854,29 @@ public sealed partial class Database : IDisposable
         string status = PlanStatus.Planned
     )
     {
+        var queryPlanId = planId;
+        var querySourceDatabasePath = sourceDatabasePath;
+        var querySourceRootId = sourceRootId;
+        var querySourceRootPath = sourceRootPath;
+        var queryTargetRootId = targetRootId;
+        var queryTargetRootPath = targetRootPath;
+        var queryEstBytes = estBytes;
+        var queryStatus = status;
         var context = Context;
         EnsureWritable();
         AddAndSave(
             context.Plans,
             new PlanEntity
             {
-                Id = planId,
+                Id = queryPlanId,
                 CreatedUtc = UtcNow(),
-                SourceDatabasePath = sourceDatabasePath,
-                SourceRootId = sourceRootId,
-                SourceRootPath = sourceRootPath,
-                TargetRootId = targetRootId,
-                TargetRootPath = targetRootPath,
-                Status = status,
-                EstimatedBytesCopied = estBytes,
+                SourceDatabasePath = querySourceDatabasePath,
+                SourceRootId = querySourceRootId,
+                SourceRootPath = querySourceRootPath,
+                TargetRootId = queryTargetRootId,
+                TargetRootPath = queryTargetRootPath,
+                Status = queryStatus,
+                EstimatedBytesCopied = queryEstBytes,
             }
         );
     }
@@ -857,32 +896,45 @@ public sealed partial class Database : IDisposable
         string? skipReason = null
     )
     {
+        var queryPlanId = planId;
+        var querySeq = seq;
+        var queryType = type;
+        var querySourceKind = sourceKind;
+        var querySrcRoot = srcRoot;
+        var querySrcPath = srcPath;
+        var queryDstRoot = dstRoot;
+        var queryDstPath = dstPath;
+        var querySize = size;
+        var queryHash = hash;
+        var queryStatus = status;
+        var querySkipReason = skipReason;
         var context = Context;
         EnsureWritable();
         AddAndSave(
             context.PlanOperations,
             new PlanOperationEntity
             {
-                PlanId = planId,
-                Sequence = seq,
-                Type = type,
-                SourceKind = sourceKind,
-                SourceRootId = srcRoot,
-                SourcePath = srcPath,
-                DestinationRootId = dstRoot,
-                DestinationPath = dstPath,
-                ExpectedSize = size,
-                ExpectedHash = hash,
-                Status = status,
-                SkipReason = skipReason,
+                PlanId = queryPlanId,
+                Sequence = querySeq,
+                Type = queryType,
+                SourceKind = querySourceKind,
+                SourceRootId = querySrcRoot,
+                SourcePath = querySrcPath,
+                DestinationRootId = queryDstRoot,
+                DestinationPath = queryDstPath,
+                ExpectedSize = querySize,
+                ExpectedHash = queryHash,
+                Status = queryStatus,
+                SkipReason = querySkipReason,
             }
         );
     }
 
     public bool PlanExists(string planId)
     {
+        var queryPlanId = planId;
         var context = Context;
-        return context.Plans.AsNoTracking().Any(x => x.Id == planId);
+        return context.Plans.AsNoTracking().Any(x => x.Id == queryPlanId);
     }
 
     public sealed record PlanOperationRow(
@@ -903,13 +955,14 @@ public sealed partial class Database : IDisposable
 
     public List<PlanOperationRow> ListPlanOperations(string planId, bool onlyProblems = false)
     {
+        var queryPlanId = planId;
         var context = Context;
         // EF precompilation needs complete branches for the optional status filter.
         if (!onlyProblems)
         {
             return context
                 .PlanOperations.AsNoTracking()
-                .Where(x => x.PlanId == planId)
+                .Where(x => x.PlanId == queryPlanId)
                 .OrderBy(x => x.Sequence)
                 .Select(x => new PlanOperationRow(
                     x.Id,
@@ -933,7 +986,7 @@ public sealed partial class Database : IDisposable
         return context
             .PlanOperations.AsNoTracking()
             .Where(x =>
-                x.PlanId == planId
+                x.PlanId == queryPlanId
                 && (
                     x.Status == OpStatus.Conflict
                     || x.Status == OpStatus.Failed
@@ -975,10 +1028,11 @@ public sealed partial class Database : IDisposable
 
     public PlanInfo? GetPlan(string planId)
     {
+        var queryPlanId = planId;
         var context = Context;
         return context
             .Plans.AsNoTracking()
-            .Where(x => x.Id == planId)
+            .Where(x => x.Id == queryPlanId)
             .Select(x => new PlanInfo(
                 x.Id,
                 x.CreatedUtc,
@@ -997,31 +1051,34 @@ public sealed partial class Database : IDisposable
 
     public void BindPlanExecution(string planId, string? sourcePath, string targetPath)
     {
+        var queryPlanId = planId;
+        var querySourcePath = sourcePath;
+        var queryTargetPath = targetPath;
         var context = Context;
         EnsureWritable();
-        sourcePath = sourcePath == null ? null : Path.GetFullPath(sourcePath);
-        targetPath = Path.GetFullPath(targetPath);
+        querySourcePath = querySourcePath == null ? null : Path.GetFullPath(querySourcePath);
+        queryTargetPath = Path.GetFullPath(queryTargetPath);
         using var transaction = context.Database.BeginTransaction();
         var plan =
-            GetPlan(planId)
-            ?? throw new InvalidOperationException($"unknown plan '{planId}'");
+            GetPlan(queryPlanId)
+            ?? throw new InvalidOperationException($"unknown plan '{queryPlanId}'");
         const string replayAdvice =
             "Import the original plan JSON into a fresh database to execute on another root.";
         if (plan.ExecutionTargetRootPath != null)
         {
             if (
-                !Paths.PathEquals(plan.ExecutionTargetRootPath, targetPath)
+                !Paths.PathEquals(plan.ExecutionTargetRootPath, queryTargetPath)
                 || (
-                    sourcePath != null
+                    querySourcePath != null
                     && (
                         plan.ExecutionSourceRootPath == null
-                        || !Paths.PathEquals(plan.ExecutionSourceRootPath, sourcePath)
+                        || !Paths.PathEquals(plan.ExecutionSourceRootPath, querySourcePath)
                     )
                 )
             )
             {
                 throw new InvalidOperationException(
-                    $"Plan '{planId}' is bound to different execution roots. {replayAdvice}"
+                    $"Plan '{queryPlanId}' is bound to different execution roots. {replayAdvice}"
                 );
             }
         }
@@ -1029,21 +1086,21 @@ public sealed partial class Database : IDisposable
         {
             if (
                 context.PlanOperations.Any(x =>
-                    x.PlanId == planId && x.Status != OpStatus.Planned
+                    x.PlanId == queryPlanId && x.Status != OpStatus.Planned
                 )
             )
             {
                 throw new InvalidOperationException(
-                    $"Plan '{planId}' has historical execution without recorded roots. {replayAdvice}"
+                    $"Plan '{queryPlanId}' has historical execution without recorded roots. {replayAdvice}"
                 );
             }
 
             context
-                .Plans.Where(x => x.Id == planId)
+                .Plans.Where(x => x.Id == queryPlanId)
                 .ExecuteUpdate(setters =>
                     setters
-                        .SetProperty(x => x.ExecutionSourceRootPath, x => sourcePath)
-                        .SetProperty(x => x.ExecutionTargetRootPath, x => targetPath)
+                        .SetProperty(x => x.ExecutionSourceRootPath, x => querySourcePath)
+                        .SetProperty(x => x.ExecutionTargetRootPath, x => queryTargetPath)
                 );
         }
         transaction.Commit();
@@ -1075,19 +1132,22 @@ public sealed partial class Database : IDisposable
 
     public void UpdatePlanStatus(string planId, string status)
     {
+        var queryPlanId = planId;
+        var queryStatus = status;
         var context = Context;
         EnsureWritable();
         context
-            .Plans.Where(x => x.Id == planId)
-            .ExecuteUpdate(setters => setters.SetProperty(x => x.Status, x => status));
+            .Plans.Where(x => x.Id == queryPlanId)
+            .ExecuteUpdate(setters => setters.SetProperty(x => x.Status, x => queryStatus));
     }
 
     public Dictionary<string, int> GetOperationCounts(string planId)
     {
+        var queryPlanId = planId;
         var context = Context;
         return context
             .PlanOperations.AsNoTracking()
-            .Where(x => x.PlanId == planId)
+            .Where(x => x.PlanId == queryPlanId)
             .GroupBy(x => x.Type)
             .Select(g => new { g.Key, Count = g.Count() })
             .ToList()
@@ -1096,59 +1156,71 @@ public sealed partial class Database : IDisposable
 
     public void MarkOperationStarted(long operationId, string startedUtc)
     {
+        var queryOperationId = operationId;
+        var queryStartedUtc = startedUtc;
         var context = Context;
         EnsureWritable();
         context
-            .PlanOperations.Where(x => x.Id == operationId)
+            .PlanOperations.Where(x => x.Id == queryOperationId)
             .ExecuteUpdate(setters =>
                 setters
                     .SetProperty(x => x.Status, x => OpStatus.Started)
-                    .SetProperty(x => x.StartedUtc, x => startedUtc)
+                    .SetProperty(x => x.StartedUtc, x => queryStartedUtc)
             );
     }
 
     public void MarkOperation(long operationId, string status, string? error, string completedUtc)
     {
+        var queryOperationId = operationId;
+        var queryStatus = status;
+        var queryError = error;
+        var queryCompletedUtc = completedUtc;
         var context = Context;
         EnsureWritable();
         context
-            .PlanOperations.Where(x => x.Id == operationId)
+            .PlanOperations.Where(x => x.Id == queryOperationId)
             .ExecuteUpdate(setters =>
                 setters
-                    .SetProperty(x => x.Status, x => status)
-                    .SetProperty(x => x.CompletedUtc, x => completedUtc)
-                    .SetProperty(x => x.Error, x => error)
+                    .SetProperty(x => x.Status, x => queryStatus)
+                    .SetProperty(x => x.CompletedUtc, x => queryCompletedUtc)
+                    .SetProperty(x => x.Error, x => queryError)
             );
     }
 
     public void MarkOperationSkipped(long operationId, string reason)
     {
         var completedUtc = UtcNow();
+        var queryOperationId = operationId;
+        var queryReason = reason;
         var context = Context;
         EnsureWritable();
         context
-            .PlanOperations.Where(x => x.Id == operationId)
+            .PlanOperations.Where(x => x.Id == queryOperationId)
             .ExecuteUpdate(setters =>
                 setters
                     .SetProperty(x => x.Status, x => OpStatus.Skipped)
                     .SetProperty(x => x.CompletedUtc, x => completedUtc)
                     .SetProperty(x => x.Error, x => (string?)null)
-                    .SetProperty(x => x.SkipReason, x => reason)
+                    .SetProperty(x => x.SkipReason, x => queryReason)
             );
     }
 
     public void AddExecutionLog(long operationId, string level, string message, string timestampUtc)
     {
+        var queryOperationId = operationId;
+        var queryLevel = level;
+        var queryMessage = message;
+        var queryTimestampUtc = timestampUtc;
         var context = Context;
         EnsureWritable();
         AddAndSave(
             context.ExecutionLogs,
             new ExecutionLogEntity
             {
-                PlanOperationId = operationId,
-                Level = level,
-                Message = message,
-                TimestampUtc = timestampUtc,
+                PlanOperationId = queryOperationId,
+                Level = queryLevel,
+                Message = queryMessage,
+                TimestampUtc = queryTimestampUtc,
             }
         );
     }
@@ -1157,13 +1229,15 @@ public sealed partial class Database : IDisposable
 
     public List<CopyCandidate> ListCompletedCopies(string planId, string hash)
     {
+        var queryPlanId = planId;
+        var queryHash = hash;
         var context = Context;
         return context
             .PlanOperations.AsNoTracking()
             .Where(x =>
-                x.PlanId == planId
+                x.PlanId == queryPlanId
                 && x.Status == OpStatus.Completed
-                && x.ExpectedHash == hash
+                && x.ExpectedHash == queryHash
                 && (x.Type == OpType.Copy || x.Type == OpType.Move || x.Type == OpType.Keep)
                 && x.DestinationRootId != null
                 && x.DestinationPath != null
@@ -1183,6 +1257,10 @@ public sealed partial class Database : IDisposable
         string hash
     )
     {
+        var queryTargetRootId = targetRootId;
+        var queryExcludeRootId = excludeRootId;
+        var queryExcludePath = excludePath;
+        var queryHash = hash;
         var context = Context;
         return context
             .FileHashes.AsNoTracking()
@@ -1193,14 +1271,14 @@ public sealed partial class Database : IDisposable
                 (fileHash, entry) => new { fileHash = fileHash, entry = entry }
             )
             .Where(x =>
-                x.fileHash.Digest == hash
+                x.fileHash.Digest == queryHash
                 && x.fileHash.State == HashState.Ok
                 && x.entry.Status == FileStatus.Ok
                 && x.entry.EntryKind == EntryKind.File
-                && x.entry.StorageRootId == targetRootId
+                && x.entry.StorageRootId == queryTargetRootId
                 && !(
-                    x.entry.StorageRootId == excludeRootId
-                    && x.entry.RelativePath == excludePath
+                    x.entry.StorageRootId == queryExcludeRootId
+                    && x.entry.RelativePath == queryExcludePath
                 )
             )
             .Select(x => new CopyCandidate(
@@ -1237,29 +1315,39 @@ public sealed partial class Database : IDisposable
         IEnumerable<PlanOperationSeed> operations
     )
     {
+        var queryPlanId = planId;
+        var queryCreatedUtc = createdUtc;
+        var querySourceDatabasePath = sourceDatabasePath;
+        var querySourceRootId = sourceRootId;
+        var querySourceRootPath = sourceRootPath;
+        var queryTargetRootId = targetRootId;
+        var queryTargetRootPath = targetRootPath;
+        var queryStatus = status;
+        var queryEstimatedBytesCopied = estimatedBytesCopied;
+        var queryOperations = operations;
         var context = Context;
         EnsureWritable();
         using var transaction = context.Database.BeginTransaction();
         context.Plans.Add(
             new PlanEntity
             {
-                Id = planId,
-                CreatedUtc = createdUtc,
-                SourceDatabasePath = sourceDatabasePath,
-                SourceRootId = sourceRootId,
-                SourceRootPath = sourceRootPath,
-                TargetRootId = targetRootId,
-                TargetRootPath = targetRootPath,
-                Status = status,
-                EstimatedBytesCopied = estimatedBytesCopied,
+                Id = queryPlanId,
+                CreatedUtc = queryCreatedUtc,
+                SourceDatabasePath = querySourceDatabasePath,
+                SourceRootId = querySourceRootId,
+                SourceRootPath = querySourceRootPath,
+                TargetRootId = queryTargetRootId,
+                TargetRootPath = queryTargetRootPath,
+                Status = queryStatus,
+                EstimatedBytesCopied = queryEstimatedBytesCopied,
             }
         );
-        foreach (var op in operations)
+        foreach (var op in queryOperations)
         {
             context.PlanOperations.Add(
                 new PlanOperationEntity
                 {
-                    PlanId = planId,
+                    PlanId = queryPlanId,
                     Sequence = op.Sequence,
                     Type = op.Type,
                     SourceKind = op.SourceKind,
