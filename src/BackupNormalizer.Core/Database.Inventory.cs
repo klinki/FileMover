@@ -83,35 +83,6 @@ public sealed partial class Database
         bool filterByScanId = scanId.HasValue;
         long selectedScanId = scanId.GetValueOrDefault();
         var context = Context;
-        if (_readOnly && !HasColumn("Scan", "Mode"))
-        {
-            var scan = filterByScanId
-                ? context
-                    .Scans.AsNoTracking()
-                    .Where(s => s.StorageRootId == queryRootId && s.Id == selectedScanId)
-                    .OrderByDescending(s => s.Id)
-                    .Select(s => new ScanRow(
-                        s.Id,
-                        s.StorageRootId,
-                        s.StartedUtc,
-                        s.CompletedUtc,
-                        s.Status
-                    ))
-                    .FirstOrDefault()
-                : context
-                    .Scans.AsNoTracking()
-                    .Where(s => s.StorageRootId == queryRootId)
-                    .OrderByDescending(s => s.Id)
-                    .Select(s => new ScanRow(
-                        s.Id,
-                        s.StorageRootId,
-                        s.StartedUtc,
-                        s.CompletedUtc,
-                        s.Status
-                    ))
-                    .FirstOrDefault();
-            return scan == null ? null : new ScanDetailsRow(scan, null, null, null, null);
-        }
         return filterByScanId
             ? context
                 .Scans.AsNoTracking()
@@ -143,10 +114,6 @@ public sealed partial class Database
     {
         var queryScanId = scanId;
         var context = Context;
-        if (_readOnly && !HasColumn("ScanDiagnostic", "ScanId"))
-        {
-            return [];
-        }
 
         return context
             .ScanDiagnostics.AsNoTracking()
@@ -172,62 +139,33 @@ public sealed partial class Database
             .Select(s => new ScanRow(s.Id, s.StorageRootId, s.StartedUtc, s.CompletedUtc, s.Status))
             .FirstOrDefault();
         queryAlgorithm = HasherFactory.NormalizeAlgorithm(queryAlgorithm);
-        int regular = _hasLinkMetadata
-            ? context.FileEntries.Count(e =>
-                e.StorageRootId == queryRootId
-                && e.Status == FileStatus.Ok
-                && e.EntryKind == EntryKind.File
+        int regular = context.FileEntries.Count(e =>
+            e.StorageRootId == queryRootId
+            && e.Status == FileStatus.Ok
+            && e.EntryKind == EntryKind.File
+        );
+        int hashes = context.FileEntries.Count(e =>
+            e.StorageRootId == queryRootId
+            && e.Status == FileStatus.Ok
+            && e.EntryKind == EntryKind.File
+            && context.FileHashes.Any(h =>
+                h.FileEntryId == e.Id
+                && h.Algorithm == queryAlgorithm
+                && h.State == HashState.Ok
+                && h.SizeAtHash == e.Size
+                && h.ModifiedUtcAtHash == e.ModifiedUtc
             )
-            : context.FileEntries.Count(e =>
-                e.StorageRootId == queryRootId && e.Status == FileStatus.Ok
-            );
-        int hashes = _hasLinkMetadata
-            ? context.FileEntries.Count(e =>
-                e.StorageRootId == queryRootId
-                && e.Status == FileStatus.Ok
-                && e.EntryKind == EntryKind.File
-                && context.FileHashes.Any(h =>
-                    h.FileEntryId == e.Id
-                    && h.Algorithm == queryAlgorithm
-                    && h.State == HashState.Ok
-                    && h.SizeAtHash == e.Size
-                    && h.ModifiedUtcAtHash == e.ModifiedUtc
-                )
-            )
-            : context.FileEntries.Count(e =>
-                e.StorageRootId == queryRootId
-                && e.Status == FileStatus.Ok
-                && context.FileHashes.Any(h =>
-                    h.FileEntryId == e.Id
-                    && h.Algorithm == queryAlgorithm
-                    && h.State == HashState.Ok
-                    && h.SizeAtHash == e.Size
-                    && h.ModifiedUtcAtHash == e.ModifiedUtc
-                )
-            );
-        int links = _hasLinkMetadata
-            ? context.FileEntries.Count(e =>
-                e.StorageRootId == queryRootId
-                && e.Status == FileStatus.Ok
-                && e.EntryKind != EntryKind.File
-            )
-            : context.FileEntries.Count(e =>
-                e.StorageRootId == queryRootId
-                && e.Status == FileStatus.UnsupportedEntry
-                && e.Error == "symlink"
-            );
-        int entryErrors = _hasLinkMetadata
-            ? context.FileEntries.Count(e =>
-                e.StorageRootId == queryRootId
-                && e.Status != FileStatus.Ok
-                && e.Status != FileStatus.Missing
-            )
-            : context.FileEntries.Count(e =>
-                e.StorageRootId == queryRootId
-                && e.Status != FileStatus.Ok
-                && e.Status != FileStatus.Missing
-                && (e.Status != FileStatus.UnsupportedEntry || e.Error != "symlink")
-            );
+        );
+        int links = context.FileEntries.Count(e =>
+            e.StorageRootId == queryRootId
+            && e.Status == FileStatus.Ok
+            && e.EntryKind != EntryKind.File
+        );
+        int entryErrors = context.FileEntries.Count(e =>
+            e.StorageRootId == queryRootId
+            && e.Status != FileStatus.Ok
+            && e.Status != FileStatus.Missing
+        );
         bool ready =
             latest?.Scan.Status == ScanStatus.Completed && hashes == regular && entryErrors == 0;
         string? reason =

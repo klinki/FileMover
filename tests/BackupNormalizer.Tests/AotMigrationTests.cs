@@ -119,19 +119,39 @@ public sealed class AotMigrationTests
     }
 
     [Fact]
-    public void Root_List_Does_Not_Upgrade_A_Legacy_Database()
+    public void Root_List_Fails_Fast_On_A_Legacy_Database_Without_Upgrading_It()
     {
-        string path = NewPath();
+        string path = NewLegacyDatabase();
         var manifest = MigrationManifestGenerator.Create();
-        using (var old = new BackupNormalizerDbContextFactory().CreateDbContext([]))
-        {
-            old.Database.SetConnectionString("Data Source=" + path);
-            old.GetService<IMigrator>().Migrate(manifest.Steps[0].Id);
-        }
-        Assert.Equal(0, Cli.Run(["root", "list", "--db", path]));
+        Assert.Equal(2, Cli.Run(["root", "list", "--db", path]));
+        Assert.Throws<DatabaseNeedsMigrationException>(() =>
+            Database.OpenReadOnly(path, pooling: false)
+        );
         using var check = DatabaseSchema.Open(path, SqliteOpenMode.ReadOnly);
         Assert.Single(DatabaseSchema.ReadHistory(check, manifest));
         Assert.False(File.Exists(path + ".bn-migration.lock"));
+    }
+
+    [Fact]
+    public void Db_Migrate_Upgrades_A_Legacy_Database_So_It_Opens_Read_Only()
+    {
+        string path = NewLegacyDatabase();
+        Assert.Equal(0, Cli.Run(["db", "migrate", "--db", path]));
+        using var db = Database.OpenReadOnly(path, pooling: false);
+        Assert.Equal("saved", Assert.Single(db.ListRoots()).Name);
+    }
+
+    private static string NewLegacyDatabase()
+    {
+        string path = NewPath();
+        var manifest = MigrationManifestGenerator.Create();
+        using var old = new BackupNormalizerDbContextFactory().CreateDbContext([]);
+        old.Database.SetConnectionString("Data Source=" + path);
+        old.GetService<IMigrator>().Migrate(manifest.Steps[0].Id);
+        old.Database.ExecuteSqlRaw(
+            "INSERT INTO StorageRoot VALUES ('r', 'saved', '/fixture', 1, 'fs', 'sensitive', 'before');"
+        );
+        return path;
     }
 
     [Fact]

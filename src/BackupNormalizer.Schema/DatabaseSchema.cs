@@ -3,8 +3,27 @@ using Microsoft.Data.Sqlite;
 
 namespace BackupNormalizer;
 
+public sealed class DatabaseNeedsMigrationException(string path, int applied, int required)
+    : InvalidOperationException(
+        $"Inventory '{path}' uses schema version {applied}; this version requires {required}. "
+            + "Run 'db migrate' on it first (a backup copy is made)."
+    )
+{
+    public string DatabasePath { get; } = path;
+}
+
 public static class DatabaseSchema
 {
+    /// <summary>Fails fast, without modifying the file, unless the database is at the current schema.</summary>
+    public static void RequireCurrent(string path)
+    {
+        var manifest = MigrationPackage.Manifest;
+        using var connection = Open(path, SqliteOpenMode.ReadOnly);
+        int applied = ReadHistory(connection, manifest).Count;
+        if (applied != manifest.Steps.Length)
+            throw new DatabaseNeedsMigrationException(path, applied, manifest.Steps.Length);
+    }
+
     public static void EnsureCurrent(string path)
     {
         var manifest = MigrationPackage.Manifest;

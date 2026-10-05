@@ -62,8 +62,6 @@ public sealed record FileHashRow(
 public sealed partial class Database : IDisposable
 {
     private readonly bool _readOnly;
-    private readonly bool _hasLinkMetadata;
-    private readonly bool _hasSkipReason;
 
     public string DbPath { get; }
 
@@ -119,7 +117,12 @@ public sealed partial class Database : IDisposable
 
         string connectionString = connectionStringBuilder.ToString();
 #if NATIVE_AOT
-        if (!readOnly)
+        if (readOnly)
+        {
+            // Older inventories are never read best-effort; they must be migrated first.
+            DatabaseSchema.RequireCurrent(DbPath);
+        }
+        else
         {
             DatabaseSchema.EnsureCurrent(DbPath);
         }
@@ -134,6 +137,17 @@ public sealed partial class Database : IDisposable
             // Keep the connection open so connection-scoped settings such as synchronous=NORMAL
             // remain in effect for the lifetime of this database facade.
             Context.Database.OpenConnection();
+#if !NATIVE_AOT
+            if (readOnly)
+            {
+                int applied = Context.Database.GetAppliedMigrations().Count();
+                int pending = Context.Database.GetPendingMigrations().Count();
+                if (pending != 0)
+                {
+                    throw new DatabaseNeedsMigrationException(DbPath, applied, applied + pending);
+                }
+            }
+#endif
             ((SqliteConnection)Context.Database.GetDbConnection()).CreateCollation(
                 "BN_PATH",
                 (left, right) =>
@@ -151,8 +165,6 @@ public sealed partial class Database : IDisposable
                 Context.Database.Migrate();
 #endif
             }
-            _hasLinkMetadata = !readOnly || HasColumn("FileEntry", "EntryKind");
-            _hasSkipReason = !readOnly || HasColumn("PlanOperation", "SkipReason");
         }
         catch
         {
@@ -169,24 +181,6 @@ public sealed partial class Database : IDisposable
 
     public static string UtcNow() => DateTime.UtcNow.ToString("o");
 
-    private bool HasColumn(string table, string column)
-    {
-        var queryTable = table;
-        var queryColumn = column;
-        var context = Context;
-        using var command = context.Database.GetDbConnection().CreateCommand();
-        command.CommandText = $"PRAGMA table_info({queryTable})";
-        using var reader = command.ExecuteReader();
-        while (reader.Read())
-        {
-            if (reader.GetString(1) == queryColumn)
-            {
-                return true;
-            }
-        }
-
-        return false;
-    }
 
     // ---- Roots ----
     public void UpsertRoot(StorageRootRow r)
@@ -355,12 +349,6 @@ public sealed partial class Database : IDisposable
     {
         var queryRootId = rootId;
         var context = Context;
-        // Opening historical inventories read-only must not require the new table.
-        if (_readOnly && !HasColumn("ScanCheckpoint", "NextUsn"))
-        {
-            return null;
-        }
-
         return context
             .ScanCheckpoints.AsNoTracking()
             .Where(x => x.StorageRootId == queryRootId)
@@ -507,38 +495,6 @@ public sealed partial class Database : IDisposable
         var queryRootId = rootId;
         var queryRel = rel;
         var context = Context;
-        if (!_hasLinkMetadata)
-        {
-            return context
-                .FileEntries.AsNoTracking()
-                .Where(x => x.StorageRootId == queryRootId && x.RelativePath == queryRel)
-                .Select(x => new FileEntryRow(
-                    x.Id,
-                    x.StorageRootId,
-                    x.RelativePath,
-                    x.Name,
-                    x.Size,
-                    x.ModifiedUtc,
-                    x.CreatedUtc,
-                    x.FileIdentity,
-                    x.LastSeenScanId,
-                    x.Status == FileStatus.UnsupportedEntry && x.Error == "symlink"
-                        ? FileStatus.Ok
-                        : x.Status,
-                    x.Status == FileStatus.UnsupportedEntry && x.Error == "symlink"
-                        ? null
-                        : x.Error,
-                    x.Status == FileStatus.UnsupportedEntry && x.Error == "symlink"
-                        ? EntryKind.ReparsePoint
-                        : EntryKind.File,
-                    null,
-                    null,
-                    x.Status == FileStatus.UnsupportedEntry && x.Error == "symlink"
-                        ? "Rescan to record link metadata."
-                        : null
-                ))
-                .FirstOrDefault();
-        }
         return context
             .FileEntries.AsNoTracking()
             .Where(x => x.StorageRootId == queryRootId && x.RelativePath == queryRel)
@@ -640,71 +596,6 @@ public sealed partial class Database : IDisposable
     {
         var queryRootId = rootId;
         var context = Context;
-        if (!_hasLinkMetadata)
-        {
-            return queryRootId == null
-                ? context
-                    .FileEntries.AsNoTracking()
-                    .OrderBy(x => x.StorageRootId)
-                    .ThenBy(x => x.RelativePath)
-                    .Select(x => new FileEntryRow(
-                        x.Id,
-                        x.StorageRootId,
-                        x.RelativePath,
-                        x.Name,
-                        x.Size,
-                        x.ModifiedUtc,
-                        x.CreatedUtc,
-                        x.FileIdentity,
-                        x.LastSeenScanId,
-                        x.Status == FileStatus.UnsupportedEntry && x.Error == "symlink"
-                            ? FileStatus.Ok
-                            : x.Status,
-                        x.Status == FileStatus.UnsupportedEntry && x.Error == "symlink"
-                            ? null
-                            : x.Error,
-                        x.Status == FileStatus.UnsupportedEntry && x.Error == "symlink"
-                            ? EntryKind.ReparsePoint
-                            : EntryKind.File,
-                        null,
-                        null,
-                        x.Status == FileStatus.UnsupportedEntry && x.Error == "symlink"
-                            ? "Rescan to record link metadata."
-                            : null
-                    ))
-                    .ToList()
-                : context
-                    .FileEntries.AsNoTracking()
-                    .Where(x => x.StorageRootId == queryRootId)
-                    .OrderBy(x => x.StorageRootId)
-                    .ThenBy(x => x.RelativePath)
-                    .Select(x => new FileEntryRow(
-                        x.Id,
-                        x.StorageRootId,
-                        x.RelativePath,
-                        x.Name,
-                        x.Size,
-                        x.ModifiedUtc,
-                        x.CreatedUtc,
-                        x.FileIdentity,
-                        x.LastSeenScanId,
-                        x.Status == FileStatus.UnsupportedEntry && x.Error == "symlink"
-                            ? FileStatus.Ok
-                            : x.Status,
-                        x.Status == FileStatus.UnsupportedEntry && x.Error == "symlink"
-                            ? null
-                            : x.Error,
-                        x.Status == FileStatus.UnsupportedEntry && x.Error == "symlink"
-                            ? EntryKind.ReparsePoint
-                            : EntryKind.File,
-                        null,
-                        null,
-                        x.Status == FileStatus.UnsupportedEntry && x.Error == "symlink"
-                            ? "Rescan to record link metadata."
-                            : null
-                    ))
-                    .ToList();
-        }
         return queryRootId == null
             ? context
                 .FileEntries.AsNoTracking()
@@ -791,95 +682,6 @@ public sealed partial class Database : IDisposable
         var queryRootId = rootId;
         var queryAlgorithm = algorithm;
         var context = Context;
-        if (!_hasLinkMetadata)
-        {
-            return queryRootId == null
-                ? context
-                    .FileEntries.AsNoTracking()
-                    .OrderBy(entry => entry.StorageRootId)
-                    .ThenBy(entry => entry.RelativePath)
-                    .Select(entry => new FileWithHashRow(
-                        entry.Id,
-                        entry.StorageRootId,
-                        entry.RelativePath,
-                        entry.Name,
-                        entry.Size,
-                        entry.ModifiedUtc,
-                        entry.CreatedUtc,
-                        entry.FileIdentity,
-                        entry.LastSeenScanId,
-                        entry.Status == FileStatus.UnsupportedEntry && entry.Error == "symlink"
-                            ? FileStatus.Ok
-                            : entry.Status,
-                        entry.Status == FileStatus.UnsupportedEntry && entry.Error == "symlink"
-                            ? null
-                            : entry.Error,
-                        entry.Status == FileStatus.Ok
-                            ? context
-                                .FileHashes.Where(h =>
-                                    h.FileEntryId == entry.Id
-                                    && h.Algorithm == queryAlgorithm
-                                    && h.State == HashState.Ok
-                                    && h.SizeAtHash == entry.Size
-                                    && h.ModifiedUtcAtHash == entry.ModifiedUtc
-                                )
-                                .Select(h => h.Digest)
-                                .FirstOrDefault()
-                            : null,
-                        entry.Status == FileStatus.UnsupportedEntry && entry.Error == "symlink"
-                            ? EntryKind.ReparsePoint
-                            : EntryKind.File,
-                        null,
-                        null,
-                        entry.Status == FileStatus.UnsupportedEntry && entry.Error == "symlink"
-                            ? "Rescan to record link metadata."
-                            : null
-                    ))
-                    .ToList()
-                : context
-                    .FileEntries.AsNoTracking()
-                    .Where(entry => entry.StorageRootId == queryRootId)
-                    .OrderBy(entry => entry.StorageRootId)
-                    .ThenBy(entry => entry.RelativePath)
-                    .Select(entry => new FileWithHashRow(
-                        entry.Id,
-                        entry.StorageRootId,
-                        entry.RelativePath,
-                        entry.Name,
-                        entry.Size,
-                        entry.ModifiedUtc,
-                        entry.CreatedUtc,
-                        entry.FileIdentity,
-                        entry.LastSeenScanId,
-                        entry.Status == FileStatus.UnsupportedEntry && entry.Error == "symlink"
-                            ? FileStatus.Ok
-                            : entry.Status,
-                        entry.Status == FileStatus.UnsupportedEntry && entry.Error == "symlink"
-                            ? null
-                            : entry.Error,
-                        entry.Status == FileStatus.Ok
-                            ? context
-                                .FileHashes.Where(h =>
-                                    h.FileEntryId == entry.Id
-                                    && h.Algorithm == queryAlgorithm
-                                    && h.State == HashState.Ok
-                                    && h.SizeAtHash == entry.Size
-                                    && h.ModifiedUtcAtHash == entry.ModifiedUtc
-                                )
-                                .Select(h => h.Digest)
-                                .FirstOrDefault()
-                            : null,
-                        entry.Status == FileStatus.UnsupportedEntry && entry.Error == "symlink"
-                            ? EntryKind.ReparsePoint
-                            : EntryKind.File,
-                        null,
-                        null,
-                        entry.Status == FileStatus.UnsupportedEntry && entry.Error == "symlink"
-                            ? "Rescan to record link metadata."
-                            : null
-                    ))
-                    .ToList();
-        }
         return queryRootId == null
             ? context
                 .FileEntries.AsNoTracking()
@@ -1158,30 +960,6 @@ public sealed partial class Database : IDisposable
         // EF precompilation needs complete branches for the optional status filter.
         if (!onlyProblems)
         {
-            if (!_hasSkipReason)
-            {
-                return context
-                    .PlanOperations.AsNoTracking()
-                    .Where(x => x.PlanId == queryPlanId)
-                    .OrderBy(x => x.Sequence)
-                    .Select(x => new PlanOperationRow(
-                        x.Id,
-                        x.Sequence,
-                        x.Type,
-                        x.SourceKind,
-                        x.SourceRootId,
-                        x.SourcePath,
-                        x.DestinationRootId,
-                        x.DestinationPath,
-                        x.ExpectedSize,
-                        x.ExpectedHash,
-                        x.Status,
-                        x.Error,
-                        null
-                    ))
-                    .ToList();
-            }
-
             return context
                 .PlanOperations.AsNoTracking()
                 .Where(x => x.PlanId == queryPlanId)
@@ -1204,36 +982,6 @@ public sealed partial class Database : IDisposable
                 .ToList();
         }
 
-        if (!_hasSkipReason)
-        {
-            return context
-                .PlanOperations.AsNoTracking()
-                .Where(x =>
-                    x.PlanId == queryPlanId
-                    && (
-                        x.Status == OpStatus.Conflict
-                        || x.Status == OpStatus.Failed
-                        || x.Status == OpStatus.Skipped
-                    )
-                )
-                .OrderBy(x => x.Sequence)
-                .Select(x => new PlanOperationRow(
-                    x.Id,
-                    x.Sequence,
-                    x.Type,
-                    x.SourceKind,
-                    x.SourceRootId,
-                    x.SourcePath,
-                    x.DestinationRootId,
-                    x.DestinationPath,
-                    x.ExpectedSize,
-                    x.ExpectedHash,
-                    x.Status,
-                    x.Error,
-                    null
-                ))
-                .ToList();
-        }
 
         return context
             .PlanOperations.AsNoTracking()

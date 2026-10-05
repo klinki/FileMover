@@ -75,6 +75,7 @@ public static class Cli
               hash <rootId> [--all] | hash --needed [--db PATH] [--parallelism N] [--no-progress]
               status [rootId] [--db PATH] [--hash-algo ALGORITHM] [--json]
               db export --db SOURCE --output DESTINATION [--json]
+              db migrate [--db PATH]
               execute <plan-id> [--db PATH] [--source-path PATH] [--target-path PATH]
                       [--yes] [--resume] [--stop-on-error]
               db-test | scan-test <path> | --version [--json]
@@ -102,6 +103,7 @@ public static class Cli
               scan errors <rootId> [--scan ID] [--db PATH] [--json]
               status [rootId] [--db PATH] [--hash-algo ALGORITHM] [--json]
               db export --db SOURCE --output DESTINATION [--json]
+              db migrate [--db PATH]
               hash <rootId> --all | hash --needed [--db PATH] [--parallelism N] [--no-progress]
               plan --source-db S.db --source-root R --target-db T.db --target-root R [--plan ID]
               plan show <plan-id> [--db PATH] | plan export <plan-id> [--format json] [--output F] [--db PATH]
@@ -522,9 +524,23 @@ public static class Cli
 
     private static int Db(string[] a)
     {
+        if (a.Length > 0 && a[0] == "migrate")
+        {
+            string target = Opt(a, "--db", LoadConfig(a).Database);
+            if (!File.Exists(target))
+            {
+                return Fail($"database file not found: {Path.GetFullPath(target)}");
+            }
+
+            // Opening writable upgrades the schema (EF migrator, or the AOT helper which backs up first).
+            using (Database.OpenWritable(target, pooling: false)) { }
+            Console.WriteLine(TerminalText($"database is at the current schema: {Path.GetFullPath(target)}"));
+            return 0;
+        }
+
         if (a.Length == 0 || a[0] != "export")
         {
-            return Fail("db requires the export subcommand");
+            return Fail("db requires the export or migrate subcommand");
         }
 
         string destination = Opt(a, "--output", "");

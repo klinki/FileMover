@@ -9,10 +9,6 @@ public sealed partial class Database
     {
         var queryRootId = rootId;
         var context = Context;
-        if (_readOnly && !HasColumn("RootScanPolicy", "ExcludedPathRegexesJson"))
-        {
-            return [];
-        }
 
         string? json = context
             .RootScanPolicies.AsNoTracking()

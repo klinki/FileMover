@@ -594,7 +594,7 @@ public sealed class UsnScanTests : IDisposable
     }
 
     [Fact]
-    public void Legacy_Read_Only_Inventories_Load_Without_Checkpoints_Or_Migration()
+    public void Legacy_Inventories_Fail_Fast_Read_Only_And_Upgrade_On_Writable_Open()
     {
         var options = new DbContextOptionsBuilder<BackupNormalizerDbContext>()
             .UseSqlite($"Data Source={_databasePath}")
@@ -604,12 +604,9 @@ public sealed class UsnScanTests : IDisposable
             context.GetService<IMigrator>().Migrate("20261002075521_RecordLinks");
         }
 
-        using (var readOnly = Database.OpenReadOnly(_databasePath, pooling: false))
-        {
-            Assert.Null(readOnly.GetScanCheckpoint("r"));
-            Assert.Empty(readOnly.ListFiles());
-            Assert.Equal(3, readOnly.AppliedMigrations().Count);
-        }
+        Assert.Throws<DatabaseNeedsMigrationException>(() =>
+            Database.OpenReadOnly(_databasePath, pooling: false)
+        );
         using var upgraded = Open();
         Assert.Equal(6, upgraded.AppliedMigrations().Count);
         Assert.False(upgraded.Context.Database.HasPendingModelChanges());

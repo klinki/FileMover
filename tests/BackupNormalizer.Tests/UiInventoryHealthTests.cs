@@ -96,7 +96,7 @@ public sealed class UiInventoryHealthTests : IDisposable
     }
 
     [Fact]
-    public void Legacy_Snapshot_Shows_Unknown_Diagnostics_Without_Migration()
+    public void Legacy_Snapshot_Fails_Fast_Without_Modifying_The_Inventory()
     {
         var options = new DbContextOptionsBuilder<BackupNormalizerDbContext>()
             .UseSqlite(
@@ -120,17 +120,7 @@ public sealed class UiInventoryHealthTests : IDisposable
         SqliteConnection.ClearAllPools();
         byte[] before = File.ReadAllBytes(DbPath);
 
-        var snapshot = InventorySnapshot.Load(DbPath);
-        var viewModel = new InventoryHealthViewModel(Assert.Single(snapshot.Roots));
-
-        Assert.Equal("Unknown (older inventory)", viewModel.ScanMode);
-        Assert.Equal("Unknown (older inventory)", viewModel.ScanErrorCount);
-        Assert.Equal(
-            "Diagnostic count was not recorded by this inventory version.",
-            viewModel.DiagnosticsSummary
-        );
-        Assert.Empty(viewModel.Errors);
-        Assert.Equal("Blocked", viewModel.PlanningReadiness);
+        Assert.Throws<DatabaseNeedsMigrationException>(() => InventorySnapshot.Load(DbPath));
         SqliteConnection.ClearAllPools();
         Assert.Equal(before, File.ReadAllBytes(DbPath));
     }

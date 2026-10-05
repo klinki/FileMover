@@ -123,7 +123,7 @@ public sealed class InventoryStatusTests : IDisposable
     }
 
     [Fact]
-    public void Historical_ReadOnly_Diagnostics_Are_Unknown_Without_Migration()
+    public void Historical_Database_Fails_Fast_Read_Only_And_Is_Not_Modified()
     {
         var options = new DbContextOptionsBuilder<BackupNormalizerDbContext>()
             .UseSqlite(
@@ -145,14 +145,9 @@ public sealed class InventoryStatusTests : IDisposable
             );
         }
         byte[] before = File.ReadAllBytes(DbPath);
-        using (var db = Database.OpenReadOnly(DbPath, pooling: false))
-        {
-            Assert.Equal(4, db.AppliedMigrations().Count);
-            var status = db.GetInventoryStatus("r");
-            Assert.Null(status.LatestScan!.ErrorCount);
-            Assert.Empty(status.Errors);
-            Assert.False(status.PlanningReady);
-        }
+        Assert.Throws<DatabaseNeedsMigrationException>(() =>
+            Database.OpenReadOnly(DbPath, pooling: false)
+        );
         Assert.Equal(before, File.ReadAllBytes(DbPath));
         using var upgraded = new Database(DbPath);
         Assert.Equal(6, upgraded.AppliedMigrations().Count);

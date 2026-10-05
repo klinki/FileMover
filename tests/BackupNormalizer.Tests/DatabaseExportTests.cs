@@ -139,10 +139,12 @@ public sealed class DatabaseExportTests : IDisposable
         byte[] original = File.ReadAllBytes(Source);
         Database.ExportSnapshot(Source, Destination);
         Assert.Equal(original, File.ReadAllBytes(Source));
-        using var exported = Database.OpenReadOnly(Destination, pooling: false);
-        Assert.Single(exported.AppliedMigrations());
+        Assert.Throws<DatabaseNeedsMigrationException>(() =>
+            Database.OpenReadOnly(Destination, pooling: false)
+        );
+        using var exported = Database.OpenWritable(Destination, pooling: false);
         Assert.Equal("r", Assert.Single(exported.ListRoots()).Id);
-        Assert.Single(exported.PendingMigrations(), m => m.EndsWith("RecordScanDiagnostics"));
+        Assert.Empty(exported.PendingMigrations());
     }
 
     [Fact]

@@ -369,7 +369,7 @@ public sealed class SymlinkTests : IDisposable
     }
 
     [Fact]
-    public void Legacy_Read_Only_Inventories_Work_And_Writable_Upgrade_Preserves_Scan_History()
+    public void Legacy_Inventories_Fail_Fast_Read_Only_And_Writable_Upgrade_Preserves_Scan_History()
     {
         var path = Path.Combine(_dir, "legacy.db");
         var options = new DbContextOptionsBuilder<BackupNormalizerDbContext>()
@@ -392,17 +392,8 @@ public sealed class SymlinkTests : IDisposable
             );
         }
         var bytes = File.ReadAllBytes(path);
-        using (var readOnly = Database.OpenReadOnly(path, false))
-        {
-            var entry = Assert.Single(readOnly.ListFiles());
-            Assert.Equal(EntryKind.ReparsePoint, entry.EntryKind);
-            Assert.Equal(FileStatus.Ok, entry.Status);
-            Assert.Null(readOnly.ListFilesWithHashes("r", "sha256").Single().Digest);
-            Assert.Empty(Matcher.LoadFromDb(readOnly, "sha256", "r"));
-        }
-        var node = InventorySnapshot.Load(path).Roots.Single().Nodes["link"];
-        Assert.True(node.IsLink);
-        Assert.False(node.HasScanError);
+        Assert.Throws<DatabaseNeedsMigrationException>(() => Database.OpenReadOnly(path, false));
+        Assert.Throws<DatabaseNeedsMigrationException>(() => InventorySnapshot.Load(path));
         Assert.Equal(bytes, File.ReadAllBytes(path));
         using var upgraded = new Database(path);
         Assert.Equal(6, upgraded.AppliedMigrations().Count);

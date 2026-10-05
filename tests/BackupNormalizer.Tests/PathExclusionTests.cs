@@ -235,7 +235,7 @@ public sealed class PathExclusionTests : IDisposable
     }
 
     [Fact]
-    public void Legacy_ReadOnly_Database_Has_Empty_Policy_And_Upgrade_Preserves_Inventory()
+    public void Legacy_Database_Fails_Fast_Read_Only_And_Upgrade_Preserves_Inventory()
     {
         var options = new DbContextOptionsBuilder<BackupNormalizerDbContext>()
             .UseSqlite(
@@ -254,11 +254,9 @@ public sealed class PathExclusionTests : IDisposable
             );
         }
         byte[] before = File.ReadAllBytes(DbPath);
-        using (var readOnly = Database.OpenReadOnly(DbPath, pooling: false))
-        {
-            Assert.Empty(readOnly.GetExcludedPathRegexes("r"));
-            Assert.False(readOnly.GetPathExclusions(readOnly.GetRoot("r")!).IsExcluded("anything"));
-        }
+        Assert.Throws<DatabaseNeedsMigrationException>(() =>
+            Database.OpenReadOnly(DbPath, pooling: false)
+        );
         Assert.Equal(before, File.ReadAllBytes(DbPath));
         using var upgraded = Database.OpenWritable(DbPath, pooling: false);
         Assert.Equal("offline", upgraded.GetRoot("r")!.Path);
