@@ -1,0 +1,19 @@
+Runtime: .NET 10.0.10
+Architecture: Arm
+Page size: 32768
+Dynamic code supported: False
+PASS: read root
+PASS: insert root
+PASS: update root
+PASS: count inventory files
+PASS: insert file
+PASS: update file
+PASS: read file projection
+PASS: persist and read hash
+PASS: update hash
+PASS: delete checkpoint
+PASS: transaction commit
+PASS: transaction rollback
+PASS: inventory aggregate
+PASS: legacy read-only root
+RESULT: 0 failed checks

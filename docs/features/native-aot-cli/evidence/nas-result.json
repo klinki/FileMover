@@ -1,0 +1,89 @@
+{
+  "baseImage": "backup-normalizer:qnap-arm32",
+  "files": {
+    "BackupNormalizer.AotTrial": {
+      "sha256": "67ede634872e7c5e6179f719098e03c7d1e33731483c2ad247b16c983531dcf2",
+      "size": 81759464,
+      "loadSegments": [
+        {
+          "offset": 0,
+          "address": 0,
+          "alignment": 65536
+        },
+        {
+          "offset": 8115440,
+          "address": 8180976,
+          "alignment": 65536
+        },
+        {
+          "offset": 17307200,
+          "address": 17438272,
+          "alignment": 65536
+        },
+        {
+          "offset": 17310288,
+          "address": 17506896,
+          "alignment": 65536
+        }
+      ]
+    },
+    "libe_sqlite3.so": {
+      "sha256": "7fec7057d16e8b5ae54fed0c42a0e6b85e40df0d57092ef20cd647a4e1c1e0ed",
+      "size": 1322584,
+      "loadSegments": [
+        {
+          "offset": 0,
+          "address": 0,
+          "alignment": 65536
+        },
+        {
+          "offset": 1132632,
+          "address": 1198168,
+          "alignment": 65536
+        }
+      ]
+    },
+    "ef-trial-fixtures/current.db": {
+      "sha256": "6d123c3aa8e417d0f19910db7625ffd9b173cbf246fb0496549776118e397a89",
+      "size": 118784
+    },
+    "ef-trial-fixtures/legacy.db": {
+      "sha256": "d5ea15e747453a477d88e90e5dd333a56dbb68023896a31d2696ec62101f4c69",
+      "size": 94208
+    }
+  },
+  "cases": [
+    {
+      "mode": "--run-static",
+      "container": "backup-normalizer-ef-aot-trial-20261005-171638-static",
+      "exitCode": 0,
+      "stdout": "Runtime: .NET 10.0.10\nArchitecture: Arm\nPage size: 32768\nDynamic code supported: False\nPASS: read root\nPASS: insert root\nPASS: update root\nPASS: count inventory files\nPASS: insert file\nPASS: update file\nPASS: read file projection\nPASS: persist and read hash\nPASS: update hash\nPASS: delete checkpoint\nPASS: transaction commit\nPASS: transaction rollback\nPASS: inventory aggregate\nPASS: legacy read-only root\nRESULT: 0 failed checks\n",
+      "stderr": "",
+      "oomKilled": false,
+      "mounts": [],
+      "passed": true
+    },
+    {
+      "mode": "--run",
+      "container": "backup-normalizer-ef-aot-trial-20261005-171638-facade",
+      "exitCode": 1,
+      "stdout": "Runtime: .NET 10.0.10\nArchitecture: Arm\nPage size: 32768\nDynamic code supported: False\nPASS: open current database\nFAIL: read root: System.InvalidOperationException: Query wasn't precompiled and dynamic code isn't supported with NativeAOT.\n   at Microsoft.EntityFrameworkCore.Query.Internal.QueryCompiler.<>c__DisplayClass11_0`1.<ExecuteCore>b__0() + 0x49\n   at Microsoft.EntityFrameworkCore.Query.Internal.CompiledQueryCache.GetOrAddQuery[TResult](Object, Func`1) + 0x10b\n   at Microsoft.EntityFrameworkCore.Query.Internal.QueryCompiler.ExecuteCore[TResult](Expression, Boolean, CancellationToken) + 0x221\n   at Microsoft.EntityFrameworkCore.Query.Internal.QueryCompiler.Execute[TResult](Expression) + 0x17\n   at Program.<>c.<<Main>$>b__0_1(Database) + 0x21\n   at Program.<<Main>$>g__Check|0_16(String, Action`1, Boolean, Program.<>c__DisplayClass0_0&) + 0x135\nFAIL: insert root: System.InvalidOperationException: Query wasn't precompiled and dynamic code isn't supported with NativeAOT.\n   at Microsoft.EntityFrameworkCore.Query.Internal.QueryCompiler.<>c__DisplayClass11_0`1.<ExecuteCore>b__0() + 0x49\n   at Microsoft.EntityFrameworkCore.Query.Internal.CompiledQueryCache.GetOrAddQuery[TResult](Object, Func`1) + 0x10b\n   at Microsoft.EntityFrameworkCore.Query.Internal.QueryCompiler.ExecuteCore[TResult](Expression, Boolean, CancellationToken) + 0x221\n   at Microsoft.EntityFrameworkCore.Query.Internal.QueryCompiler.Execute[TResult](Expression) + 0x17\n   at BackupNormalizer.Database.UpsertRoot(StorageRootRow) + 0x399\n   at Program.<>c.<<Main>$>b__0_2(Database) + 0x33\n   at Program.<<Main>$>g__Check|0_16(String, Action`1, Boolean, Program.<>c__DisplayClass0_0&) + 0x135\nFAIL: update root: System.InvalidOperationException: Query wasn't precompiled and dynamic code isn't supported with NativeAOT.\n   at Microsoft.EntityFrameworkCore.Query.Internal.QueryCompiler.<>c__DisplayClass11_0`1.<ExecuteCore>b__0() + 0x49\n   at Microsoft.EntityFrameworkCore.Query.Internal.CompiledQueryCache.GetOrAddQuery[TResult](Object, Func`1) + 0x10b\n   at Microsoft.EntityFrameworkCore.Query.Internal.QueryCompiler.ExecuteCore[TResult](Expression, Boolean, CancellationToken) + 0x221\n   at Microsoft.EntityFrameworkCore.Query.Internal.QueryCompiler.Execute[TResult](Expression) + 0x17\n   at BackupNormalizer.Database.UpsertRoot(StorageRootRow) + 0x399\n   at Program.<>c.<<Main>$>b__0_3(Database) + 0xcb\n   at Program.<<Main>$>g__Check|0_16(String, Action`1, Boolean, Program.<>c__DisplayClass0_0&) + 0x135\nFAIL: count inventory files: System.InvalidOperationException: Query wasn't precompiled and dynamic code isn't supported with NativeAOT.\n   at Microsoft.EntityFrameworkCore.Query.Internal.QueryCompiler.<>c__DisplayClass11_0`1.<ExecuteCore>b__0() + 0x49\n   at Microsoft.EntityFrameworkCore.Query.Internal.CompiledQueryCache.GetOrAddQuery[TResult](Object, Func`1) + 0x115\n   at Microsoft.EntityFrameworkCore.Query.Internal.QueryCompiler.ExecuteCore[TResult](Expression, Boolean, CancellationToken) + 0x231\n   at Program.<>c.<<Main>$>b__0_4(Database) + 0x21\n   at Program.<<Main>$>g__Check|0_16(String, Action`1, Boolean, Program.<>c__DisplayClass0_0&) + 0x135\nFAIL: insert file: System.InvalidOperationException: Query wasn't precompiled and dynamic code isn't supported with NativeAOT.\n   at Microsoft.EntityFrameworkCore.Query.Internal.QueryCompiler.<>c__DisplayClass11_0`1.<ExecuteCore>b__0() + 0x49\n   at Microsoft.EntityFrameworkCore.Query.Internal.CompiledQueryCache.GetOrAddQuery[TResult](Object, Func`1) + 0x10b\n   at Microsoft.EntityFrameworkCore.Query.Internal.QueryCompiler.ExecuteCore[TResult](Expression, Boolean, CancellationToken) + 0x221\n   at Microsoft.EntityFrameworkCore.Query.Internal.QueryCompiler.Execute[TResult](Expression) + 0x17\n   at BackupNormalizer.Database.UpsertFileEntry(FileEntryRow) + 0x65d\n   at Program.<>c.<<Main>$>b__0_5(Database) + 0x73\n   at Program.<<Main>$>g__Check|0_16(String, Action`1, Boolean, Program.<>c__DisplayClass0_0&) + 0x135\nFAIL: update file: System.InvalidOperationException: Query wasn't precompiled and dynamic code isn't supported with NativeAOT.\n   at Microsoft.EntityFrameworkCore.Query.Internal.QueryCompiler.<>c__DisplayClass11_0`1.<ExecuteCore>b__0() + 0x49\n   at Microsoft.EntityFrameworkCore.Query.Internal.CompiledQueryCache.GetOrAddQuery[TResult](Object, Func`1) + 0x10b\n   at Microsoft.EntityFrameworkCore.Query.Internal.QueryCompiler.ExecuteCore[TResult](Expression, Boolean, CancellationToken) + 0x221\n   at Microsoft.EntityFrameworkCore.Query.Internal.QueryCompiler.Execute[TResult](Expression) + 0x17\n   at BackupNormalizer.Database.UpsertFileEntry(FileEntryRow) + 0x65d\n   at Program.<>c.<<Main>$>b__0_6(Database) + 0x71\n   at Program.<<Main>$>g__Check|0_16(String, Action`1, Boolean, Program.<>c__DisplayClass0_0&) + 0x135\nFAIL: read file projection: System.InvalidOperationException: Query wasn't precompiled and dynamic code isn't supported with NativeAOT.\n   at Microsoft.EntityFrameworkCore.Query.Internal.QueryCompiler.<>c__DisplayClass11_0`1.<ExecuteCore>b__0() + 0x49\n   at Microsoft.EntityFrameworkCore.Query.Internal.CompiledQueryCache.GetOrAddQuery[TResult](Object, Func`1) + 0x10b\n   at Microsoft.EntityFrameworkCore.Query.Internal.QueryCompiler.ExecuteCore[TResult](Expression, Boolean, CancellationToken) + 0x221\n   at Microsoft.EntityFrameworkCore.Query.Internal.QueryCompiler.Execute[TResult](Expression) + 0x17\n   at Program.<>c.<<Main>$>b__0_7(Database) + 0x2d\n   at Program.<<Main>$>g__Check|0_16(String, Action`1, Boolean, Program.<>c__DisplayClass0_0&) + 0x135\nFAIL: list inventory files: System.InvalidOperationException: Query wasn't precompiled and dynamic code isn't supported with NativeAOT.\n   at Microsoft.EntityFrameworkCore.Query.Internal.QueryCompiler.<>c__DisplayClass11_0`1.<ExecuteCore>b__0() + 0x49\n   at Microsoft.EntityFrameworkCore.Query.Internal.CompiledQueryCache.GetOrAddQuery[TResult](Object, Func`1) + 0x10b\n   at Microsoft.EntityFrameworkCore.Query.Internal.QueryCompiler.ExecuteCore[TResult](Expression, Boolean, CancellationToken) + 0x221\n   at Microsoft.EntityFrameworkCore.Query.Internal.QueryCompiler.Execute[TResult](Expression) + 0x17\n   at Microsoft.EntityFrameworkCore.Query.Internal.EntityQueryable`1.GetEnumerator() + 0x41\n   at System.Collections.Generic.List`1..ctor(IEnumerable`1 collection) + 0x61\n   at System.Linq.Enumerable.ToList[TSource](IEnumerable`1 source) + 0x31\n   at Program.<>c.<<Main>$>b__0_8(Database) + 0x21\n   at Program.<<Main>$>g__Check|0_16(String, Action`1, Boolean, Program.<>c__DisplayClass0_0&) + 0x135\nFAIL: delete checkpoint: System.InvalidOperationException: Query wasn't precompiled and dynamic code isn't supported with NativeAOT.\n   at Microsoft.EntityFrameworkCore.Query.Internal.QueryCompiler.<>c__DisplayClass11_0`1.<ExecuteCore>b__0() + 0x49\n   at Microsoft.EntityFrameworkCore.Query.Internal.CompiledQueryCache.GetOrAddQuery[TResult](Object, Func`1) + 0x115\n   at Microsoft.EntityFrameworkCore.Query.Internal.QueryCompiler.ExecuteCore[TResult](Expression, Boolean, CancellationToken) + 0x231\n   at BackupNormalizer.Database.ClearScanCheckpoint(String) + 0x225\n   at Program.<>c.<<Main>$>b__0_9(Database) + 0x25\n   at Program.<<Main>$>g__Check|0_16(String, Action`1, Boolean, Program.<>c__DisplayClass0_0&) + 0x135\nFAIL: transaction commit: System.InvalidOperationException: Query wasn't precompiled and dynamic code isn't supported with NativeAOT.\n   at Microsoft.EntityFrameworkCore.Query.Internal.QueryCompiler.<>c__DisplayClass11_0`1.<ExecuteCore>b__0() + 0x49\n   at Microsoft.EntityFrameworkCore.Query.Internal.CompiledQueryCache.GetOrAddQuery[TResult](Object, Func`1) + 0x10b\n   at Microsoft.EntityFrameworkCore.Query.Internal.QueryCompiler.ExecuteCore[TResult](Expression, Boolean, CancellationToken) + 0x221\n   at Microsoft.EntityFrameworkCore.Query.Internal.QueryCompiler.Execute[TResult](Expression) + 0x17\n   at BackupNormalizer.Database.UpsertRoot(StorageRootRow) + 0x399\n   at Program.<>c.<<Main>$>b__0_10(Database) + 0x6d\n   at Program.<<Main>$>g__Check|0_16(String, Action`1, Boolean, Program.<>c__DisplayClass0_0&) + 0x135\nFAIL: transaction rollback: System.InvalidOperationException: Query wasn't precompiled and dynamic code isn't supported with NativeAOT.\n   at Microsoft.EntityFrameworkCore.Query.Internal.QueryCompiler.<>c__DisplayClass11_0`1.<ExecuteCore>b__0() + 0x49\n   at Microsoft.EntityFrameworkCore.Query.Internal.CompiledQueryCache.GetOrAddQuery[TResult](Object, Func`1) + 0x10b\n   at Microsoft.EntityFrameworkCore.Query.Internal.QueryCompiler.ExecuteCore[TResult](Expression, Boolean, CancellationToken) + 0x221\n   at Microsoft.EntityFrameworkCore.Query.Internal.QueryCompiler.Execute[TResult](Expression) + 0x17\n   at BackupNormalizer.Database.UpsertRoot(StorageRootRow) + 0x399\n   at Program.<>c.<<Main>$>b__0_11(Database) + 0x6d\n   at Program.<<Main>$>g__Check|0_16(String, Action`1, Boolean, Program.<>c__DisplayClass0_0&) + 0x135\nFAIL: inventory status query: System.InvalidOperationException: Query wasn't precompiled and dynamic code isn't supported with NativeAOT.\n   at Microsoft.EntityFrameworkCore.Query.Internal.QueryCompiler.<>c__DisplayClass11_0`1.<ExecuteCore>b__0() + 0x49\n   at Microsoft.EntityFrameworkCore.Query.Internal.CompiledQueryCache.GetOrAddQuery[TResult](Object, Func`1) + 0x10b\n   at Microsoft.EntityFrameworkCore.Query.Internal.QueryCompiler.ExecuteCore[TResult](Expression, Boolean, CancellationToken) + 0x221\n   at Microsoft.EntityFrameworkCore.Query.Internal.QueryCompiler.Execute[TResult](Expression) + 0x17\n   at BackupNormalizer.Database.GetInventoryStatus(String, String) + 0x7b\n   at Program.<>c.<<Main>$>b__0_12(Database) + 0x2d\n   at Program.<<Main>$>g__Check|0_16(String, Action`1, Boolean, Program.<>c__DisplayClass0_0&) + 0x135\nFAIL: legacy read-only root: System.InvalidOperationException: Query wasn't precompiled and dynamic code isn't supported with NativeAOT.\n   at Microsoft.EntityFrameworkCore.Query.Internal.QueryCompiler.<>c__DisplayClass11_0`1.<ExecuteCore>b__0() + 0x49\n   at Microsoft.EntityFrameworkCore.Query.Internal.CompiledQueryCache.GetOrAddQuery[TResult](Object, Func`1) + 0x10b\n   at Microsoft.EntityFrameworkCore.Query.Internal.QueryCompiler.ExecuteCore[TResult](Expression, Boolean, CancellationToken) + 0x221\n   at Microsoft.EntityFrameworkCore.Query.Internal.QueryCompiler.Execute[TResult](Expression) + 0x17\n   at Program.<>c.<<Main>$>b__0_13(Database) + 0x21\n   at Program.<<Main>$>g__Check|0_16(String, Action`1, Boolean, Program.<>c__DisplayClass0_0&) + 0x135\nRESULT: 13 failed checks\n",
+      "stderr": "",
+      "oomKilled": false,
+      "mounts": [],
+      "passed": false
+    }
+  ],
+  "image": "backup-normalizer:ef-aot-trial-20261005-171638",
+  "hashesMatch": true,
+  "originalRunningServices": [
+    "stash",
+    "stash_atk",
+    "qbitorrent-qbittorrent-1",
+    "gluetun",
+    "c345a9f8d683_calibre-calibre-web-1",
+    "portainer",
+    "jdownloader-1"
+  ],
+  "allOriginalServicesStillRunning": true
+}

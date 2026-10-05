@@ -41,3 +41,57 @@ The initial build context contained approximately 223 KiB. The allowlist exclude
 Local emulation reported a page size of `4096`. It cannot verify the NAS's kernel or page size. QNAP support and the hash-progress bug remain open until the corresponding user checks are confirmed.
 
 Changes are not committed. No NAS files have been accessed or modified, and no image has been pushed to a registry.
+
+## Actual NAS test, 2026-10-05
+
+The user authorized Docker testing on the NAS. Portainer was reachable and the existing SSH identity allowed access to QNAP's Docker executable. The host reports `armv7l`, 32,768-byte pages, kernel 4.2.8, and Docker 26.1.4-qnap2.
+
+The existing October 1 image crashed on .NET startup. A fresh current CLI build and an independent .NET 10.0.10 probe were copied into a separate test image. The fresh image's database and scanner checks also crashed. The probe exited 139 before managed entry. GDB located SIGSEGV inside CoreCLR, without symbols to identify the function.
+
+Compatibility is failed on this host in the tested configuration. The earlier emulator and static alignment checks were insufficient to establish support. The [QNAP runtime investigation](../../bugs/002-sqlite-native-loading/initial-findings.md) records the evidence.
+
+Only isolated test containers, images, and synthetic Docker volumes were created. No existing NAS share was mounted or modified, no existing service was stopped or edited, and no image was pushed.
+
+## Native AOT test, 2026-10-05
+
+Native AOT runs on the actual ARMv7 QNAP with 32,768-byte pages. A minimal probe passed managed startup, SHA256, and temporary file read/write/move checks. A separate SQLite probe passed open/create/insert/read/transaction rollback using Microsoft.Data.Sqlite 10.0.12 and bundled SQLite 3.53.3.
+
+The full CLI also published to Native AOT and passed `--version` and `--help` on the NAS. Its database and scan checks failed with `Model building is not supported when publishing with NativeAOT. Use a compiled model.` This experimental image is not ready for inventory or move replay. EF model/query/migration handling and JSON serialization still need AOT compatibility work.
+
+Retained test images on the NAS:
+
+| Image | Tested entrypoint | Result |
+| --- | --- | --- |
+| `backup-normalizer:qnap-aot-probe-20261005` | `/app/AotProbe` | Runtime, hashing, file operations passed |
+| `backup-normalizer:qnap-aot-sqlite-probe-20261005` | `/app/SqliteProbe` | SQLite passed |
+| `backup-normalizer:qnap-aot-app-experiment-20261005` | `/app/BackupNormalizer` | Version/help passed; database/scan blocked |
+
+These images derive from the existing Alpine test image and retain its original default entrypoint. Select the entrypoint shown above when inspecting them in Portainer; do not use the full CLI experiment for a production inventory job. Test runs used a read-only filesystem, writable `/tmp`, and no existing NAS share mounts.
+
+The [Native AOT investigation](../../bugs/002-sqlite-native-loading/fix-attempt-002.md) links the local source snapshots, build diagnostics, and on-device JSON results. Full application support remains open; the Docker build/deployment helpers have not been converted to AOT.
+
+## Ordinary Ubuntu test, 2026-10-05
+
+The user authorized an ordinary Ubuntu 22.04 test with the glibc-based `linux-arm` target and supplied [qnap-32k-containers](https://github.com/laroy-sh/qnap-32k-containers) as compatibility evidence. Ubuntu 22.04.5, glibc 2.35, its shell, and the required native runtime dependencies all worked on the actual ARMv7 NAS with 32,768-byte pages.
+
+The independent CoreCLR 10.0.10 probe and the current CLI failed before managed entry, reporting `Failed to load System.Private.CoreLib.dll` and `Out Of Memory`. The NAS had approximately 5.5 GiB available, and Docker recorded no OOM kill. A system-call trace captured `mprotect(0x733ac000, 16384, PROT_READ|PROT_WRITE)` failing with `EINVAL`; that address is not aligned to the actual 32 KiB page size. ReadyToRun and executable-memory setting changes did not resolve startup. SQLite, scan, and hash workflows could not be tested in this configuration.
+
+Measured uncompressed image sizes were 56.6 MB for Ubuntu alone, 95.8 MB with native .NET dependencies, and 180.2 MB for the complete experimental image. The retained image is `backup-normalizer:ubuntu-app-test-20261005`, with `/app/BackupNormalizer` as its default entrypoint. It is not usable for production inventory jobs in this tested configuration.
+
+The [Ubuntu investigation](../../bugs/002-sqlite-native-loading/fix-attempt-003.md) records build versions, image digest, diagnostic variants, and local evidence. All seven original services remained running, no existing NAS share was mounted, and transferred binaries matched their local SHA256 hashes. Application source and deployment helpers were not changed; no image was pushed and no commit was created.
+
+## .NET 6 hello-world test, 2026-10-05
+
+An independent `net6.0` hello-world program was published with SDK 6.0.428 and runtime 6.0.36 for both Ubuntu 22.04 (`linux-arm`) and Alpine 3.17 (`linux-musl-arm`). Both builds exited 139 before printing anything on the actual ARMv7 QNAP with 32,768-byte pages. Disabling WriteXorExecute gave the same result. Docker reported no OOM kills, transferred binary hashes matched, and all seven original services remained running.
+
+The Ubuntu trace records an early native SIGSEGV before captured CoreCLR loading. The exact cause remains unconfirmed. These official .NET 6 distributions are therefore not a working fallback in the tested configurations. The application was not retargeted, and database/scan/hash workflows were not tested with .NET 6.
+
+The retained images are `backup-normalizer:net6-hello-test-20261005` and `backup-normalizer:net6-musl-hello-test-20261005`, both with `/app/HelloNet6` as their default entrypoint. The [.NET 6 experiment](../../bugs/002-sqlite-native-loading/fix-attempt-004.md) records the probe and evidence. Test containers had no existing NAS share mounts. No production application changes, commit, or push were made.
+
+## EF Core AOT trial, 2026-10-05
+
+The first EF AOT trial passed all 14 candidate static-query checks on the actual NAS using the production database model/entities, EF Core 10.0.12, and Native AOT runtime 10.0.10. It confirmed reads, writes, hash persistence, bulk updates/deletion, transaction commit/rollback, and a legacy read-only query. The executable reported ARM, 32,768-byte pages, and dynamic code disabled.
+
+The retained image is `backup-normalizer:ef-aot-trial-20261005-171638`, with the synthetic static suite as its default command. The unchanged facade is also tested separately; model-backed opening works, while its queries fail without precompilation. This diagnostic image does not perform inventory collection or production upgrades.
+
+[AOT verification](../native-aot-cli/verification.md) records generation adjustments, source, and evidence. ELF alignment and transfer hashes passed, all seven original services remained running, and no existing NAS share was mounted. Inventory query conversion, migration helper implementation, and complete scan/hash/export acceptance remain pending.
