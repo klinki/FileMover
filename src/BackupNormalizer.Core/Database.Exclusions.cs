@@ -7,19 +7,18 @@ public sealed partial class Database
 {
     public IReadOnlyList<string> GetExcludedPathRegexes(string rootId)
     {
-        var queryRootId = rootId;
         var context = Context;
 
         string? json = context
             .RootScanPolicies.AsNoTracking()
-            .Where(p => p.StorageRootId == queryRootId)
+            .Where(p => p.StorageRootId == rootId)
             .Select(p => p.ExcludedPathRegexesJson)
             .FirstOrDefault();
         return json == null
             ? []
             : JsonSerializer.Deserialize(json, CoreJsonContext.Compact.StringArray)
                 ?? throw new InvalidOperationException(
-                    $"Invalid exclusion policy for root '{queryRootId}'."
+                    $"Invalid exclusion policy for root '{rootId}'."
                 );
     }
 
@@ -28,24 +27,22 @@ public sealed partial class Database
 
     internal void SetExcludedPathRegexes(string rootId, IReadOnlyList<string> patterns)
     {
-        var queryRootId = rootId;
-        var queryPatterns = patterns;
         var context = Context;
         EnsureWritable();
         using var transaction = context.Database.BeginTransaction();
-        context.RootScanPolicies.Where(p => p.StorageRootId == queryRootId).ExecuteDelete();
+        context.RootScanPolicies.Where(p => p.StorageRootId == rootId).ExecuteDelete();
         AddAndSave(
             context.RootScanPolicies,
             new RootScanPolicyEntity
             {
-                StorageRootId = queryRootId,
+                StorageRootId = rootId,
                 ExcludedPathRegexesJson = JsonSerializer.Serialize(
-                    queryPatterns,
+                    patterns,
                     CoreJsonContext.Compact.IReadOnlyListString
                 ),
             }
         );
-        ClearScanCheckpoint(queryRootId);
+        ClearScanCheckpoint(rootId);
         transaction.Commit();
     }
 }
