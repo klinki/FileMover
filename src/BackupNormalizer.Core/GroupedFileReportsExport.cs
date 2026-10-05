@@ -29,27 +29,22 @@ internal static class GroupedFileReportsExport
         if (format.Equals("json", StringComparison.OrdinalIgnoreCase))
         {
             var json = JsonSerializer.Serialize(
-                new
-                {
+                new GroupedFileReportsJson(
                     report.Direction,
                     report.A,
                     report.B,
                     report.CreatedUtc,
-                    Filter = filter,
+                    filter,
                     report.FilenameMatchingEnabled,
                     report.FilenameExtensions,
                     report.ExcludedPaths,
                     report.Summary,
                     report.UnverifiedFiles,
-                    FilenameGroups = families,
-                    DuplicateGroups = duplicates,
-                    UnverifiedLocations = unverified,
-                },
-                new JsonSerializerOptions
-                {
-                    WriteIndented = true,
-                    PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-                }
+                    families,
+                    duplicates,
+                    unverified
+                ),
+                CoreJsonContext.Default.GroupedFileReportsJson
             );
             token.ThrowIfCancellationRequested();
             writer.WriteLine(json);
@@ -57,7 +52,10 @@ internal static class GroupedFileReportsExport
         }
         if (!format.Equals("csv", StringComparison.OrdinalIgnoreCase))
             throw new ArgumentException("File reports support csv or json format.");
-        string excludedPaths = JsonSerializer.Serialize(report.ExcludedPaths);
+        string excludedPaths = JsonSerializer.Serialize(
+            report.ExcludedPaths,
+            CoreJsonContext.Compact.IReadOnlyListString
+        );
         LocationChangesExport.Row(
             writer,
             "GroupId",

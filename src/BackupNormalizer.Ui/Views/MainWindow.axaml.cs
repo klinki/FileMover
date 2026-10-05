@@ -11,6 +11,7 @@ using Avalonia.LogicalTree;
 using Avalonia.Platform.Storage;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
+using BackupNormalizer.Ui.Models;
 using BackupNormalizer.Ui.ViewModels;
 
 namespace BackupNormalizer.Ui.Views;
@@ -29,13 +30,6 @@ public partial class MainWindow : Window
         DataFormat.CreateStringApplicationFormat(DropFormatName);
     private static readonly DataFormat<string> InventoryDropFormat =
         DataFormat.CreateStringApplicationFormat("x-bn-inventory-copy");
-
-    private sealed record InventoryDrag(
-        string Side,
-        string DatabasePath,
-        string RootId,
-        string[] Paths
-    );
 
     private FilePanelViewModel? _rubberPanel;
     private string? _rubberSide;
@@ -429,7 +423,10 @@ public partial class MainWindow : Window
                     set.Select(s => s.FullPath).ToArray()
                 );
                 transfer.Add(
-                    DataTransferItem.Create(InventoryDropFormat, JsonSerializer.Serialize(payload))
+                    DataTransferItem.Create(
+                        InventoryDropFormat,
+                        JsonSerializer.Serialize(payload, GuiJsonContext.Default.InventoryDrag)
+                    )
                 );
             }
             else
@@ -676,7 +673,7 @@ public partial class MainWindow : Window
             return null;
         try
         {
-            var payload = JsonSerializer.Deserialize<InventoryDrag>(text);
+            var payload = JsonSerializer.Deserialize(text, GuiJsonContext.Default.InventoryDrag);
             return
                 payload
                     is {

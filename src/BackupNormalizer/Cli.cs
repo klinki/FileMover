@@ -104,7 +104,7 @@ public static class Cli
         var build = BuildInfo.FromAssembly(typeof(Cli).Assembly);
         if (Has(a, "--json"))
         {
-            WriteJson(build);
+            WriteJson(build, CliJsonContext.Default.BuildInfo);
         }
         else
         {
@@ -114,17 +114,10 @@ public static class Cli
         return 0;
     }
 
-    private static void WriteJson(object value) =>
-        Console.WriteLine(
-            System.Text.Json.JsonSerializer.Serialize(
-                value,
-                new System.Text.Json.JsonSerializerOptions
-                {
-                    WriteIndented = true,
-                    PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase,
-                }
-            )
-        );
+    private static void WriteJson<T>(
+        T value,
+        System.Text.Json.Serialization.Metadata.JsonTypeInfo<T> typeInfo
+    ) => Console.WriteLine(System.Text.Json.JsonSerializer.Serialize(value, typeInfo));
 
     private static string TerminalText(string value) =>
         new(value.Select(c => char.IsControl(c) ? ' ' : c).ToArray());
@@ -140,7 +133,7 @@ public static class Cli
         var statuses = roots.Select(r => db.GetInventoryStatus(r, algorithm)).ToList();
         if (Has(a, "--json"))
         {
-            WriteJson(statuses);
+            WriteJson(statuses, CliJsonContext.Default.ListInventoryStatusRow);
         }
         else
         {
@@ -383,7 +376,7 @@ public static class Cli
         var report = BackupCoverage.Analyze(inputs);
         if (Has(args, "--json"))
         {
-            WriteJson(report);
+            WriteJson(report, CliJsonContext.Default.CoverageReport);
             return 0;
         }
         Console.WriteLine(
@@ -462,7 +455,7 @@ public static class Cli
         var errors = db.ListScanDiagnostics(details.Scan.Id);
         if (Has(a, "--json"))
         {
-            WriteJson(new { scan = details, errors });
+            WriteJson(new ScanErrorsJson(details, errors), CliJsonContext.Default.ScanErrorsJson);
         }
         else
         {
@@ -508,11 +501,8 @@ public static class Cli
         if (Has(a, "--json"))
         {
             WriteJson(
-                new
-                {
-                    source = Path.GetFullPath(source),
-                    destination = Path.GetFullPath(destination),
-                }
+                new DatabaseExportJson(Path.GetFullPath(source), Path.GetFullPath(destination)),
+                CliJsonContext.Default.DatabaseExportJson
             );
         }
         else
@@ -597,7 +587,7 @@ public static class Cli
 
         if (a[0] == "show")
         {
-            WriteJson(LoadConfig(a));
+            WriteJson(LoadConfig(a), CliJsonContext.Default.AppConfig);
             return 0;
         }
         if (a[0] != "init")

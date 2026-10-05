@@ -55,8 +55,10 @@ public sealed class AppConfig
         try
         {
             config =
-                JsonSerializer.Deserialize<AppConfig>(File.ReadAllText(path), JsonOpts())
-                ?? throw new JsonException("Expected a JSON object.");
+                JsonSerializer.Deserialize(
+                    File.ReadAllText(path),
+                    new CoreJsonContext(JsonOpts()).AppConfig
+                ) ?? throw new JsonException("Expected a JSON object.");
         }
         catch (JsonException ex)
         {
@@ -76,7 +78,7 @@ public sealed class AppConfig
             overwrite ? FileMode.Create : FileMode.CreateNew,
             FileAccess.Write
         );
-        JsonSerializer.Serialize(stream, this, JsonOpts(true));
+        JsonSerializer.Serialize(stream, this, new CoreJsonContext(JsonOpts(true)).AppConfig);
     }
 
     public void Validate()
@@ -132,5 +134,6 @@ public sealed class AppConfig
             PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
             PropertyNameCaseInsensitive = true,
             UnmappedMemberHandling = JsonUnmappedMemberHandling.Disallow,
+            TypeInfoResolver = CoreJsonContext.Default,
         };
 }

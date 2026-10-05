@@ -42,7 +42,10 @@ public sealed class GuiSessionStore
 
         try
         {
-            var session = JsonSerializer.Deserialize<GuiSession>(File.ReadAllText(Path));
+            var session = JsonSerializer.Deserialize(
+                File.ReadAllText(Path),
+                GuiJsonContext.Default.GuiSession
+            );
             if (session?.Left == null || session.Right == null)
             {
                 return null;
@@ -77,10 +80,7 @@ public sealed class GuiSessionStore
         {
             File.WriteAllText(
                 temporary,
-                JsonSerializer.Serialize(
-                    session,
-                    new JsonSerializerOptions { WriteIndented = true }
-                )
+                JsonSerializer.Serialize(session, GuiJsonContext.Indented.GuiSession)
             );
             File.Move(temporary, full, overwrite: true);
         }

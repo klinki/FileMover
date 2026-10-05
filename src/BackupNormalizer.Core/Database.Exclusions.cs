@@ -19,7 +19,7 @@ public sealed partial class Database
             .FirstOrDefault();
         return json == null
             ? []
-            : JsonSerializer.Deserialize<string[]>(json)
+            : JsonSerializer.Deserialize(json, CoreJsonContext.Compact.StringArray)
                 ?? throw new InvalidOperationException(
                     $"Invalid exclusion policy for root '{rootId}'."
                 );
@@ -38,7 +38,10 @@ public sealed partial class Database
             new RootScanPolicyEntity
             {
                 StorageRootId = rootId,
-                ExcludedPathRegexesJson = JsonSerializer.Serialize(patterns),
+                ExcludedPathRegexesJson = JsonSerializer.Serialize(
+                    patterns,
+                    CoreJsonContext.Compact.IReadOnlyListString
+                ),
             }
         );
         ClearScanCheckpoint(rootId);

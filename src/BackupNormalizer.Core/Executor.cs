@@ -408,7 +408,11 @@ public sealed class Executor
     private void Journal(long opId, string level, string msg)
     {
         _db.AddExecutionLog(opId, level, msg, Database.UtcNow());
-        Log.Info(msg, new { opId, level });
+        Log.Info(
+            msg,
+            new ExecutionLogFields(opId, level),
+            CoreJsonContext.Compact.ExecutionLogFields
+        );
     }
 
     private void DoVerify(

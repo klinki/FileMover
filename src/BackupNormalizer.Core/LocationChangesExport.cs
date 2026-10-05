@@ -24,25 +24,20 @@ public static class LocationChangesExport
         if (format.Equals("json", StringComparison.OrdinalIgnoreCase))
         {
             string json = JsonSerializer.Serialize(
-                new
-                {
+                new LocationChangesJson(
                     report.Direction,
                     report.A,
                     report.B,
                     report.CreatedUtc,
-                    Filter = filter,
+                    filter,
                     report.Summary,
                     report.UnverifiedFiles,
                     report.FilenameMatchingEnabled,
                     report.FilenameExtensions,
                     report.ExcludedPaths,
-                    Groups = groups,
-                },
-                new JsonSerializerOptions
-                {
-                    WriteIndented = true,
-                    PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-                }
+                    groups
+                ),
+                CoreJsonContext.Default.LocationChangesJson
             );
             cancellationToken.ThrowIfCancellationRequested();
             writer.WriteLine(json);
@@ -50,7 +45,10 @@ public static class LocationChangesExport
         }
         if (!format.Equals("csv", StringComparison.OrdinalIgnoreCase))
             throw new ArgumentException("Location reports support csv or json format.");
-        string excludedPaths = JsonSerializer.Serialize(report.ExcludedPaths);
+        string excludedPaths = JsonSerializer.Serialize(
+            report.ExcludedPaths,
+            CoreJsonContext.Compact.IReadOnlyListString
+        );
         Row(
             writer,
             "GroupId",

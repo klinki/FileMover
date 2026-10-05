@@ -521,12 +521,5 @@ public sealed class Planner
     }
 
     public static string ToJson(PlanDoc doc) =>
-        JsonSerializer.Serialize(
-            doc,
-            new JsonSerializerOptions
-            {
-                WriteIndented = true,
-                PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-            }
-        );
+        JsonSerializer.Serialize(doc, CoreJsonContext.Default.PlanDoc);
 }

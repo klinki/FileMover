@@ -9,6 +9,7 @@
     <AssemblyName>BackupNormalizer</AssemblyName>
     <RootNamespace>BackupNormalizer</RootNamespace>
     <AllowUnsafeBlocks>false</AllowUnsafeBlocks>
+    <JsonSerializerIsReflectionEnabledByDefault>false</JsonSerializerIsReflectionEnabledByDefault>
   </PropertyGroup>
 
   <ItemGroup>

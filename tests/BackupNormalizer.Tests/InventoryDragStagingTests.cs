@@ -364,15 +364,13 @@ public sealed class InventoryDragStagingTests : IDisposable
             transfer.Add(
                 DataTransferItem.Create(
                     DataFormat.CreateStringApplicationFormat("x-bn-inventory-copy"),
-                    JsonSerializer.Serialize(
-                        new
-                        {
-                            Side = "Left",
-                            DatabasePath = source.DatabasePath,
-                            RootId,
-                            Paths = new[] { "folder" },
-                        }
-                    )
+                    new System.Text.Json.Nodes.JsonObject
+                    {
+                        ["Side"] = "Left",
+                        ["DatabasePath"] = source.DatabasePath,
+                        ["RootId"] = RootId,
+                        ["Paths"] = new System.Text.Json.Nodes.JsonArray("folder"),
+                    }.ToJsonString()
                 )
             );
             var previous = SynchronizationContext.Current;

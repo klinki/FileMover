@@ -150,7 +150,7 @@ public sealed class FileDifferenceExclusionsTests : IDisposable
         var row = parser.ReadFields()!;
         Assert.Equal(header.Length, row.Length);
         Assert.Equal(
-            JsonSerializer.Serialize(report.ExcludedPaths),
+            "[\"cache\",\"one,\\u0022two\\u0022\"]",
             row[Array.IndexOf(header, "ExcludedPaths")]
         );
         Assert.True(parser.EndOfData);

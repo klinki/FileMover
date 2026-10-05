@@ -411,14 +411,8 @@ public static class PlanStaging
     {
         string json = File.ReadAllText(jsonPath);
         var doc =
-            JsonSerializer.Deserialize<PlanDoc>(
-                json,
-                new JsonSerializerOptions
-                {
-                    PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-                    PropertyNameCaseInsensitive = true,
-                }
-            ) ?? throw new InvalidOperationException($"invalid plan file: {jsonPath}");
+            JsonSerializer.Deserialize(json, CoreJsonContext.Default.PlanDoc)
+            ?? throw new InvalidOperationException($"invalid plan file: {jsonPath}");
         if (
             string.IsNullOrWhiteSpace(doc.PlanId)
             || doc.Operations == null
