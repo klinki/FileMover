@@ -574,52 +574,29 @@ public sealed partial class Database : IDisposable
     public List<FileEntryRow> ListFiles(string? rootId = null)
     {
         var context = Context;
-        return rootId == null
-            ? context
-                .FileEntries.AsNoTracking()
-                .OrderBy(x => x.StorageRootId)
-                .ThenBy(x => x.RelativePath)
-                .Select(x => new FileEntryRow(
-                    x.Id,
-                    x.StorageRootId,
-                    x.RelativePath,
-                    x.Name,
-                    x.Size,
-                    x.ModifiedUtc,
-                    x.CreatedUtc,
-                    x.FileIdentity,
-                    x.LastSeenScanId,
-                    x.Status,
-                    x.Error,
-                    x.EntryKind,
-                    x.LinkTarget,
-                    x.TargetPath,
-                    x.LinkNote
-                ))
-                .ToList()
-            : context
-                .FileEntries.AsNoTracking()
-                .Where(x => x.StorageRootId == rootId)
-                .OrderBy(x => x.StorageRootId)
-                .ThenBy(x => x.RelativePath)
-                .Select(x => new FileEntryRow(
-                    x.Id,
-                    x.StorageRootId,
-                    x.RelativePath,
-                    x.Name,
-                    x.Size,
-                    x.ModifiedUtc,
-                    x.CreatedUtc,
-                    x.FileIdentity,
-                    x.LastSeenScanId,
-                    x.Status,
-                    x.Error,
-                    x.EntryKind,
-                    x.LinkTarget,
-                    x.TargetPath,
-                    x.LinkNote
-                ))
-                .ToList();
+        return context
+            .FileEntries.AsNoTracking()
+            .Where(x => rootId == null || x.StorageRootId == rootId)
+            .OrderBy(x => x.StorageRootId)
+            .ThenBy(x => x.RelativePath)
+            .Select(x => new FileEntryRow(
+                x.Id,
+                x.StorageRootId,
+                x.RelativePath,
+                x.Name,
+                x.Size,
+                x.ModifiedUtc,
+                x.CreatedUtc,
+                x.FileIdentity,
+                x.LastSeenScanId,
+                x.Status,
+                x.Error,
+                x.EntryKind,
+                x.LinkTarget,
+                x.TargetPath,
+                x.LinkNote
+            ))
+            .ToList();
     }
 
     public int CountFiles(string rootId)
@@ -657,76 +634,41 @@ public sealed partial class Database : IDisposable
     public List<FileWithHashRow> ListFilesWithHashes(string? rootId, string algorithm)
     {
         var context = Context;
-        return rootId == null
-            ? context
+        return context
                 .FileEntries.AsNoTracking()
-                .OrderBy(entry => entry.StorageRootId)
-                .ThenBy(entry => entry.RelativePath)
-                .Select(entry => new FileWithHashRow(
-                    entry.Id,
-                    entry.StorageRootId,
-                    entry.RelativePath,
-                    entry.Name,
-                    entry.Size,
-                    entry.ModifiedUtc,
-                    entry.CreatedUtc,
-                    entry.FileIdentity,
-                    entry.LastSeenScanId,
-                    entry.Status,
-                    entry.Error,
-                    entry.Status == FileStatus.Ok && entry.EntryKind == EntryKind.File
-                        ? context
-                            .FileHashes.Where(h =>
-                                h.FileEntryId == entry.Id
-                                && h.Algorithm == algorithm
-                                && h.State == HashState.Ok
-                                && h.SizeAtHash == entry.Size
-                                && h.ModifiedUtcAtHash == entry.ModifiedUtc
-                            )
-                            .Select(h => h.Digest)
-                            .FirstOrDefault()
-                        : null,
-                    entry.EntryKind,
-                    entry.LinkTarget,
-                    entry.TargetPath,
-                    entry.LinkNote
-                ))
-                .ToList()
-            : context
-                .FileEntries.AsNoTracking()
-                .Where(entry => entry.StorageRootId == rootId)
-                .OrderBy(entry => entry.StorageRootId)
-                .ThenBy(entry => entry.RelativePath)
-                .Select(entry => new FileWithHashRow(
-                    entry.Id,
-                    entry.StorageRootId,
-                    entry.RelativePath,
-                    entry.Name,
-                    entry.Size,
-                    entry.ModifiedUtc,
-                    entry.CreatedUtc,
-                    entry.FileIdentity,
-                    entry.LastSeenScanId,
-                    entry.Status,
-                    entry.Error,
-                    entry.Status == FileStatus.Ok && entry.EntryKind == EntryKind.File
-                        ? context
-                            .FileHashes.Where(h =>
-                                h.FileEntryId == entry.Id
-                                && h.Algorithm == algorithm
-                                && h.State == HashState.Ok
-                                && h.SizeAtHash == entry.Size
-                                && h.ModifiedUtcAtHash == entry.ModifiedUtc
-                            )
-                            .Select(h => h.Digest)
-                            .FirstOrDefault()
-                        : null,
-                    entry.EntryKind,
-                    entry.LinkTarget,
-                    entry.TargetPath,
-                    entry.LinkNote
-                ))
-                .ToList();
+            .Where(entry => rootId == null || entry.StorageRootId == rootId)
+            .OrderBy(entry => entry.StorageRootId)
+            .ThenBy(entry => entry.RelativePath)
+            .Select(entry => new FileWithHashRow(
+                entry.Id,
+                entry.StorageRootId,
+                entry.RelativePath,
+                entry.Name,
+                entry.Size,
+                entry.ModifiedUtc,
+                entry.CreatedUtc,
+                entry.FileIdentity,
+                entry.LastSeenScanId,
+                entry.Status,
+                entry.Error,
+                entry.Status == FileStatus.Ok && entry.EntryKind == EntryKind.File
+                    ? context
+                        .FileHashes.Where(h =>
+                            h.FileEntryId == entry.Id
+                            && h.Algorithm == algorithm
+                            && h.State == HashState.Ok
+                            && h.SizeAtHash == entry.Size
+                            && h.ModifiedUtcAtHash == entry.ModifiedUtc
+                        )
+                        .Select(h => h.Digest)
+                        .FirstOrDefault()
+                    : null,
+                entry.EntryKind,
+                entry.LinkTarget,
+                entry.TargetPath,
+                entry.LinkNote
+            ))
+            .ToList();
     }
 
     public FileHashRow? GetHash(long fileEntryId, string algo)
@@ -904,38 +846,14 @@ public sealed partial class Database : IDisposable
     public List<PlanOperationRow> ListPlanOperations(string planId, bool onlyProblems = false)
     {
         var context = Context;
-        // EF precompilation needs complete branches for the optional status filter.
-        if (!onlyProblems)
-        {
-            return context
-                .PlanOperations.AsNoTracking()
-                .Where(x => x.PlanId == planId)
-                .OrderBy(x => x.Sequence)
-                .Select(x => new PlanOperationRow(
-                    x.Id,
-                    x.Sequence,
-                    x.Type,
-                    x.SourceKind,
-                    x.SourceRootId,
-                    x.SourcePath,
-                    x.DestinationRootId,
-                    x.DestinationPath,
-                    x.ExpectedSize,
-                    x.ExpectedHash,
-                    x.Status,
-                    x.Error,
-                    x.SkipReason
-                ))
-                .ToList();
-        }
-
-
+        // One query: the optional status filter is a captured-scalar predicate, not LINQ composition.
         return context
             .PlanOperations.AsNoTracking()
             .Where(x =>
                 x.PlanId == planId
                 && (
-                    x.Status == OpStatus.Conflict
+                    !onlyProblems
+                    || x.Status == OpStatus.Conflict
                     || x.Status == OpStatus.Failed
                     || x.Status == OpStatus.Skipped
                 )
